@@ -106,6 +106,11 @@ RUN echo "account default"                         >  /etc/msmtprc \
 # ──────────────────────────────────────────
 # Permissions & workdir
 # ──────────────────────────────────────────
+ARG HOST_UID=1000
+ARG HOST_GID=1000
+RUN groupmod -g ${HOST_GID} www-data \
+    && usermod -u ${HOST_UID} www-data
+
 WORKDIR /var/www/html
 
 RUN chown -R www-data:www-data /var/www
