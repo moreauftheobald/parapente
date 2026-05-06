@@ -9,6 +9,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
+/**
+ * FUTURE USE — Balises temps réel PiouPiou / FFVL.
+ * Modèle préparé mais non utilisé tant que l'intégration des balises
+ * n'est pas implémentée (cf. CLAUDE.md, modules futurs).
+ */
 class Balise extends Model
 {
     protected $fillable = [

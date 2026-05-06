@@ -6,6 +6,11 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
+/**
+ * FUTURE USE — Table préparée pour les lectures temps réel des balises
+ * (cf. migration create_balises_table). Non alimentée tant que
+ * l'intégration PiouPiou / FFVL n'est pas implémentée.
+ */
 return new class extends Migration
 {
     public function up(): void

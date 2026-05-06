@@ -7,6 +7,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * FUTURE USE — Lectures temps réel des balises (cf. Balise).
+ * Modèle préparé mais non utilisé tant que l'intégration n'est pas
+ * implémentée (cf. CLAUDE.md, modules futurs).
+ */
 class BaliseReading extends Model
 {
     public $timestamps = false; // uniquement created_at défini en migration

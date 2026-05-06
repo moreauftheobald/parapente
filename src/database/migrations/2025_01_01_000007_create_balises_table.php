@@ -6,6 +6,10 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
+/**
+ * FUTURE USE — Table préparée pour l'intégration future des balises
+ * temps réel PiouPiou / FFVL. Aucune donnée n'y est encore écrite.
+ */
 return new class extends Migration
 {
     public function up(): void
