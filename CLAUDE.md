@@ -2,23 +2,27 @@
 
 ## Présentation du projet
 
-**ParapenteFR** est une plateforme web dédiée aux pilotes de parapente, construite en Laravel.
-Le projet est modulaire : chaque grande fonctionnalité est un module indépendant.
+**ParapenteFR** est une plateforme web dédiée aux pilotes de parapente du Grand Est,
+construite en Laravel. Le projet est modulaire : chaque grande fonctionnalité est un module indépendant.
 
 ---
 
 ## Stack technique
 
-| Composant      | Technologie                          |
-|----------------|--------------------------------------|
-| Serveur        | Nginx 1.26                           |
-| Backend        | PHP 8.4 / Laravel 11                 |
-| Base de données| MariaDB 10.11                        |
-| Cache / Queue  | Redis 7                              |
-| Frontend       | Tailwind CSS + Alpine.js + Livewire  |
-| Carte          | Leaflet.js                           |
-| Build assets   | Vite                                 |
-| Conteneurs     | Docker / Docker Compose              |
+| Composant       | Technologie                         |
+|-----------------|-------------------------------------|
+| Serveur         | Nginx 1.26                          |
+| Backend         | PHP 8.4 / Laravel 13                |
+| Base de données | MariaDB 10.11                       |
+| Cache / Queue   | Redis 7                             |
+| Frontend        | CSS inline + Alpine.js              |
+| Carte           | Leaflet.js                          |
+| Build assets    | Vite                                |
+| Conteneurs      | Docker / Docker Compose             |
+
+> **Note** : la vue carte (`map/index.blade.php`) utilise majoritairement du CSS inline
+> (pas de classes Tailwind) pour éviter les dépendances au build Vite. Alpine.js est
+> utilisé sans composants imbriqués — tout l'état est dans un seul `x-data="mapApp()"`.
 
 ---
 
@@ -29,100 +33,208 @@ src/                        ← Racine Laravel
 ├── app/
 │   ├── Http/
 │   │   ├── Controllers/
-│   │   └── Livewire/       ← Composants Livewire
+│   │   │   ├── Api/
+│   │   │   │   └── SiteController.php   ← API JSON sites/scores/chart
+│   │   │   └── MapController.php        ← Vue carte
+│   │   └── Livewire/
 │   ├── Models/
-│   ├── Services/           ← Logique métier (météo, scoring, etc.)
-│   └── Jobs/               ← Jobs de queue (fetch météo, calcul scores)
+│   │   ├── Site.php
+│   │   ├── SiteCondition.php
+│   │   ├── WeatherModel.php
+│   │   ├── Forecast.php
+│   │   ├── SiteScore.php
+│   │   ├── Balise.php
+│   │   └── BaliseReading.php
+│   ├── Services/
+│   │   └── Weather/
+│   │       ├── OpenMeteoService.php     ← Fetch API Open-Meteo
+│   │       └── ScoringService.php       ← Voting logic + scores
+│   └── Jobs/
+│       ├── FetchForecastsJob.php        ← Orchestre par site
+│       └── FetchSiteForecastsJob.php    ← Fetch + score 1 site
 ├── database/
-│   ├── migrations/
+│   ├── migrations/                      ← 8 migrations (voir ci-dessous)
 │   └── seeders/
-├── resources/
-│   ├── views/
-│   │   ├── layouts/        ← Layout principal
-│   │   ├── components/     ← Composants Blade
-│   │   └── livewire/       ← Vues des composants Livewire
-│   ├── js/
-│   │   └── app.js          ← Alpine.js + Leaflet initialisés ici
-│   └── css/
-│       └── app.css         ← Tailwind CSS
-├── routes/
-│   ├── web.php
-│   └── api.php             ← Endpoints JSON pour Leaflet
-└── config/
-    └── meteo.php           ← Config des modèles météo et APIs
+│       ├── WeatherModelSeeder.php       ← 10 modèles Open-Meteo
+│       ├── SiteSeeder.php               ← Volmerange EST
+│       └── GrandEstSitesSeeder.php      ← 13 sites Grand Est
+├── resources/views/
+│   ├── layouts/app.blade.php
+│   └── map/
+│       └── index.blade.php              ← Vue principale carte (541 lignes)
+└── routes/
+    ├── web.php
+    └── api.php                          ← 3 endpoints REST
 ```
 
 ---
 
-## Modules prévus
+## Base de données
 
-### Module 1 — Météo & Carte des sites (en cours)
-Le cœur de la plateforme. Affiche une carte des sites de vol du Grand Est
-avec un scoring météo multi-modèles en temps réel.
+### Migrations (dans l'ordre)
 
-**Concepts clés :**
-- Chaque site a un profil de conditions idéales (vent, direction, précipitations)
-- Un job de queue interroge Open-Meteo toutes les heures pour 10 modèles météo
-- Une voting logic + moyenne pondérée par distance inverse carré produit un score de confiance
-- Les balises PiouPiou/FFVL en temps réel valident ou challengent la prévision
-- Résultat affiché : feu tricolore + % de confiance par site, par créneau, sur 5 jours max
+| Table             | Description                                              |
+|-------------------|----------------------------------------------------------|
+| `users`           | Utilisateurs + rôle admin/user                          |
+| `sites`           | Sites de vol (nom, coords, altitude, niveau, région)    |
+| `site_conditions` | Conditions idéales par site (vent dir/vitesse, nuages)  |
+| `weather_models`  | 10 modèles météo avec poids short/medium                |
+| `forecasts`       | Prévisions brutes Open-Meteo (nullable)                 |
+| `site_scores`     | Scores calculés par site/heure (green/orange/red)       |
+| `balises`         | Balises PiouPiou/FFVL                                   |
+| `balise_readings` | Lectures temps réel balises                             |
 
-**Modèles météo utilisés (via Open-Meteo) :**
+### Colonnes clés `site_conditions`
 ```
-Court terme (J+1/J+2) : AROME, ICON-D2, HARMONIE (haute résolution locale)
-Moyen terme (J+3/J+5) : ARPEGE-EU, ICON-EU, IFS-HRES, AIFS, ICON, GEM
+wind_dir_min, wind_dir_max          ← Axe favorable (ex: 75-105 pour Volmerange EST)
+wind_speed_min, wind_speed_max      ← Plage de vent acceptable (km/h)
+wind_speed_ideal                    ← Vent idéal
+precip_max                          ← Précipitations max tolérées
+cloud_base_min_m                    ← Plafond nuageux minimum (m)
+cloud_cover_low_max                 ← Couverture nuageuse basse max
 ```
 
-**Variables météo :**
-- DÉTERMINISTES (éliminatoires) : direction vent, force vent (min/moy/max), précipitations
-- QUALITATIVES : plafond nuageux, couverture nuageuse (haute/moyenne/basse), température, humidité
+### Colonnes clés `site_scores`
+```
+status                  ← green / orange / red / unknown
+confidence_pct          ← Pourcentage de confiance (0-100)
+wind_dir_consensus      ← Direction vent consensus (FROM direction, météo standard)
+wind_speed_consensus    ← Vitesse vent consensus
+precip_consensus        ← Précipitations consensus
+models_count            ← Nombre de modèles ayant des données
+models_converging       ← Nombre de modèles convergents
+detail                  ← JSON détail du scoring
+```
+
+### Sites en base (14 total)
+Volmerange EST (49.4468, 6.0999, 420m, vent E 75°-105°) + 13 sites Grand Est :
+Jouy-sous-les-Côtes, Beauring, Losheim, Houéville, Létanne, Lion-devant-Dun,
+Coo Ouest, Algrange, Fumay, Coo Sud, Revin Fallières, Klusserath, Markstein.
+
+---
+
+## API REST
+
+```
+GET /api/sites              → Liste tous les sites actifs (métadonnées)
+GET /api/sites/{id}/scores  → Scores filtrés fenêtre solaire + sun_windows
+GET /api/sites/{id}/chart   → Données horaires pour popup graphique
+                              (vent min/moy/max, nuages H/M/B, direction)
+```
+
+### Fenêtre de vol solaire (appliquée dans `SiteController`)
+- Début : lever du soleil − 30min → **floor** à l'heure (ex: 06:40 → 6h)
+- Fin   : coucher du soleil + 30min → **ceil** à l'heure (ex: 18:50 → 19h)
+- Calculé via `date_sunrise` / `date_sunset` PHP natif, timezone Europe/Paris
+
+---
+
+## Module 1 — Carte météo (IMPLÉMENTÉ)
+
+### Vue carte (`map/index.blade.php`)
+
+**Architecture Alpine.js** — UN SEUL composant `x-data="mapApp()"`, pas de composants
+imbriqués. Les dropdowns toolbar utilisent `position:fixed` calculé via `getBoundingClientRect()`
+pour échapper au stacking context de Leaflet.
+
+**Toolbar (h=56px)** :
+- Dropdown sélecteur de journée (5 jours, défaut = Aujourd'hui)
+- Compteur sites volables
+- Dropdown sélecteur fond de carte (5 options)
+
+**Fonds de carte disponibles** :
+| Clé        | Label         | URL                                    |
+|------------|---------------|----------------------------------------|
+| topo       | Topographique | opentopomap.org (défaut)               |
+| osm        | Standard      | tile.openstreetmap.org                 |
+| satellite  | Satellite     | server.arcgisonline.com (ESRI)         |
+| dark       | Sombre        | cartocdn.com/dark_all                  |
+| light      | Clair         | cartocdn.com/rastertiles/voyager       |
+
+**Marqueurs** : icône bouclier SVG (`pgIcon(color)`) colorée vert/orange/rouge/gris.
+Couleur = statut du jour sélectionné dans le toolbar.
+
+**Popup graphique** (au clic sur marqueur, `position:fixed`) :
+- Header : nom site + altitude + niveau + fenêtre solaire
+- **Tuiles nuageuses** (3 tuiles/heure : haute/moy/basse)
+  - Couleur `#4b8db5` (bleu-gris)
+  - Opacité INVERSÉE : `(100 - cover%) / 100` → bleu = ciel dégagé, transparent = couvert
+- **Bargraphes vent** (heure par heure) :
+  - Max : fond orange transparent
+  - Moy : vert plein (si favorable) / gris (si hors axe)
+  - Min : bleu centré
+- **Flèches direction** : `rotate(wind_dir + 180)` — pointe où le vent VA (convention usuelle)
+  - Vert si dans l'axe du site (`wind_dir_min` ≤ dir ≤ `wind_dir_max`)
+  - Rouge sinon
+  - Gère le chevauchement Nord (ex: 315°→45°)
+- Bouton "Détails ›" → ouvre side panel timeline
+
+**Side panel** (timeline détaillée, s'ouvre sur "Détails ›") :
+- Blocs colorés par heure, opacité = confiance
+- Clic sur bloc → détail vent/confiance/précip/modèles
+
+### Services météo
+
+**`OpenMeteoService`** :
+- `fetchForSiteAndModel()` / `fetchAllModelsForSite()` (pause 200ms entre appels)
+- Formule plafond Henning : `(T - Td) / 8 × 1000`
+- Format datetime `Y-m-d H:i:s` pour MariaDB (pas ISO avec `T`)
+
+**`ScoringService`** :
+- Voting logic complète
+- Moyenne circulaire pour direction vent (évite le problème 359°/1°)
+- Moyenne inverse carré pour isoler les outliers
+- Règles éliminatoires : précip > 0 → rouge ; ≥1 modèle avec pluie → orange
+- `upsert()` en masse
+
+### Convention direction vent (IMPORTANT)
+`wind_dir_consensus` dans `site_scores` = direction **FROM** (convention météo standard).
+- Est = 90°, Ouest = 270°, Nord = 0°/360°
+- Même convention dans `site_conditions.wind_dir_min/max`
+- Dans `buildChartSVG` : flèche = `rotate(wind_dir + 180)` pour montrer où le vent VA
+
+### Jobs
+- `FetchForecastsJob` : dispatche 1 job par site sur queue `meteo`
+- `FetchSiteForecastsJob` : fetch tous modèles → upsert par lots 500 → calcul scores. Timeout 300s.
+
+---
+
+## Modules futurs
 
 ### Module 2 — Journal de vol
-Carnet de vol numérique par utilisateur. Log des vols, statistiques, progression.
-Nécessite authentification.
+Carnet de vol numérique par utilisateur. Nécessite authentification.
 
 ### Module 3 — Comparatif voiles & sellettes
-Base de données des équipements parapente avec système de comparaison.
-Notation communautaire, fiches techniques.
+Base de données équipements avec comparaison et notation communautaire.
 
-### Module 4 — (à définir)
+### Balises PiouPiou/FFVL
+Intégration API temps réel pour validation des prévisions.
 
 ---
 
 ## Conventions de code
 
 ### PHP / Laravel
-- PSR-12 strict
-- Typage fort partout (`declare(strict_types=1)` en tête de chaque fichier)
+- PSR-12 strict, `declare(strict_types=1)` en tête de chaque fichier
 - Services dans `app/Services/` — logique métier jamais dans les controllers
 - Jobs dans `app/Jobs/` — tout traitement async passe par la queue Redis
-- Toujours utiliser l'ORM Eloquent, pas de requêtes SQL brutes
-- Les réponses API retournent toujours du JSON avec la structure :
-  ```json
-  { "success": true, "data": {}, "message": "" }
-  ```
+- Toujours Eloquent, pas de SQL brut
 
 ### Frontend
-- Tailwind CSS uniquement pour le style (pas de CSS custom sauf cas extrême)
-- Alpine.js pour la réactivité légère (dropdowns, toggles, etc.)
-- Livewire pour les composants avec état côté serveur
-- Leaflet.js pour tout ce qui est cartographique — initialisé dans `resources/js/map.js`
-- Pas de jQuery
+- **Pas de classes Tailwind dans la vue carte** — CSS inline uniquement (évite dépendance build)
+- Alpine.js sans composants imbriqués dans la vue carte
+- Leaflet.js pour tout ce qui est cartographique
+- Les dropdowns au-dessus de la carte : `position:fixed` + `getBoundingClientRect()`
+- Le SVG du popup est généré dynamiquement par `buildChartSVG(dayData, siteInfo)` en JS pur
 
 ### Base de données
-- Toujours passer par les migrations Laravel, jamais de modification manuelle
+- Toujours migrations Laravel, jamais de modif manuelle
 - snake_case pour les colonnes
-- Chaque table a `created_at` et `updated_at` (timestamps Laravel)
-- Indexes sur toutes les clés étrangères et les colonnes fréquemment filtrées
-
-### Sécurité
-- Toutes les routes authentifiées utilisent le middleware `auth`
-- Validation systématique des inputs via Form Requests Laravel
-- Ne jamais exposer les clés API dans le frontend
+- Indexes sur FK et colonnes fréquemment filtrées
 
 ---
 
-## Commandes Docker utiles
+## Commandes utiles
 
 ```bash
 # Démarrer l'environnement
@@ -131,46 +243,56 @@ docker compose up -d
 # Accéder au container PHP
 docker exec -it parapente_php bash
 
+# Vider les caches (après modif vue/config)
+docker exec -it parapente_php php artisan optimize:clear
+
+# Rebuild assets Vite (si modif JS/CSS hors vue carte)
+docker exec -it parapente_php npm run build
+
 # Lancer les migrations
 docker exec -it parapente_php php artisan migrate
 
-# Lancer les seeders
-docker exec -it parapente_php php artisan db:seed
+# Tester le fetch météo d'un site (id=1 = Volmerange)
+docker exec -it parapente_php php artisan tinker
+# >>> \App\Jobs\FetchSiteForecastsJob::dispatchSync(1);
 
-# Vider les caches
-docker exec -it parapente_php php artisan optimize:clear
+# Traiter la queue manuellement
+docker exec -it parapente_php php artisan queue:work --queue=meteo
 
-# Compiler les assets (dev)
-docker exec -it parapente_php npm run dev
-
-# Voir les logs du worker de queue
+# Voir les logs du worker
 docker logs parapente_worker -f
+
+# Vérifier les données en base
+# >>> \App\Models\SiteScore::where('site_id',1)->where('forecast_at','like','2026-05-08%')->get(['forecast_at','wind_dir_consensus','status']);
+# >>> \App\Models\SiteCondition::where('site_id',1)->first(['wind_dir_min','wind_dir_max','wind_speed_min','wind_speed_max']);
 ```
 
 ---
 
 ## URLs de développement
 
-| Service     | URL                        |
-|-------------|----------------------------|
-| Application | http://localhost:8001       |
-| phpMyAdmin  | http://localhost:8081       |
-| MailDev     | http://localhost:6082       |
-| Xdebug port | 6001                        |
+| Service     | URL                   |
+|-------------|-----------------------|
+| Application | http://localhost:8001 |
+| phpMyAdmin  | http://localhost:8081 |
+| MailDev     | http://localhost:6082 |
+| Xdebug port | 6001                  |
 
----
-
-## Variables d'environnement importantes
-
-Voir `.env.example` à la racine du projet.
-Copier en `.env` et renseigner les valeurs avant le premier `docker compose up`.
+> Les ports sont décalés pour coexister avec Dolibarr sur le même serveur.
 
 ---
 
 ## Points d'attention
 
-1. **Le dossier `src/` contient l'application Laravel** — ne pas modifier la structure Docker depuis ce dossier
-2. **Les jobs météo sont asynchrones** — ils tournent dans le container `parapente-worker`
-3. **Redis est utilisé** pour le cache, les sessions ET les queues — ne pas changer `QUEUE_CONNECTION`
-4. **Horizon temporel météo limité à 5 jours** — au-delà c'est de la divination, pas de la prévision
-5. **Les ports sont décalés** pour coexister avec Dolibarr sur le même serveur (voir tableau URLs)
+1. **Un seul `x-data` dans la vue carte** — ne jamais créer de composants Alpine imbriqués,
+   ça casse le scope des dropdowns et du popup.
+2. **CSS inline dans la vue carte** — ne pas migrer vers Tailwind sans rebuild Vite.
+3. **Les dropdowns doivent être `position:fixed`** avec coordonnées calculées via
+   `getBoundingClientRect()` — sinon ils passent derrière Leaflet.
+4. **Convention direction vent** : toujours stocker et comparer en FROM direction (météo standard).
+   Ajouter +180° uniquement à l'affichage des flèches.
+5. **Redis** utilisé pour cache + sessions + queues — ne pas changer `QUEUE_CONNECTION`.
+6. **Horizon météo limité à 5 jours** — au-delà c'est de la divination.
+7. **Le scheduler** (`php artisan schedule:run`) est à configurer dans `routes/console.php`
+   pour le fetch automatique toutes les heures (PENDING).
+8. **Authentification** non encore implémentée — Laravel Breeze prévu (admin/user).
