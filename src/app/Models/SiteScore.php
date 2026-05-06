@@ -76,30 +76,4 @@ class SiteScore extends Model
     {
         return $this->status === 'red';
     }
-
-    /**
-     * Couleur CSS Tailwind associée au statut.
-     */
-    public function statusColor(): string
-    {
-        return match ($this->status) {
-            'green'  => 'text-green-600',
-            'orange' => 'text-orange-500',
-            'red'    => 'text-red-600',
-            default  => 'text-gray-400',
-        };
-    }
-
-    /**
-     * Icône associée au statut (pour affichage carte Leaflet).
-     */
-    public function statusIcon(): string
-    {
-        return match ($this->status) {
-            'green'  => 'green',
-            'orange' => 'orange',
-            'red'    => 'red',
-            default  => 'gray',
-        };
-    }
 }
