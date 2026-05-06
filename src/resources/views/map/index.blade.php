@@ -29,12 +29,51 @@
         #chart-popup { position:fixed; z-index:2000; width:460px; background:#111827; border:1px solid rgba(255,255,255,.14); border-radius:16px; box-shadow:0 24px 64px rgba(0,0,0,.85); transition:opacity .2s; }
 
         /* Side panel */
-        #panel { transition:transform .35s cubic-bezier(.4,0,.2,1); transform:translateX(100%); }
+        :root { --panel-width: clamp(600px, 50vw, 900px); }
+        #panel { width:var(--panel-width); transition:transform .35s cubic-bezier(.4,0,.2,1); transform:translateX(100%); }
         #panel.open { transform:translateX(0); }
 
-        .slot-block { flex:1; height:20px; min-width:2px; cursor:pointer; border-radius:2px; transition:opacity .1s,transform .1s; }
-        .slot-block:hover { opacity:.7; transform:scaleY(1.25); }
-        .slot-block.sel { outline:2px solid white; outline-offset:1px; z-index:1; }
+        .panel-header { padding:18px 20px 0; border-bottom:1px solid rgba(55,65,81,.4); flex-shrink:0; }
+        .panel-titlebar { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+        .panel-titlebar h2 { font-size:16px; font-weight:600; color:#fff; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .panel-meta { display:flex; align-items:center; gap:8px; margin-top:6px; font-size:12px; color:#6b7280; font-family:'DM Mono',monospace; }
+        .panel-meta .sep { color:#374151; }
+        .panel-close { width:28px; height:28px; border-radius:50%; border:none; background:transparent; color:#6b7280; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:all .15s; }
+        .panel-close:hover { background:rgba(55,65,81,.7); color:#fff; }
+        .panel-sun { margin-top:10px; display:flex; align-items:center; gap:8px; font-size:12px; color:#9ca3af; }
+        .panel-sun .ico { color:#fbbf24; font-size:18px; line-height:1; }
+        .panel-sun .mono { color:#e5e7eb; font-family:'DM Mono',monospace; }
+
+        .panel-tabs { display:flex; gap:4px; margin-top:14px; }
+        .pg-tab { padding:9px 16px; border:none; background:transparent; color:#6b7280; cursor:pointer; font-size:13px; font-weight:500; border-bottom:2px solid transparent; transition:color .15s,border-color .15s; }
+        .pg-tab:hover:not(.active) { color:#9ca3af; }
+        .pg-tab.active { color:#fff; border-bottom-color:#38bdf8; }
+
+        .panel-day-row { display:flex; align-items:center; gap:10px; padding:14px 0 16px; }
+        .pg-day-arrow { width:30px; height:30px; border-radius:50%; border:1px solid rgba(55,65,81,.5); background:rgba(31,41,55,.4); color:#9ca3af; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:all .15s; }
+        .pg-day-arrow:hover:not(:disabled) { color:#fff; border-color:rgba(75,85,99,.7); background:rgba(31,41,55,.7); }
+        .pg-day-arrow:disabled { opacity:.35; cursor:not-allowed; }
+        .panel-day-label { flex:1; text-align:center; font-size:14px; font-weight:500; color:#fff; }
+        .panel-conformity { display:flex; align-items:center; gap:8px; font-size:11px; color:#6b7280; }
+        .panel-conformity .bar { width:64px; height:5px; background:#1f2937; border-radius:3px; overflow:hidden; }
+        .panel-conformity .fill { height:100%; background:#22c55e; transition:width .4s; }
+        .panel-conformity .val { font-family:'DM Mono',monospace; color:#e5e7eb; min-width:32px; text-align:right; }
+
+        .panel-legend { padding:10px 20px; background:rgba(17,24,39,.95); border-bottom:1px solid rgba(55,65,81,.4); display:flex; flex-wrap:wrap; gap:6px; flex-shrink:0; position:sticky; top:0; z-index:5; backdrop-filter:blur(6px); }
+        .pg-chip { display:inline-flex; align-items:center; gap:6px; padding:3px 9px; border-radius:999px; background:rgba(31,41,55,.6); border:1px solid rgba(55,65,81,.5); font-size:10px; color:#cbd5e1; user-select:none; }
+        .pg-chip-dot { width:9px; height:3px; border-radius:1px; flex-shrink:0; }
+        .pg-chip-consensus { background:rgba(255,255,255,.06); border-color:rgba(255,255,255,.18); color:#fff; font-weight:500; }
+        .pg-chip-consensus .pg-chip-dot { background-image:repeating-linear-gradient(90deg,#fff 0 3px,transparent 3px 6px); height:2px; }
+
+        .panel-loader { flex:1; display:flex; align-items:center; justify-content:center; }
+        .panel-spinner { width:28px; height:28px; border:2px solid #374151; border-top-color:#38bdf8; border-radius:50%; animation:spin 1s linear infinite; }
+
+        .panel-scroll { flex:1; overflow-y:auto; min-height:0; }
+        .panel-placeholder { padding:60px 24px; text-align:center; font-size:13px; color:#4b5563; line-height:1.6; }
+        .panel-placeholder strong { color:#9ca3af; font-weight:600; }
+
+        .panel-footer { padding:10px 20px; border-top:1px solid rgba(55,65,81,.4); flex-shrink:0; display:flex; justify-content:space-between; font-size:10px; color:#374151; }
+
         @keyframes spin { to { transform:rotate(360deg); } }
 
         ::-webkit-scrollbar { width:3px; }
@@ -146,89 +185,94 @@
                 </div>
             </div>
 
-            {{-- Side panel (timeline détaillée) --}}
-            <div id="panel" style="position:absolute;top:0;right:0;height:100%;width:384px;background:#111827;border-left:1px solid rgba(55,65,81,.5);z-index:500;display:flex;flex-direction:column;box-shadow:-8px 0 32px rgba(0,0,0,.5);">
-                <div style="padding:20px 20px 16px;border-bottom:1px solid rgba(55,65,81,.4);flex-shrink:0;">
-                    <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+            {{-- Side panel (comparaison multi-modèles) --}}
+            <div id="panel" style="position:absolute;top:0;right:0;height:100%;background:#111827;border-left:1px solid rgba(55,65,81,.5);z-index:500;display:flex;flex-direction:column;box-shadow:-8px 0 32px rgba(0,0,0,.5);">
+
+                {{-- Header : titre, méta, sun window, tabs, sélecteur jour, conformité --}}
+                <div class="panel-header">
+                    <div class="panel-titlebar">
                         <div style="flex:1;min-width:0;">
-                            <h2 style="font-weight:600;color:#fff;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" x-text="site.name"></h2>
-                            <div style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:12px;">
-                                <span style="color:#6b7280;font-family:'DM Mono',monospace;" x-text="site.altitude+' m'"></span>
-                                <span style="color:#374151;">·</span>
-                                <span style="padding:2px 8px;border-radius:999px;border:1px solid;font-size:11px;"
-                                      :style="{borderColor:site.level==='debutant'?'rgba(74,222,128,.3)':site.level==='intermediaire'?'rgba(250,204,21,.3)':site.level==='confirme'?'rgba(251,146,60,.3)':'rgba(248,113,113,.3)',color:site.level==='debutant'?'#4ade80':site.level==='intermediaire'?'#facc15':site.level==='confirme'?'#fb923c':'#f87171'}"
-                                      x-text="site.level"></span>
+                            <h2 x-text="site.name"></h2>
+                            <div class="panel-meta">
+                                <span x-text="(site.altitude??'?')+' m'"></span>
+                                <span class="sep">·</span>
+                                <span x-text="(typeof site.lat==='number'?site.lat.toFixed(2):'?')+'°N '+(typeof site.lng==='number'?site.lng.toFixed(2):'?')+'°E'"></span>
+                                <span class="sep">·</span>
+                                <span x-text="site.level??''"></span>
                             </div>
                         </div>
-                        <button @click="closePanel()" style="width:28px;height:28px;border-radius:50%;border:none;background:transparent;color:#6b7280;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:8px;" onmouseover="this.style.background='rgba(55,65,81,.7)';this.style.color='#fff'" onmouseout="this.style.background='transparent';this.style.color='#6b7280'">✕</button>
+                        <button class="panel-close" @click="closePanel()">✕</button>
                     </div>
-                    <div x-show="currentSunWindow" style="margin-top:12px;display:flex;align-items:center;gap:8px;font-size:12px;color:#6b7280;">
-                        <span style="color:#fbbf24;">☀</span>
-                        <span>Vol de <span style="color:#e5e7eb;font-family:'DM Mono',monospace;" x-text="currentSunWindow?.start_hour+'h'"></span> à <span style="color:#e5e7eb;font-family:'DM Mono',monospace;" x-text="currentSunWindow?.end_hour+'h'"></span></span>
-                        <span style="color:#374151;">·</span>
-                        <span x-text="currentSunWindow?.sunrise_display+' → '+currentSunWindow?.sunset_display"></span>
+
+                    <div x-show="multimodelData?.sun_window" class="panel-sun">
+                        <span class="ico">☀</span>
+                        <span>Lever <span class="mono" x-text="multimodelData?.sun_window?.sunrise_display"></span></span>
+                        <span class="sep">→</span>
+                        <span>Coucher <span class="mono" x-text="multimodelData?.sun_window?.sunset_display"></span></span>
                     </div>
-                </div>
-                <div x-show="loading" style="flex:1;display:flex;align-items:center;justify-content:center;">
-                    <div style="width:28px;height:28px;border:2px solid #374151;border-top-color:#38bdf8;border-radius:50%;animation:spin 1s linear infinite;"></div>
-                </div>
-                <div x-show="!loading" style="flex:1;overflow-y:auto;min-height:0;">
-                    <div style="padding:16px 20px 8px;">
-                        <div style="font-size:10px;color:#4b5563;text-transform:uppercase;letter-spacing:.08em;font-weight:500;margin-bottom:12px;">Fenêtres de vol</div>
-                        <div x-show="Object.keys(scoresByDay).length>0" style="display:flex;flex-direction:column;gap:8px;">
-                            <template x-for="(slots,day) in scoresByDay" :key="day">
-                                <div style="display:flex;align-items:center;gap:10px;">
-                                    <span style="font-size:10px;color:#4b5563;font-family:'DM Mono',monospace;width:36px;flex-shrink:0;" x-text="day"></span>
-                                    <div style="display:flex;gap:1px;flex:1;align-items:stretch;height:20px;">
-                                        <template x-for="slot in slots" :key="slot.forecast_at">
-                                            <div class="slot-block" :class="selectedSlot===slot.forecast_at?'sel':''" :style="`background:${slotColor(slot)}`" :title="slot.hour+' · '+statusLabel(slot.status)+' · '+slot.confidence+'%'" @click="selectSlot(slot)"></div>
-                                        </template>
-                                    </div>
-                                    <span style="font-size:10px;width:20px;text-align:right;flex-shrink:0;font-family:'DM Mono',monospace;" :style="{color:greenHours(slots)>0?'#4ade80':'#374151'}" x-text="greenHours(slots)>0?greenHours(slots)+'h':''"></span>
-                                </div>
-                            </template>
-                        </div>
-                        <div x-show="Object.keys(scoresByDay).length===0" style="padding:24px;text-align:center;font-size:12px;color:#4b5563;">Aucune prévision disponible.</div>
+
+                    <div class="panel-tabs">
+                        <button class="pg-tab" :class="panelTab==='today'?'active':''" @click="panelTab='today'">Aujourd'hui</button>
+                        <button class="pg-tab" :class="panelTab==='fivedays'?'active':''" @click="panelTab='fivedays'">Vue 5 jours</button>
                     </div>
-                    <div x-show="!selectedSlotData&&Object.keys(scoresByDay).length>0" style="margin:0 20px 12px;border:1px dashed rgba(55,65,81,.5);border-radius:12px;padding:12px;text-align:center;font-size:12px;color:#4b5563;">↑ Cliquez sur un bloc</div>
-                    <div x-show="selectedSlotData" style="margin:0 20px 12px;background:rgba(31,41,55,.4);border:1px solid rgba(55,65,81,.4);border-radius:12px;padding:16px;">
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-                            <span style="font-size:14px;font-weight:500;color:#fff;" x-text="selectedSlotData?.day+' à '+selectedSlotData?.hour"></span>
-                            <span style="font-size:11px;padding:4px 10px;border-radius:999px;font-weight:500;border:1px solid;"
-                                  :style="{background:selectedSlotData?.status==='green'?'rgba(34,197,94,.12)':selectedSlotData?.status==='orange'?'rgba(245,158,11,.12)':'rgba(239,68,68,.12)',borderColor:selectedSlotData?.status==='green'?'rgba(34,197,94,.25)':selectedSlotData?.status==='orange'?'rgba(245,158,11,.25)':'rgba(239,68,68,.25)',color:selectedSlotData?.status==='green'?'#4ade80':selectedSlotData?.status==='orange'?'#fbbf24':'#f87171'}"
-                                  x-text="statusLabel(selectedSlotData?.status)"></span>
-                        </div>
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                            <div style="background:rgba(0,0,0,.3);border-radius:12px;padding:12px;text-align:center;">
-                                <div style="font-size:20px;margin-bottom:6px;display:inline-block;transition:transform .3s;" :style="`transform:rotate(${(selectedSlotData?.wind_dir??0)+180}deg)`">↑</div>
-                                <div style="font-size:10px;color:#6b7280;margin-bottom:2px;">Direction</div>
-                                <div style="font-size:14px;font-weight:600;color:#fff;font-family:'DM Mono',monospace;" x-text="selectedSlotData?.wind_dir?selectedSlotData.wind_dir+'°':'—'"></div>
-                            </div>
-                            <div style="background:rgba(0,0,0,.3);border-radius:12px;padding:12px;text-align:center;">
-                                <div style="font-size:20px;margin-bottom:6px;">💨</div>
-                                <div style="font-size:10px;color:#6b7280;margin-bottom:2px;">Vent moy.</div>
-                                <div style="font-size:14px;font-weight:600;color:#fff;font-family:'DM Mono',monospace;" x-text="selectedSlotData?.wind_speed?selectedSlotData.wind_speed+' km/h':'—'"></div>
-                            </div>
-                            <div style="background:rgba(0,0,0,.3);border-radius:12px;padding:12px;">
-                                <div style="font-size:10px;color:#6b7280;margin-bottom:8px;">Confiance</div>
-                                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-                                    <div style="flex:1;height:6px;background:#1f2937;border-radius:3px;overflow:hidden;">
-                                        <div style="height:100%;border-radius:3px;transition:width .5s;" :style="{width:(selectedSlotData?.confidence??0)+'%',background:selectedSlotData?.confidence>=75?'#22c55e':selectedSlotData?.confidence>=50?'#f59e0b':'#ef4444'}"></div>
-                                    </div>
-                                    <span style="font-size:12px;font-weight:600;color:#fff;font-family:'DM Mono',monospace;" x-text="(selectedSlotData?.confidence??0)+'%'"></span>
-                                </div>
-                                <div style="font-size:10px;color:#4b5563;" x-text="(selectedSlotData?.models_conv??0)+'/'+(selectedSlotData?.models_count??0)+' modèles'"></div>
-                            </div>
-                            <div style="background:rgba(0,0,0,.3);border-radius:12px;padding:12px;">
-                                <div style="font-size:10px;color:#6b7280;margin-bottom:8px;">Précipitations</div>
-                                <div style="font-size:14px;font-weight:600;font-family:'DM Mono',monospace;" :style="{color:(selectedSlotData?.precip??0)>0?'#60a5fa':'#4ade80'}" x-text="selectedSlotData?.precip!==null?selectedSlotData.precip+' mm/h':'—'"></div>
-                                <div style="font-size:10px;margin-top:4px;" :style="{color:(selectedSlotData?.precip??0)===0?'#16a34a':'#dc2626'}" x-text="(selectedSlotData?.precip??0)===0?'✓ Sec':'✗ Pluie'"></div>
-                            </div>
+
+                    <div x-show="panelTab==='today'" class="panel-day-row">
+                        <button class="pg-day-arrow" :disabled="panelDayIdx===0" @click="panelDayShift(-1)">‹</button>
+                        <div class="panel-day-label" x-text="panelDay?.label ?? '—'"></div>
+                        <button class="pg-day-arrow" :disabled="panelDayIdx>=days.length-1" @click="panelDayShift(1)">›</button>
+                        <div class="panel-conformity" x-show="multimodelData">
+                            <span>Conformité</span>
+                            <div class="bar"><div class="fill" :style="`width:${multimodelData?.conformity_pct??0}%;background:${conformityColor}`"></div></div>
+                            <span class="val" x-text="(multimodelData?.conformity_pct ?? '—')+'%'"></span>
                         </div>
                     </div>
                 </div>
-                <div style="padding:10px 20px;border-top:1px solid rgba(55,65,81,.4);flex-shrink:0;display:flex;justify-content:space-between;font-size:10px;color:#374151;">
-                    <span>Open-Meteo · 10 modèles météo</span><span>Horizon 5 jours</span>
+
+                {{-- Légende sticky des modèles (uniquement sur l'onglet Aujourd'hui) --}}
+                <div x-show="panelTab==='today' && multimodelData" class="panel-legend">
+                    <template x-for="m in (multimodelData?.models??[])" :key="m.id">
+                        <span class="pg-chip" :title="m.provider">
+                            <span class="pg-chip-dot" :style="`background:${m.color}`"></span>
+                            <span x-text="m.name"></span>
+                        </span>
+                    </template>
+                    <span class="pg-chip pg-chip-consensus">
+                        <span class="pg-chip-dot"></span>
+                        Consensus
+                    </span>
+                </div>
+
+                {{-- Loader --}}
+                <div x-show="multimodelLoading" class="panel-loader">
+                    <div class="panel-spinner"></div>
+                </div>
+
+                {{-- Onglet "Aujourd'hui" : placeholder pour les 7 graphes (étape 3) --}}
+                <div x-show="!multimodelLoading && panelTab==='today'" class="panel-scroll">
+                    <div class="panel-placeholder">
+                        <strong>Comparaison multi-modèles</strong><br>
+                        Les graphes (vent min/moy/max, direction, précipitations,
+                        humidité, température) seront affichés ici.<br><br>
+                        <span style="font-size:11px;color:#374151;">
+                            Données chargées :
+                            <span x-text="(multimodelData?.models?.length ?? 0)+' modèles · '+(multimodelData?.hours?.length ?? 0)+' créneaux'"></span>
+                        </span>
+                    </div>
+                </div>
+
+                {{-- Onglet "Vue 5 jours" : placeholder --}}
+                <div x-show="panelTab==='fivedays'" class="panel-scroll">
+                    <div class="panel-placeholder">
+                        <strong>Vue 5 jours</strong><br>
+                        Bientôt disponible — comparaison des modèles<br>
+                        sur l'horizon complet.
+                    </div>
+                </div>
+
+                {{-- Footer --}}
+                <div class="panel-footer">
+                    <span>Open-Meteo · 10 modèles météo</span>
+                    <span>Horizon 5 jours</span>
                 </div>
             </div>
         </div>
@@ -398,8 +442,7 @@
             map:null,tl:null,markers:{},
             sites:[],allScores:{},sunWindows:{},
             days:[],selectedDayIdx:0,
-            site:{},loading:false,
-            scoresByDay:{},selectedSlot:null,selectedSlotData:null,
+            site:{},
             currentBasemap:'topo',basemapList:BASEMAP_LIST,
             dayDropOpen:false,dayDropPos:{top:0,left:0},
             bmDropOpen:false,bmDropPos:{top:0,right:0},
@@ -408,6 +451,10 @@
             chartLoading:false,chartData:null,
             chartSite:null,chartSunWindow:null,
             _chartSiteObj:null, // référence site pour "Détails >"
+            // Side panel (mode comparaison multi-modèles)
+            panelOpen:false,panelTab:'today',panelDayIdx:0,
+            multimodelData:null,multimodelLoading:false,
+            _panelMapState:null, // sauvegarde center+zoom carte avant ouverture
 
             async init(){await this.$nextTick();this.initMap();await this.loadSites();},
 
@@ -455,7 +502,6 @@
             selectDay(idx){this.selectedDayIdx=idx;this.renderMarkers();if(this.chartOpen&&this.chartData)this.$nextTick(()=>this.refreshChart());},
 
             get greenCount(){const day=this.days[this.selectedDayIdx]?.raw;if(!day)return 0;return this.sites.filter(s=>(this.allScores[s.id]||[]).some(sc=>sc.day===day&&sc.status==='green')).length;},
-            get currentSunWindow(){if(!this.site?.id)return null;return this.sunWindows[this.site.id]?.[this.days[this.selectedDayIdx]?.raw]??null;},
 
             renderMarkers(){
                 const day=this.days[this.selectedDayIdx]?.raw;
@@ -518,24 +564,85 @@
                 this.$nextTick(()=>buildChartSVG(dayData,this.chartData.site));
             },
 
-            // Bouton "Détails ›" dans le popup → ouvre le panel timeline
+            // Bouton "Détails ›" dans le popup → ouvre le panel multi-modèles
             openPanel(){
                 if(!this._chartSiteObj) return;
                 const s=this._chartSiteObj;
-                this.site=s;this.loading=false;this.selectedSlot=null;this.selectedSlotData=null;
-                this.scoresByDay=(this.allScores[s.id]||[]).reduce((acc,sc)=>{if(!acc[sc.day])acc[sc.day]=[];acc[sc.day].push(sc);return acc;},{});
+                this.site=s;
+                this.panelTab='today';
+                this.panelDayIdx=this.selectedDayIdx;
+                this.panelOpen=true;
                 document.getElementById('panel').classList.add('open');
+                this._recenterMapForPanel(s);
+                this.loadMultimodel();
             },
             closePanel(){
                 document.getElementById('panel').classList.remove('open');
+                this.panelOpen=false;
+                this.multimodelData=null;
+                this._restoreMapState();
                 Object.values(this.markers).forEach(m=>m.getElement()?.querySelector('.pg-marker')?.classList.remove('selected'));
                 this.site={};
             },
 
-            selectSlot(slot){this.selectedSlot=slot.forecast_at;this.selectedSlotData=slot;},
-            slotColor(slot){const a=Math.max(0.25,(slot.confidence??50)/100);return{green:`rgba(22,163,74,${a})`,orange:`rgba(217,119,6,${a})`,red:`rgba(220,38,38,${a})`,unknown:'rgba(75,85,99,0.4)'}[slot.status]??'rgba(75,85,99,0.4)';},
-            statusLabel(s){return{green:'Favorable',orange:'Incertain',red:'Défavorable',unknown:'—'}[s]??'—';},
-            greenHours(slots){return slots.filter(s=>s.status==='green').length;},
+            // ── Side panel : navigation jour + chargement multi-modèles ──
+            get panelDay(){return this.days[this.panelDayIdx]??null;},
+            get conformityColor(){
+                const c=this.multimodelData?.conformity_pct;
+                if(c==null) return '#6b7280';
+                if(c>=75) return '#22c55e';
+                if(c>=50) return '#f59e0b';
+                return '#ef4444';
+            },
+            panelDayShift(delta){
+                const next=Math.max(0, Math.min(this.days.length-1, this.panelDayIdx+delta));
+                if(next===this.panelDayIdx) return;
+                this.panelDayIdx=next;
+                this.loadMultimodel();
+            },
+            async loadMultimodel(){
+                if(!this.site?.id) return;
+                const day=this.days[this.panelDayIdx]?.raw;
+                if(!day) return;
+                const ymd=this._dayRawToYmd(day);
+                this.multimodelData=null;
+                this.multimodelLoading=true;
+                try{
+                    const r=await fetch(`/api/sites/${this.site.id}/multimodel?day=${ymd}`);
+                    if(!r.ok) throw new Error('HTTP '+r.status);
+                    this.multimodelData=await r.json();
+                }catch(e){console.error('multimodel load failed',e);}
+                this.multimodelLoading=false;
+            },
+            _dayRawToYmd(raw){
+                const [d,m]=raw.split('/');
+                const yyyy=new Date().getFullYear();
+                return `${yyyy}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            },
+
+            // ── Recentrage carte à l'ouverture/fermeture du panel ──
+            // Le panel est en position:absolute par-dessus la carte : le
+            // conteneur ne change pas de taille (pas d'invalidateSize).
+            // On décale juste le centre géographique de panelW/2 vers la
+            // droite pour que le site apparaisse au milieu de la zone
+            // visible (à gauche du panel). Le zoom courant est conservé.
+            _recenterMapForPanel(site){
+                if(!this.map) return;
+                if(!this._panelMapState){
+                    this._panelMapState={center:this.map.getCenter(),zoom:this.map.getZoom()};
+                }
+                const panelW=document.getElementById('panel')?.offsetWidth??0;
+                if(panelW===0) return;
+                const sitePoint=this.map.latLngToContainerPoint([site.lat,site.lng]);
+                const newCenterPoint=L.point(sitePoint.x + panelW/2, sitePoint.y);
+                const newCenter=this.map.containerPointToLatLng(newCenterPoint);
+                this.map.flyTo(newCenter, this.map.getZoom(), {duration:.6});
+            },
+            _restoreMapState(){
+                if(!this.map || !this._panelMapState) return;
+                const s=this._panelMapState; this._panelMapState=null;
+                this.map.flyTo(s.center, s.zoom, {duration:.5});
+            },
         };}
     </script>
 @endpush
