@@ -524,13 +524,13 @@
             const sunStart = data.sun_window?.start_hour;
             const sunEnd   = data.sun_window?.end_hour;
 
-            // Bandeau "nuit" (heures hors fenêtre solaire) — léger overlay clair
+            // Bandeau "jour" (fenêtre solaire) — léger éclaircissement
             hours.forEach((h, i) => {
-                const isDay = sunStart == null || (h >= sunStart && h <= sunEnd);
-                if (isDay) return;
+                const isDay = sunStart != null && h >= sunStart && h <= sunEnd;
+                if (!isDay) return;
                 const x1 = i === 0 ? PAD_L : (xScale(i-1) + xScale(i)) / 2;
                 const x2 = i === N-1 ? PAD_L + innerW : (xScale(i) + xScale(i+1)) / 2;
-                svgMk(svg, 'rect', {x:x1, y:PAD_T, width:Math.max(0,x2-x1), height:innerH, fill:'rgba(255,255,255,.04)'});
+                svgMk(svg, 'rect', {x:x1, y:PAD_T, width:Math.max(0,x2-x1), height:innerH, fill:'rgba(255,255,255,.06)'});
             });
 
             // Bandeau favorable
@@ -867,7 +867,7 @@
                 this.multimodelData=null;
                 this.multimodelLoading=true;
                 try{
-                    const r=await fetch(`/api/sites/${this.site.id}/multimodel?day=${ymd}`);
+                    const r=await fetch(`/api/sites/${this.site.id}/multimodel?day=${ymd}&period=24h`);
                     if(!r.ok) throw new Error('HTTP '+r.status);
                     this.multimodelData=await r.json();
                 }catch(e){console.error('multimodel load failed',e);}
