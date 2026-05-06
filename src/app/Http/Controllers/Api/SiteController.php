@@ -101,14 +101,17 @@ class SiteController extends Controller
                 $key   = $score->forecast_at->format('Y-m-d H:i:s');
                 $fcsts = ($rawForecasts[$key] ?? collect())->filter(fn ($f) => $f->wind_speed_avg !== null);
 
+                // wind_max : on utilise le consensus (voting logic) plutôt que la
+                // moyenne arithmétique pour éviter qu'une valeur aberrante d'un
+                // modèle ne fausse la rafale affichée.
                 $dayData[] = [
                     'hour'       => $score->forecast_at->format('H:i'),
                     'status'     => $score->status,
                     'confidence' => $score->confidence_pct,
                     'wind_dir'   => $score->wind_dir_consensus,
-                    'wind_avg'   => $score->wind_speed_consensus ? round((float) $score->wind_speed_consensus, 1) : null,
+                    'wind_avg'   => $score->wind_speed_consensus !== null ? round((float) $score->wind_speed_consensus, 1) : null,
                     'wind_min'   => $fcsts->isNotEmpty() ? round($fcsts->avg('wind_speed_min'), 1) : null,
-                    'wind_max'   => $fcsts->isNotEmpty() ? round($fcsts->avg('wind_speed_max'), 1) : null,
+                    'wind_max'   => $score->wind_gust_consensus !== null ? round((float) $score->wind_gust_consensus, 1) : null,
                     'cloud_high' => $fcsts->isNotEmpty() ? (int) round($fcsts->avg('cloud_cover_high')) : null,
                     'cloud_mid'  => $fcsts->isNotEmpty() ? (int) round($fcsts->avg('cloud_cover_mid'))  : null,
                     'cloud_low'  => $fcsts->isNotEmpty() ? (int) round($fcsts->avg('cloud_cover_low'))  : null,
@@ -214,6 +217,7 @@ class SiteController extends Controller
                 $consensus[$h] = [
                     'wind_dir'   => $s->wind_dir_consensus,
                     'wind_speed' => $s->wind_speed_consensus !== null ? (float) $s->wind_speed_consensus : null,
+                    'wind_gust'  => $s->wind_gust_consensus  !== null ? (float) $s->wind_gust_consensus  : null,
                     'precip'     => $s->precip_consensus !== null ? (float) $s->precip_consensus : null,
                     'status'     => $s->status,
                     'confidence' => $s->confidence_pct,

@@ -58,7 +58,8 @@ class ScoringService
                 ['site_id', 'forecast_at'],
                 [
                     'computed_at', 'status', 'confidence_pct',
-                    'wind_dir_consensus', 'wind_speed_consensus', 'precip_consensus',
+                    'wind_dir_consensus', 'wind_speed_consensus', 'wind_gust_consensus',
+                    'precip_consensus',
                     'models_count', 'models_converging', 'detail',
                 ]
             );
@@ -80,6 +81,7 @@ class ScoringService
         // ── 1. Calcul du consensus par variable ─────────────────
         $windDirs   = $this->extractWeighted($modelForecasts, 'wind_direction', $horizonHours);
         $windSpeeds = $this->extractWeighted($modelForecasts, 'wind_speed_avg', $horizonHours);
+        $windGusts  = $this->extractWeighted($modelForecasts, 'wind_speed_max', $horizonHours);
         $precips    = $this->extractWeighted($modelForecasts, 'precipitation',  $horizonHours);
 
         if (empty($windDirs) || empty($windSpeeds) || empty($precips)) {
@@ -88,6 +90,9 @@ class ScoringService
 
         $windDirConsensus   = $this->weightedMeanCircular($windDirs);
         $windSpeedConsensus = $this->weightedMeanInverseSquare($windSpeeds);
+        // Rafales : même voting logic. Si aucun modèle ne donne wind_speed_max
+        // (cas rare), on retombe sur wind_speed_consensus.
+        $windGustConsensus  = !empty($windGusts) ? $this->weightedMeanInverseSquare($windGusts) : $windSpeedConsensus;
         $precipConsensus    = $this->weightedMeanInverseSquare($precips);
 
         // ── 2. Convergence par variable ──────────────────────────
@@ -134,6 +139,10 @@ class ScoringService
                 'convergence' => round($windSpeedConvergence, 2),
                 'values'      => array_column($windSpeeds, 'value'),
             ],
+            'wind_gust' => [
+                'consensus' => $windGustConsensus,
+                'values'    => array_column($windGusts, 'value'),
+            ],
             'precip' => [
                 'consensus'   => $precipConsensus,
                 'convergence' => round($precipConvergence, 2),
@@ -149,6 +158,7 @@ class ScoringService
             'confidence_pct'       => $confidencePct,
             'wind_dir_consensus'   => (int) round($windDirConsensus),
             'wind_speed_consensus' => round($windSpeedConsensus, 1),
+            'wind_gust_consensus'  => round($windGustConsensus, 1),
             'precip_consensus'     => round($precipConsensus, 1),
             'models_count'         => $modelsCount,
             'models_converging'    => $modelsConverging,

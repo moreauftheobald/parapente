@@ -26,7 +26,9 @@
         .pg-marker.selected { transform:scale(1.2); filter:drop-shadow(0 0 6px rgba(255,255,255,.7)) drop-shadow(0 4px 10px rgba(0,0,0,.6)); }
 
         /* Popup chart */
-        #chart-popup { position:fixed; z-index:2000; width:460px; background:#111827; border:1px solid rgba(255,255,255,.14); border-radius:16px; box-shadow:0 24px 64px rgba(0,0,0,.85); transition:opacity .2s; }
+        #chart-popup { position:fixed; z-index:2000; width:600px; background:#111827; border:1px solid rgba(255,255,255,.14); border-radius:16px; box-shadow:0 24px 64px rgba(0,0,0,.85); transition:opacity .2s; color:#fff; }
+        #chart-popup .popup-meta { color:#e5e7eb; }
+        #chart-popup .popup-foot { color:#cbd5e1; }
 
         /* Side panel */
         :root { --panel-width: clamp(600px, 50vw, 900px); }
@@ -60,7 +62,7 @@
         .panel-conformity .val { font-family:'DM Mono',monospace; color:#e5e7eb; min-width:32px; text-align:right; }
 
         .panel-legend { padding:10px 20px; background:rgba(17,24,39,.95); border-bottom:1px solid rgba(55,65,81,.4); display:flex; flex-wrap:wrap; gap:6px; flex-shrink:0; position:sticky; top:0; z-index:5; backdrop-filter:blur(6px); }
-        .pg-chip { display:inline-flex; align-items:center; gap:6px; padding:3px 9px; border-radius:999px; background:rgba(31,41,55,.6); border:1px solid rgba(55,65,81,.5); font-size:10px; color:#cbd5e1; user-select:none; }
+        .pg-chip { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; background:rgba(31,41,55,.6); border:1px solid rgba(55,65,81,.5); font-size:12px; color:#e5e7eb; user-select:none; }
         .pg-chip-dot { width:9px; height:3px; border-radius:1px; flex-shrink:0; }
         .pg-chip-consensus { background:rgba(255,255,255,.06); border-color:rgba(255,255,255,.18); color:#fff; font-weight:500; }
         .pg-chip-consensus .pg-chip-dot { background-image:repeating-linear-gradient(90deg,#fff 0 3px,transparent 3px 6px); height:2px; }
@@ -73,6 +75,14 @@
         .panel-placeholder strong { color:#9ca3af; font-weight:600; }
 
         .panel-footer { padding:10px 20px; border-top:1px solid rgba(55,65,81,.4); flex-shrink:0; display:flex; justify-content:space-between; font-size:10px; color:#374151; }
+
+        /* Sections de graphes dans le panel */
+        .chart-section { padding:0 18px; border-bottom:1px solid rgba(55,65,81,.25); }
+        .chart-section:last-child { border-bottom:none; padding-bottom:14px; }
+        .chart-header { display:flex; justify-content:space-between; align-items:baseline; padding:14px 0 6px; }
+        .chart-title { font-size:12px; color:#e5e7eb; font-weight:600; text-transform:uppercase; letter-spacing:.06em; }
+        .chart-unit { font-size:11px; color:#cbd5e1; font-family:'DM Mono',monospace; margin-left:8px; }
+        .chart-svg { display:block; width:100%; height:120px; overflow:visible; }
 
         @keyframes spin { to { transform:rotate(360deg); } }
 
@@ -140,46 +150,46 @@
                  @click.stop>
 
                 {{-- Header popup --}}
-                <div style="padding:14px 16px 12px;border-bottom:1px solid rgba(55,65,81,.4);display:flex;align-items:center;justify-content:space-between;">
+                <div style="padding:18px 20px 14px;border-bottom:1px solid rgba(55,65,81,.4);display:flex;align-items:center;justify-content:space-between;">
                     <div>
-                        <div style="color:#fff;font-size:14px;font-weight:500;" x-text="chartSite?.name"></div>
-                        <div style="color:#6b7280;font-size:10px;margin-top:2px;">
+                        <div style="color:#fff;font-size:18px;font-weight:600;" x-text="chartSite?.name"></div>
+                        <div class="popup-meta" style="font-size:13px;margin-top:4px;">
                             <span x-text="chartSite?.altitude+' m'"></span> ·
                             <span x-text="chartSite?.level"></span> ·
-                            <span style="color:#fbbf24;">☀</span>
+                            <span style="color:#fbbf24;font-size:18px;line-height:1;">☀</span>
                             <span x-text="chartSunWindow?.sunrise_display+' – '+chartSunWindow?.sunset_display"></span>
                         </div>
                     </div>
-                    <div style="display:flex;align-items:center;gap:8px;">
+                    <div style="display:flex;align-items:center;gap:10px;">
                         <button @click="openPanel(); chartOpen=false;"
-                                style="padding:5px 12px;border-radius:8px;border:1px solid rgba(55,65,81,.6);background:rgba(255,255,255,.05);color:#9ca3af;font-size:11px;cursor:pointer;transition:all .15s;"
-                                onmouseover="this.style.background='rgba(255,255,255,.1)';this.style.color='#fff'"
-                                onmouseout="this.style.background='rgba(255,255,255,.05)';this.style.color='#9ca3af'">
+                                style="padding:7px 16px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;font-size:14px;cursor:pointer;transition:all .15s;"
+                                onmouseover="this.style.background='rgba(255,255,255,.16)'"
+                                onmouseout="this.style.background='rgba(255,255,255,.08)'">
                             Détails ›
                         </button>
                         <button @click="chartOpen=false"
-                                style="width:26px;height:26px;border-radius:50%;border:none;background:transparent;color:#6b7280;cursor:pointer;font-size:13px;"
+                                style="width:32px;height:32px;border-radius:50%;border:none;background:transparent;color:#cbd5e1;cursor:pointer;font-size:17px;"
                                 onmouseover="this.style.background='rgba(55,65,81,.7)';this.style.color='#fff'"
-                                onmouseout="this.style.background='transparent';this.style.color='#6b7280'">✕</button>
+                                onmouseout="this.style.background='transparent';this.style.color='#cbd5e1'">✕</button>
                     </div>
                 </div>
 
                 {{-- Loader --}}
-                <div x-show="chartLoading" style="padding:40px;display:flex;align-items:center;justify-content:center;">
-                    <div style="width:24px;height:24px;border:2px solid #374151;border-top-color:#38bdf8;border-radius:50%;animation:spin 1s linear infinite;"></div>
+                <div x-show="chartLoading" style="padding:50px;display:flex;align-items:center;justify-content:center;">
+                    <div style="width:30px;height:30px;border:2px solid #374151;border-top-color:#38bdf8;border-radius:50%;animation:spin 1s linear infinite;"></div>
                 </div>
 
-                {{-- SVG chart --}}
-                <div x-show="!chartLoading" style="padding:14px 16px;">
-                    <svg id="chart-svg" width="428" height="240" viewBox="0 0 428 240" style="display:block;overflow:visible;"></svg>
-                    <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:9px;color:#374151;">
+                {{-- SVG chart (viewBox inchangé pour conserver la logique JS) --}}
+                <div x-show="!chartLoading" style="padding:18px 20px;">
+                    <svg id="chart-svg" width="558" height="312" viewBox="0 0 428 240" style="display:block;overflow:visible;"></svg>
+                    <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;color:#cbd5e1;">
                         <span>↑ sens du vent (direction de propagation)</span>
                         <span><span style="color:#22c55e;">■</span> axe favorable &nbsp;<span style="color:#ef4444;">■</span> hors axe</span>
                     </div>
                 </div>
 
                 {{-- Jour sélectionné --}}
-                <div style="padding:8px 16px;border-top:1px solid rgba(55,65,81,.4);display:flex;justify-content:space-between;font-size:10px;color:#4b5563;">
+                <div class="popup-foot" style="padding:10px 20px;border-top:1px solid rgba(55,65,81,.4);display:flex;justify-content:space-between;font-size:13px;">
                     <span x-text="'Journée : ' + (days[selectedDayIdx]?.label ?? '—')"></span>
                     <span x-text="(chartData?.days[days[selectedDayIdx]?.raw]?.length ?? 0) + ' créneaux analysés'"></span>
                 </div>
@@ -247,17 +257,21 @@
                     <div class="panel-spinner"></div>
                 </div>
 
-                {{-- Onglet "Aujourd'hui" : placeholder pour les 7 graphes (étape 3) --}}
-                <div x-show="!multimodelLoading && panelTab==='today'" class="panel-scroll">
-                    <div class="panel-placeholder">
-                        <strong>Comparaison multi-modèles</strong><br>
-                        Les graphes (vent min/moy/max, direction, précipitations,
-                        humidité, température) seront affichés ici.<br><br>
-                        <span style="font-size:11px;color:#374151;">
-                            Données chargées :
-                            <span x-text="(multimodelData?.models?.length ?? 0)+' modèles · '+(multimodelData?.hours?.length ?? 0)+' créneaux'"></span>
-                        </span>
-                    </div>
+                {{-- Onglet "Aujourd'hui" : 7 graphes multi-modèles --}}
+                <div x-show="!multimodelLoading && panelTab==='today' && multimodelData" class="panel-scroll">
+                    <template x-for="cfg in CHART_CONFIGS" :key="cfg.id">
+                        <div class="chart-section">
+                            <div class="chart-header">
+                                <span><span class="chart-title" x-text="cfg.title"></span><span class="chart-unit" x-text="cfg.unit"></span></span>
+                            </div>
+                            <svg :id="'svg-'+cfg.id" class="chart-svg"></svg>
+                        </div>
+                    </template>
+                </div>
+
+                {{-- État vide si pas de données --}}
+                <div x-show="!multimodelLoading && panelTab==='today' && !multimodelData" class="panel-placeholder">
+                    Aucune donnée disponible pour ce jour.
                 </div>
 
                 {{-- Onglet "Vue 5 jours" : placeholder --}}
@@ -347,8 +361,8 @@
             }
 
             // ── Labels section nuages ────────────────────────────────
-            txt(10, 12, 'Couverture nuageuse', 9, '#9ca3af');
-            txt(W,  12, '▲haute  ▬moy.  ▼basse', 8, '#4b5563', 'end');
+            txt(10, 12, 'Couverture nuageuse', 10, '#e5e7eb');
+            txt(W,  12, '▲haute  ▬moy.  ▼basse', 9, '#cbd5e1', 'end');
 
             // ── Nuages (3 tuiles par heure) ──────────────────────────
             dayData.forEach((h, i) => {
@@ -360,21 +374,23 @@
                     mk('rect', {x, y:ty, width:COL_W, height:9, rx:2, fill:'#4b8db5', 'fill-opacity': op});
                 });
             });
-            // Labels heures nuages
-            txt(10,  60, dayData[0]?.hour?.slice(0,2)+'h', 7, '#4b5563');
+            // Labels heures nuages — toutes les 2h
             const midI = Math.floor(N/2);
-            txt(10 + midI*PITCH, 60, dayData[midI]?.hour?.slice(0,2)+'h', 7, '#4b5563', 'middle');
-            txt(10 + (N-1)*PITCH + COL_W/2, 60, dayData[N-1]?.hour?.slice(0,2)+'h', 7, '#4b5563', 'end');
+            for (let i = 0; i < N; i += 2) {
+                const x = 10 + i * PITCH + (i === N-1 ? COL_W/2 : 0);
+                const anchor = i === 0 ? null : (i === N-1 ? 'end' : 'middle');
+                txt(x, 60, dayData[i]?.hour?.slice(0,2)+'h', 9, '#cbd5e1', anchor);
+            }
 
             // ── Séparateur ───────────────────────────────────────────
             mk('line', {x1:10, y1:67, x2:W-10, y2:67, stroke:'#1f2937', 'stroke-width':1});
 
             // ── Titre vent ───────────────────────────────────────────
-            txt(10, 79, 'Vent km/h', 9, '#9ca3af');
+            txt(10, 79, 'Vent km/h', 10, '#e5e7eb');
             // Légende vent
             [[W-110,10,'#3b82f6','Min'],[W-70,10,'#22c55e','Moy'],[W-30,10,'#f97316','Max']].forEach(([lx,s,c,lb]) => {
                 mk('rect',{x:lx-s,y:72,width:7,height:7,rx:1,fill:c});
-                txt(lx-s+9, 79, lb, 8, '#6b7280');
+                txt(lx-s+9, 79, lb, 9, '#cbd5e1');
             });
 
             // Ligne de base vent
@@ -393,8 +409,8 @@
             // Échelle
             [0, Math.round(maxWind/2), Math.round(maxWind)].forEach(v => {
                 const y = BASE_Y - v * scale;
-                mk('line',{x1:7,y1:y,x2:9,y2:y,stroke:'#374151','stroke-width':1});
-                txt(6, y+3, v, 7, '#374151', 'end');
+                mk('line',{x1:7,y1:y,x2:9,y2:y,stroke:'#6b7280','stroke-width':1});
+                txt(6, y+3, v, 9, '#cbd5e1', 'end');
             });
 
             dayData.forEach((h, i) => {
@@ -431,10 +447,242 @@
                 }
             });
 
-            // Labels heures vent
-            txt(10, BASE_Y+30, dayData[0]?.hour?.slice(0,2)+'h', 7, '#4b5563');
-            txt(10+midI*PITCH, BASE_Y+30, dayData[midI]?.hour?.slice(0,2)+'h', 7, '#4b5563', 'middle');
-            txt(10+(N-1)*PITCH+COL_W/2, BASE_Y+30, dayData[N-1]?.hour?.slice(0,2)+'h', 7, '#4b5563', 'end');
+            // Labels heures vent — toutes les 2h
+            for (let i = 0; i < N; i += 2) {
+                const x = 10 + i * PITCH + (i === N-1 ? COL_W/2 : 0);
+                const anchor = i === 0 ? null : (i === N-1 ? 'end' : 'middle');
+                txt(x, BASE_Y+30, dayData[i]?.hour?.slice(0,2)+'h', 9, '#cbd5e1', anchor);
+            }
+        }
+
+        // ── Configuration des 7 graphes du panel multi-modèles ──────
+        const CHART_CONFIGS = [
+            {id:'wind-avg', title:'Vent — Vitesse moyenne',   unit:'km/h',  type:'line', key:'wind_avg',    yMin:0,    yMax:'auto', favBand:'speed', consensusKey:'wind_speed', wrap:false},
+            {id:'wind-max', title:'Vent — Rafales (max)',     unit:'km/h',  type:'line', key:'wind_max',    yMin:0,    yMax:'auto', favBand:null,    consensusKey:'wind_gust',  wrap:false},
+            {id:'wind-dir', title:'Direction du vent',        unit:'',      type:'line', key:'wind_dir',    yMin:0,    yMax:360,    favBand:'dir',   consensusKey:'wind_dir',   wrap:true,  yTicks:'compass'},
+            {id:'precip',   title:'Précipitations',           unit:'mm/h',  type:'bar',  key:'precip',      yMin:0,    yMax:'auto', favBand:null,    consensusKey:'precip',     wrap:false},
+            {id:'humidity', title:'Humidité relative',        unit:'%',     type:'line', key:'humidity',    yMin:0,    yMax:100,    favBand:null,    consensusKey:null,         wrap:false},
+            {id:'temp',     title:'Température',              unit:'°C',    type:'line', key:'temperature', yMin:'auto', yMax:'auto', favBand:null,  consensusKey:null,         wrap:false},
+        ];
+
+        // ── Helpers SVG ──────────────────────────────────────────────
+        function svgMk(svg, tag, attrs, parent) {
+            const e = document.createElementNS(NS, tag);
+            for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+            (parent || svg).appendChild(e);
+            return e;
+        }
+
+        function computeYDomain(cfg, data) {
+            const vals = [];
+            data.hours.forEach(h => {
+                Object.values(data.data[h] || {}).forEach(m => {
+                    const v = m[cfg.key];
+                    if (v != null) vals.push(+v);
+                });
+                if (cfg.consensusKey) {
+                    const cv = data.consensus[h]?.[cfg.consensusKey];
+                    if (cv != null) vals.push(+cv);
+                }
+            });
+            let yMin = cfg.yMin === 'auto' ? (vals.length ? Math.min(...vals) : 0) : cfg.yMin;
+            let yMax = cfg.yMax === 'auto' ? (vals.length ? Math.max(...vals) : 1) : cfg.yMax;
+            // Petite marge en haut/bas pour les axes auto
+            if (cfg.yMin === 'auto') yMin = Math.floor(yMin - 1);
+            if (cfg.yMax === 'auto') yMax = Math.ceil(yMax + 1);
+            if (yMin === yMax) yMax = yMin + 1;
+            return [yMin, yMax];
+        }
+
+        function formatTickValue(v) {
+            if (Math.abs(v) >= 100) return Math.round(v).toString();
+            if (Math.abs(v) >= 10)  return Math.round(v).toString();
+            return (Math.round(v * 10) / 10).toString();
+        }
+
+        // Construit un path SVG depuis une liste de points (avec gestion des null
+        // et du wrap pour la direction du vent : si saut > 180° on interrompt).
+        function buildLinePath(points, wrap) {
+            let d = '';
+            let prev = null;
+            for (const pt of points) {
+                if (pt == null) { prev = null; continue; }
+                if (prev == null || (wrap && Math.abs(pt.v - prev.v) > 180)) {
+                    d += `M ${pt.x.toFixed(1)} ${pt.y.toFixed(1)} `;
+                } else {
+                    d += `L ${pt.x.toFixed(1)} ${pt.y.toFixed(1)} `;
+                }
+                prev = pt;
+            }
+            return d.trim();
+        }
+
+        // Bandeau jour/nuit + bandeau favorable (vitesse ou direction).
+        function drawBackgroundBands(svg, cfg, data, geo) {
+            const { PAD_L, PAD_T, innerW, innerH, xScale, yScale, hours, N } = geo;
+            const [yMin, yMax] = geo.yDomain;
+            const sunStart = data.sun_window?.start_hour;
+            const sunEnd   = data.sun_window?.end_hour;
+
+            // Bandeau "nuit" (heures hors fenêtre solaire) — léger overlay clair
+            hours.forEach((h, i) => {
+                const isDay = sunStart == null || (h >= sunStart && h <= sunEnd);
+                if (isDay) return;
+                const x1 = i === 0 ? PAD_L : (xScale(i-1) + xScale(i)) / 2;
+                const x2 = i === N-1 ? PAD_L + innerW : (xScale(i) + xScale(i+1)) / 2;
+                svgMk(svg, 'rect', {x:x1, y:PAD_T, width:Math.max(0,x2-x1), height:innerH, fill:'rgba(255,255,255,.04)'});
+            });
+
+            // Bandeau favorable
+            if (cfg.favBand === 'speed') {
+                const lo = data.site?.wind_speed_min, hi = data.site?.wind_speed_max;
+                if (lo != null && hi != null) {
+                    const yA = yScale(Math.min(hi, yMax));
+                    const yB = yScale(Math.max(lo, yMin));
+                    if (yB > yA) svgMk(svg, 'rect', {x:PAD_L, y:yA, width:innerW, height:yB-yA, fill:'rgba(34,197,94,.08)'});
+                }
+            } else if (cfg.favBand === 'dir') {
+                const lo = data.site?.wind_dir_min, hi = data.site?.wind_dir_max;
+                if (lo != null && hi != null) {
+                    if (lo <= hi) {
+                        const yA = yScale(hi), yB = yScale(lo);
+                        svgMk(svg, 'rect', {x:PAD_L, y:yA, width:innerW, height:yB-yA, fill:'rgba(34,197,94,.08)'});
+                    } else {
+                        // Chevauche le Nord (ex: 340° → 30°) : 2 zones
+                        svgMk(svg, 'rect', {x:PAD_L, y:yScale(360), width:innerW, height:yScale(lo)-yScale(360), fill:'rgba(34,197,94,.08)'});
+                        svgMk(svg, 'rect', {x:PAD_L, y:yScale(hi),  width:innerW, height:yScale(0)-yScale(hi),   fill:'rgba(34,197,94,.08)'});
+                    }
+                }
+            }
+        }
+
+        // Labels compas pour la direction du vent (provenance)
+        const COMPASS_TICKS = [
+            {deg:0,   label:'N'},
+            {deg:90,  label:'E'},
+            {deg:180, label:'S'},
+            {deg:270, label:'O'},
+            {deg:360, label:'N'},
+        ];
+
+        function drawAxes(svg, cfg, geo) {
+            const { PAD_L, PAD_T, innerW, xScale, yScale, hours, N, H } = geo;
+            const [yMin, yMax] = geo.yDomain;
+
+            // Grille horizontale + labels Y
+            let ticks;
+            if (cfg.yTicks === 'compass') {
+                // Direction du vent : 1 tick tous les 45°, label = point cardinal
+                ticks = COMPASS_TICKS.map(c => ({value:c.deg, label:c.label}));
+            } else {
+                ticks = [yMin, (yMin + yMax) / 2, yMax].map(v => ({value:v, label:formatTickValue(v)}));
+            }
+            ticks.forEach(t => {
+                const y = yScale(t.value);
+                svgMk(svg, 'line', {x1:PAD_L, y1:y, x2:PAD_L+innerW, y2:y, stroke:'#1f2937', 'stroke-width':1, 'stroke-dasharray':'2,3'});
+                const lbl = svgMk(svg, 'text', {x:PAD_L-5, y:y+3.5, 'text-anchor':'end', 'font-size':10, fill:'#cbd5e1', 'font-family':'DM Mono,monospace'});
+                lbl.textContent = t.label;
+            });
+
+            // Labels heures — toutes les 2h (et toujours la première et la dernière)
+            const labelIdx = [];
+            for (let i = 0; i < N; i += 2) labelIdx.push(i);
+            if (labelIdx[labelIdx.length - 1] !== N - 1) labelIdx.push(N - 1);
+            labelIdx.forEach(idx => {
+                if (idx < 0 || idx >= N) return;
+                const x = xScale(idx);
+                const anchor = idx === 0 ? 'start' : (idx === N - 1 ? 'end' : 'middle');
+                const t = svgMk(svg, 'text', {x, y:H-5, 'text-anchor':anchor, 'font-size':10, fill:'#cbd5e1', 'font-family':'DM Mono,monospace'});
+                t.textContent = String(hours[idx]).padStart(2,'0') + 'h';
+            });
+        }
+
+        function makeGeometry(svg, cfg, data) {
+            const W = svg.clientWidth || 600;
+            const H = 120;
+            const PAD_L = 32, PAD_R = 8, PAD_T = 8, PAD_B = 22;
+            const innerW = W - PAD_L - PAD_R;
+            const innerH = H - PAD_T - PAD_B;
+            const hours = data.hours;
+            const N = hours.length;
+            const yDomain = computeYDomain(cfg, data);
+            const xScale = i => N <= 1 ? PAD_L + innerW/2 : PAD_L + (i / (N-1)) * innerW;
+            const yScale = v => PAD_T + innerH - ((v - yDomain[0]) / (yDomain[1] - yDomain[0])) * innerH;
+            svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+            svg.setAttribute('preserveAspectRatio', 'none');
+            return {W, H, PAD_L, PAD_R, PAD_T, PAD_B, innerW, innerH, hours, N, xScale, yScale, yDomain};
+        }
+
+        // ── Graphe linéaire multi-modèles ────────────────────────────
+        function buildLineChart(svgId, cfg, data) {
+            const svg = document.getElementById(svgId);
+            if (!svg) return;
+            while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+            const geo = makeGeometry(svg, cfg, data);
+            drawBackgroundBands(svg, cfg, data, geo);
+            drawAxes(svg, cfg, geo);
+
+            // 1 ligne par modèle
+            data.models.forEach(model => {
+                const pts = data.hours.map((h, i) => {
+                    const v = data.data[h]?.[model.id]?.[cfg.key];
+                    return v == null ? null : {x: geo.xScale(i), y: geo.yScale(+v), v: +v};
+                });
+                const d = buildLinePath(pts, cfg.wrap);
+                if (d) svgMk(svg, 'path', {d, fill:'none', stroke:model.color, 'stroke-width':1.2, 'stroke-opacity':.7, 'stroke-linecap':'round', 'stroke-linejoin':'round'});
+            });
+
+            // Ligne consensus (par-dessus, double trait noir épais + blanc pointillé)
+            if (cfg.consensusKey) {
+                const pts = data.hours.map((h, i) => {
+                    const v = data.consensus[h]?.[cfg.consensusKey];
+                    return v == null ? null : {x: geo.xScale(i), y: geo.yScale(+v), v: +v};
+                });
+                const d = buildLinePath(pts, cfg.wrap);
+                if (d) {
+                    svgMk(svg, 'path', {d, fill:'none', stroke:'#000', 'stroke-width':3.5, 'stroke-opacity':.5, 'stroke-linecap':'round', 'stroke-linejoin':'round'});
+                    svgMk(svg, 'path', {d, fill:'none', stroke:'#fff', 'stroke-width':1.6, 'stroke-dasharray':'5,3', 'stroke-linecap':'round', 'stroke-linejoin':'round'});
+                }
+            }
+        }
+
+        // ── Graphe en barres groupées (pour les précipitations) ──────
+        // Pour chaque heure : N barres fines côte à côte (1 par modèle).
+        // La convergence se lit visuellement à l'alignement des hauteurs.
+        function buildBarChart(svgId, cfg, data) {
+            const svg = document.getElementById(svgId);
+            if (!svg) return;
+            while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+            const geo = makeGeometry(svg, cfg, data);
+            drawBackgroundBands(svg, cfg, data, geo);
+            drawAxes(svg, cfg, geo);
+
+            const { PAD_L, PAD_T, innerH, innerW, hours, N, yScale } = geo;
+            const baseY = PAD_T + innerH;
+            const hourW  = innerW / N;
+            const groupW = hourW * 0.78;
+            const barW   = Math.max(1.2, groupW / data.models.length);
+
+            hours.forEach((h, i) => {
+                const xCenter = PAD_L + i * hourW + hourW/2;
+                const groupX  = xCenter - groupW/2;
+                data.models.forEach((m, mi) => {
+                    const v = data.data[h]?.[m.id]?.[cfg.key];
+                    if (v == null || v <= 0) return;
+                    const yTop = yScale(+v);
+                    const x    = groupX + mi * (groupW / data.models.length);
+                    svgMk(svg, 'rect', {x:x.toFixed(1), y:yTop.toFixed(1), width:barW.toFixed(1), height:Math.max(1, baseY - yTop).toFixed(1), fill:m.color, 'fill-opacity':.85, rx:0.5});
+                });
+
+                // Marqueur consensus au-dessus du groupe (petit triangle)
+                const cv = data.consensus[h]?.[cfg.consensusKey];
+                if (cv != null && cv > 0) {
+                    const cy = yScale(+cv);
+                    svgMk(svg, 'polygon', {points:`${xCenter-3.5},${cy-5} ${xCenter+3.5},${cy-5} ${xCenter},${cy-1}`, fill:'#fff', 'fill-opacity':.85});
+                }
+            });
         }
 
         // ── Alpine component ─────────────────────────────────────────
@@ -456,7 +704,18 @@
             multimodelData:null,multimodelLoading:false,
             _panelMapState:null, // sauvegarde center+zoom carte avant ouverture
 
-            async init(){await this.$nextTick();this.initMap();await this.loadSites();},
+            // Configuration des graphes exposée pour le template
+            CHART_CONFIGS,
+
+            async init(){
+                await this.$nextTick();
+                this.initMap();
+                await this.loadSites();
+                // Re-rendu des graphes du panel sur redimensionnement
+                window.addEventListener('resize', () => {
+                    if (this.panelOpen && this.multimodelData) this.renderCharts();
+                });
+            },
 
             initMap(){
                 this.map=L.map('map',{center:[49.1,5.5],zoom:7});
@@ -531,7 +790,7 @@
 
                 // Positionner le popup
                 const r=markerEl?.getBoundingClientRect()??{top:200,left:200,right:220,bottom:240};
-                const pw=460, ph=310;
+                const pw=600, ph=400;
                 let left=r.right+12;
                 if(left+pw>window.innerWidth-10) left=r.left-pw-12;
                 if(left<10) left=10;
@@ -613,6 +872,14 @@
                     this.multimodelData=await r.json();
                 }catch(e){console.error('multimodel load failed',e);}
                 this.multimodelLoading=false;
+                this.$nextTick(()=>this.renderCharts());
+            },
+            renderCharts(){
+                if(!this.multimodelData) return;
+                CHART_CONFIGS.forEach(cfg => {
+                    const fn = cfg.type === 'bar' ? buildBarChart : buildLineChart;
+                    fn('svg-' + cfg.id, cfg, this.multimodelData);
+                });
             },
             _dayRawToYmd(raw){
                 const [d,m]=raw.split('/');
