@@ -239,8 +239,8 @@
                     </div>
 
                     <div class="panel-tabs">
-                        <button class="pg-tab" :class="panelTab==='today'?'active':''" @click="panelTab='today'">Aujourd'hui</button>
-                        <button class="pg-tab" :class="panelTab==='fivedays'?'active':''" @click="panelTab='fivedays'">Vue 5 jours</button>
+                        <button class="pg-tab" :class="panelTab==='today'?'active':''" @click="setPanelTab('today')">Aujourd'hui</button>
+                        <button class="pg-tab" :class="panelTab==='fivedays'?'active':''" @click="setPanelTab('fivedays')">Vue 5 jours</button>
                     </div>
 
                     <div x-show="panelTab==='today'" class="panel-day-row">
@@ -251,6 +251,15 @@
                             <span>Conformité</span>
                             <div class="bar"><div class="fill" :style="`width:${multimodelData?.conformity_pct??0}%;background:${conformityColor}`"></div></div>
                             <span class="val" x-text="(multimodelData?.conformity_pct ?? '—')+'%'"></span>
+                        </div>
+                    </div>
+
+                    <div x-show="panelTab==='fivedays'" class="panel-day-row">
+                        <div class="panel-day-label" x-text="fiveDaysRangeLabel"></div>
+                        <div class="panel-conformity" x-show="multimodel5Data">
+                            <span>Conformité moy.</span>
+                            <div class="bar"><div class="fill" :style="`width:${multimodel5Data?.conformity_pct??0}%;background:${conformity5Color}`"></div></div>
+                            <span class="val" x-text="(multimodel5Data?.conformity_pct ?? '—')+'%'"></span>
                         </div>
                     </div>
                 </div>
@@ -294,13 +303,29 @@
                     Aucune donnée disponible pour ce jour.
                 </div>
 
-                {{-- Onglet "Vue 5 jours" : placeholder --}}
-                <div x-show="panelTab==='fivedays'" class="panel-scroll">
-                    <div class="panel-placeholder">
-                        <strong>Vue 5 jours</strong><br>
-                        Bientôt disponible — comparaison des modèles<br>
-                        sur l'horizon complet.
-                    </div>
+                {{-- Onglet "Vue 5 jours" : loader pendant chargement --}}
+                <div x-show="panelTab==='fivedays' && multimodel5Loading" class="panel-loader">
+                    <div class="panel-spinner"></div>
+                </div>
+
+                {{-- Onglet "Vue 5 jours" : 6 graphes sur 5 jours × 24h --}}
+                <div x-show="panelTab==='fivedays' && !multimodel5Loading && multimodel5Data" class="panel-scroll">
+                    <template x-for="cfg in CHART_CONFIGS" :key="'5d-'+cfg.id">
+                        <div class="chart-section">
+                            <div class="chart-header" @click="toggleChart5(cfg.id)">
+                                <span><span class="chart-title" x-text="cfg.title"></span><span class="chart-unit" x-text="cfg.unit"></span></span>
+                                <span class="chart-toggle" :class="chartCollapsed5[cfg.id]?'collapsed':''">▾</span>
+                            </div>
+                            <div class="chart-svg-wrap" :class="chartCollapsed5[cfg.id]?'collapsed':''">
+                                <svg :id="'svg5-'+cfg.id" class="chart-svg"></svg>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                {{-- État vide --}}
+                <div x-show="panelTab==='fivedays' && !multimodel5Loading && !multimodel5Data" class="panel-placeholder">
+                    Aucune donnée disponible.
                 </div>
 
                 {{-- Footer --}}
@@ -556,16 +581,28 @@
         }
 
         // Bandeau jour/nuit + bandeau favorable (vitesse ou direction).
+        // En mode 5 jours (data.viewMode==='fivedays'), utilise data.sun_windows_by_day
+        // pour appliquer la bonne fenêtre solaire à chaque jour.
         function drawBackgroundBands(svg, cfg, data, geo) {
             const { PAD_L, PAD_T, innerW, innerH, xScale, yScale, hours, N } = geo;
             const [yMin, yMax] = geo.yDomain;
-            const sunStart = data.sun_window?.start_hour;
-            const sunEnd   = data.sun_window?.end_hour;
+
+            // Helper : retourne la fenêtre solaire pour une heure plate donnée
+            const sunForHour = (h) => {
+                if (data.viewMode === 'fivedays' && Array.isArray(data.sun_windows_by_day)) {
+                    const dayIdx = Math.floor(h / 24);
+                    return data.sun_windows_by_day[dayIdx] || null;
+                }
+                if (data.sun_window) return {start: data.sun_window.start_hour, end: data.sun_window.end_hour, offset: 0};
+                return null;
+            };
 
             // Bandeau "jour" (fenêtre solaire) — léger éclaircissement
             hours.forEach((h, i) => {
-                const isDay = sunStart != null && h >= sunStart && h <= sunEnd;
-                if (!isDay) return;
+                const sw = sunForHour(h);
+                if (!sw || sw.start == null) return;
+                const hOfDay = h - (sw.offset ?? 0);
+                if (hOfDay < sw.start || hOfDay > sw.end) return;
                 const x1 = i === 0 ? PAD_L : (xScale(i-1) + xScale(i)) / 2;
                 const x2 = i === N-1 ? PAD_L + innerW : (xScale(i) + xScale(i+1)) / 2;
                 svgMk(svg, 'rect', {x:x1, y:PAD_T, width:Math.max(0,x2-x1), height:innerH, fill:'rgba(255,255,255,.06)'});
@@ -603,14 +640,13 @@
             {deg:360, label:'N'},
         ];
 
-        function drawAxes(svg, cfg, geo) {
-            const { PAD_L, PAD_T, innerW, xScale, yScale, hours, N, H } = geo;
+        function drawAxes(svg, cfg, geo, data) {
+            const { PAD_L, PAD_T, innerW, innerH, xScale, yScale, hours, N, H } = geo;
             const [yMin, yMax] = geo.yDomain;
 
             // Grille horizontale + labels Y
             let ticks;
             if (cfg.yTicks === 'compass') {
-                // Direction du vent : 1 tick tous les 45°, label = point cardinal
                 ticks = COMPASS_TICKS.map(c => ({value:c.deg, label:c.label}));
             } else {
                 ticks = [yMin, (yMin + yMax) / 2, yMax].map(v => ({value:v, label:formatTickValue(v)}));
@@ -622,17 +658,37 @@
                 lbl.textContent = t.label;
             });
 
-            // Labels heures — toutes les 2h (et toujours la première et la dernière)
-            const labelIdx = [];
-            for (let i = 0; i < N; i += 2) labelIdx.push(i);
-            if (labelIdx[labelIdx.length - 1] !== N - 1) labelIdx.push(N - 1);
-            labelIdx.forEach(idx => {
-                if (idx < 0 || idx >= N) return;
-                const x = xScale(idx);
-                const anchor = idx === 0 ? 'start' : (idx === N - 1 ? 'end' : 'middle');
-                const t = svgMk(svg, 'text', {x, y:H-5, 'text-anchor':anchor, 'font-size':10, fill:'#cbd5e1', 'font-family':'DM Mono,monospace'});
-                t.textContent = String(hours[idx]).padStart(2,'0') + 'h';
-            });
+            // ── Axe X ─────────────────────────────────────────────────
+            if (data && data.viewMode === 'fivedays') {
+                // Séparateurs verticaux entre jours
+                (data.day_separators || []).forEach(sep => {
+                    const idx = hours.indexOf(sep);
+                    if (idx < 0) return;
+                    const x = xScale(idx);
+                    svgMk(svg, 'line', {x1:x, y1:PAD_T, x2:x, y2:PAD_T+innerH, stroke:'rgba(255,255,255,.18)', 'stroke-width':1});
+                });
+                // Label centré sous chaque journée
+                (data.day_labels || []).forEach(dl => {
+                    const startIdx = hours.indexOf(dl.offset);
+                    if (startIdx < 0) return;
+                    const midIdx = Math.min(N - 1, startIdx + 12);
+                    const x = xScale(midIdx);
+                    const t = svgMk(svg, 'text', {x, y:H-5, 'text-anchor':'middle', 'font-size':10, fill:'#cbd5e1', 'font-family':'DM Sans,sans-serif', 'font-weight':500});
+                    t.textContent = dl.label;
+                });
+            } else {
+                // Mode 1 jour : labels heures toutes les 2h
+                const labelIdx = [];
+                for (let i = 0; i < N; i += 2) labelIdx.push(i);
+                if (labelIdx[labelIdx.length - 1] !== N - 1) labelIdx.push(N - 1);
+                labelIdx.forEach(idx => {
+                    if (idx < 0 || idx >= N) return;
+                    const x = xScale(idx);
+                    const anchor = idx === 0 ? 'start' : (idx === N - 1 ? 'end' : 'middle');
+                    const t = svgMk(svg, 'text', {x, y:H-5, 'text-anchor':anchor, 'font-size':10, fill:'#cbd5e1', 'font-family':'DM Mono,monospace'});
+                    t.textContent = String(hours[idx]).padStart(2,'0') + 'h';
+                });
+            }
         }
 
         function makeGeometry(svg, cfg, data) {
@@ -659,7 +715,7 @@
 
             const geo = makeGeometry(svg, cfg, data);
             drawBackgroundBands(svg, cfg, data, geo);
-            drawAxes(svg, cfg, geo);
+            drawAxes(svg, cfg, geo, data);
 
             // 1 ligne par modèle
             data.models.forEach(model => {
@@ -697,7 +753,7 @@
 
             const geo = makeGeometry(svg, cfg, data);
             drawBackgroundBands(svg, cfg, data, geo);
-            drawAxes(svg, cfg, geo);
+            drawAxes(svg, cfg, geo, data);
 
             const { PAD_L, PAD_T, innerH, innerW, hours, N, yScale } = geo;
             const baseY = PAD_T + innerH;
@@ -794,7 +850,15 @@
                 }
 
                 // Mise à jour Alpine
-                app.tooltip.hour      = String(hour).padStart(2,'0') + 'h00';
+                // Format : "14h00" en mode jour, "Jeu 07 · 14h00" en mode 5 jours
+                let hourLabel = String(hour).padStart(2,'0') + 'h00';
+                if (data.viewMode === 'fivedays') {
+                    const dayIdx    = Math.floor(hour / 24);
+                    const hourOfDay = hour % 24;
+                    const dayLabel  = data.day_labels?.[dayIdx]?.label || '';
+                    hourLabel = (dayLabel ? dayLabel + ' · ' : '') + String(hourOfDay).padStart(2,'0') + 'h00';
+                }
+                app.tooltip.hour      = hourLabel;
                 app.tooltip.consensus = consensus;
                 app.tooltip.rows      = rows;
                 app.tooltip.visible   = true;
@@ -836,9 +900,10 @@
             // Side panel (mode comparaison multi-modèles)
             panelOpen:false,panelTab:'today',panelDayIdx:0,
             multimodelData:null,multimodelLoading:false,
+            multimodel5Data:null,multimodel5Loading:false,
             _panelMapState:null, // sauvegarde center+zoom carte avant ouverture
-            // État collapse de chaque section graphe
-            chartCollapsed:{},
+            // État collapse de chaque section graphe (séparé par onglet)
+            chartCollapsed:{},chartCollapsed5:{},
             // Tooltip flottant des graphes
             tooltip:{visible:false, x:0, y:0, hour:'', consensus:null, rows:[]},
 
@@ -851,7 +916,9 @@
                 await this.loadSites();
                 // Re-rendu des graphes du panel sur redimensionnement
                 window.addEventListener('resize', () => {
-                    if (this.panelOpen && this.multimodelData) this.renderCharts();
+                    if (!this.panelOpen) return;
+                    if (this.panelTab === 'today'    && this.multimodelData)  this.renderCharts();
+                    if (this.panelTab === 'fivedays' && this.multimodel5Data) this.renderCharts5();
                 });
             },
 
@@ -977,6 +1044,7 @@
                 document.getElementById('panel').classList.remove('open');
                 this.panelOpen=false;
                 this.multimodelData=null;
+                this.multimodel5Data=null;
                 this._restoreMapState();
                 Object.values(this.markers).forEach(m=>m.getElement()?.querySelector('.pg-marker')?.classList.remove('selected'));
                 this.site={};
@@ -985,10 +1053,20 @@
             // ── Side panel : navigation jour + chargement multi-modèles ──
             get panelDay(){return this.days[this.panelDayIdx]??null;},
             get conformityColor(){
-                const c=this.multimodelData?.conformity_pct;
-                if(c==null) return '#6b7280';
-                if(c>=75) return '#22c55e';
-                if(c>=50) return '#f59e0b';
+                return this._conformityColor(this.multimodelData?.conformity_pct);
+            },
+            get conformity5Color(){
+                return this._conformityColor(this.multimodel5Data?.conformity_pct);
+            },
+            get fiveDaysRangeLabel(){
+                const slice = this.days.slice(0, 5);
+                if (!slice.length) return '—';
+                return slice[0].raw + ' → ' + slice[slice.length-1].raw;
+            },
+            _conformityColor(c){
+                if (c == null) return '#6b7280';
+                if (c >= 75) return '#22c55e';
+                if (c >= 50) return '#f59e0b';
                 return '#ef4444';
             },
             panelDayShift(delta){
@@ -996,6 +1074,20 @@
                 if(next===this.panelDayIdx) return;
                 this.panelDayIdx=next;
                 this.loadMultimodel();
+            },
+            // Bascule d'onglet : déclenche le chargement de la vue 5 jours à
+            // la première activation, puis re-render après changement.
+            async setPanelTab(tab){
+                this.panelTab = tab;
+                if (tab === 'fivedays') {
+                    if (!this.multimodel5Data && !this.multimodel5Loading) {
+                        await this.loadFiveDays();
+                    } else if (this.multimodel5Data) {
+                        this.$nextTick(() => this.renderCharts5());
+                    }
+                } else if (tab === 'today' && this.multimodelData) {
+                    this.$nextTick(() => this.renderCharts());
+                }
             },
             async loadMultimodel(){
                 if(!this.site?.id) return;
@@ -1012,23 +1104,97 @@
                 this.multimodelLoading=false;
                 this.$nextTick(()=>this.renderCharts());
             },
+            // Charge les 5 jours en parallèle et fusionne en une structure
+            // unique avec hours = [0..119] (5 jours × 24h). Stocke aussi les
+            // séparateurs et labels pour l'affichage de l'axe X.
+            async loadFiveDays(){
+                if(!this.site?.id || !this.days.length) return;
+                this.multimodel5Loading = true;
+                this.multimodel5Data    = null;
+                try {
+                    const slice  = this.days.slice(0, 5);
+                    const ymds   = slice.map(d => this._dayRawToYmd(d.raw));
+                    const reqs   = ymds.map(ymd =>
+                        fetch(`/api/sites/${this.site.id}/multimodel?day=${ymd}&period=24h`).then(r => {
+                            if (!r.ok) throw new Error('HTTP ' + r.status);
+                            return r.json();
+                        })
+                    );
+                    const responses = await Promise.all(reqs);
+
+                    const merged = {
+                        viewMode:       'fivedays',
+                        site:           responses[0].site,
+                        models:         responses[0].models,
+                        hours:          [],
+                        data:           {},
+                        consensus:      {},
+                        day_separators: [],
+                        day_labels:     [],
+                        sun_windows_by_day: [],
+                    };
+                    responses.forEach((resp, dayIdx) => {
+                        const offset = dayIdx * 24;
+                        for (let h = 0; h < 24; h++) {
+                            const flat = offset + h;
+                            merged.hours.push(flat);
+                            if (resp.data && resp.data[h])      merged.data[flat]      = resp.data[h];
+                            if (resp.consensus && resp.consensus[h]) merged.consensus[flat] = resp.consensus[h];
+                        }
+                        if (dayIdx < responses.length - 1) merged.day_separators.push((dayIdx + 1) * 24);
+                        merged.day_labels.push({offset, label: slice[dayIdx]?.label || slice[dayIdx]?.raw || '', raw: slice[dayIdx]?.raw});
+                        merged.sun_windows_by_day.push({
+                            offset,
+                            start: resp.sun_window?.start_hour ?? null,
+                            end:   resp.sun_window?.end_hour   ?? null,
+                        });
+                    });
+                    const conformities = responses.map(r => r.conformity_pct).filter(c => c != null);
+                    merged.conformity_pct = conformities.length
+                        ? Math.round(conformities.reduce((a, b) => a + b, 0) / conformities.length)
+                        : null;
+                    this.multimodel5Data = merged;
+                } catch (e) {
+                    console.error('5-day load failed', e);
+                }
+                this.multimodel5Loading = false;
+                this.$nextTick(() => this.renderCharts5());
+            },
             renderCharts(){
                 if(!this.multimodelData) return;
                 CHART_CONFIGS.forEach(cfg => {
-                    if (this.chartCollapsed[cfg.id]) return; // SVG caché : on ne re-rend pas
+                    if (this.chartCollapsed[cfg.id]) return;
                     const fn = cfg.type === 'bar' ? buildBarChart : buildLineChart;
                     fn('svg-' + cfg.id, cfg, this.multimodelData, this);
+                });
+            },
+            renderCharts5(){
+                if(!this.multimodel5Data) return;
+                CHART_CONFIGS.forEach(cfg => {
+                    if (this.chartCollapsed5[cfg.id]) return;
+                    const fn = cfg.type === 'bar' ? buildBarChart : buildLineChart;
+                    fn('svg5-' + cfg.id, cfg, this.multimodel5Data, this);
                 });
             },
             toggleChart(id){
                 this.chartCollapsed[id] = !this.chartCollapsed[id];
                 if (!this.chartCollapsed[id]) {
-                    // Re-render quand on ré-ouvre (le SVG était caché → clientWidth = 0)
                     this.$nextTick(() => {
                         const cfg = CHART_CONFIGS.find(c => c.id === id);
                         if (!cfg || !this.multimodelData) return;
                         const fn = cfg.type === 'bar' ? buildBarChart : buildLineChart;
                         fn('svg-' + id, cfg, this.multimodelData, this);
+                    });
+                }
+            },
+            toggleChart5(id){
+                this.chartCollapsed5[id] = !this.chartCollapsed5[id];
+                if (!this.chartCollapsed5[id]) {
+                    this.$nextTick(() => {
+                        const cfg = CHART_CONFIGS.find(c => c.id === id);
+                        if (!cfg || !this.multimodel5Data) return;
+                        const fn = cfg.type === 'bar' ? buildBarChart : buildLineChart;
+                        fn('svg5-' + id, cfg, this.multimodel5Data, this);
                     });
                 }
             },
