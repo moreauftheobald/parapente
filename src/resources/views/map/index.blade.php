@@ -79,10 +79,27 @@
         /* Sections de graphes dans le panel */
         .chart-section { padding:0 18px; border-bottom:1px solid rgba(55,65,81,.25); }
         .chart-section:last-child { border-bottom:none; padding-bottom:14px; }
-        .chart-header { display:flex; justify-content:space-between; align-items:baseline; padding:14px 0 6px; }
+        .chart-header { display:flex; justify-content:space-between; align-items:baseline; padding:14px 0 6px; cursor:pointer; user-select:none; transition:opacity .15s; }
+        .chart-header:hover { opacity:.85; }
         .chart-title { font-size:12px; color:#e5e7eb; font-weight:600; text-transform:uppercase; letter-spacing:.06em; }
         .chart-unit { font-size:11px; color:#cbd5e1; font-family:'DM Mono',monospace; margin-left:8px; }
+        .chart-toggle { font-size:13px; color:#9ca3af; transition:transform .2s; line-height:1; }
+        .chart-toggle.collapsed { transform:rotate(-90deg); }
+        .chart-svg-wrap { overflow:hidden; transition:max-height .25s ease-out; max-height:200px; }
+        .chart-svg-wrap.collapsed { max-height:0; }
         .chart-svg { display:block; width:100%; height:120px; overflow:visible; }
+
+        /* Tooltip multi-modèles au survol des graphes */
+        #chart-tooltip { position:fixed; z-index:9999; background:#0f172a; border:1px solid rgba(75,85,99,.7); border-radius:10px; padding:10px 12px; font-size:11px; color:#e5e7eb; pointer-events:none; box-shadow:0 12px 32px rgba(0,0,0,.7); min-width:200px; max-width:260px; }
+        #chart-tooltip .tt-hour { font-size:13px; font-weight:600; color:#fff; margin-bottom:8px; font-family:'DM Mono',monospace; }
+        #chart-tooltip .tt-row { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:2px 0; }
+        #chart-tooltip .tt-row .name { display:flex; align-items:center; gap:6px; color:#cbd5e1; font-size:11px; }
+        #chart-tooltip .tt-row .name .dot { width:9px; height:3px; border-radius:1px; flex-shrink:0; }
+        #chart-tooltip .tt-row .val { color:#fff; font-family:'DM Mono',monospace; font-size:11px; white-space:nowrap; }
+        #chart-tooltip .tt-row.consensus { padding-bottom:5px; margin-bottom:5px; border-bottom:1px solid rgba(55,65,81,.5); }
+        #chart-tooltip .tt-row.consensus .name { color:#fff; font-weight:600; }
+        #chart-tooltip .tt-row.consensus .name .dot { background-image:repeating-linear-gradient(90deg,#fff 0 3px,transparent 3px 6px); height:2px; }
+        #chart-tooltip .tt-empty { color:#6b7280; font-style:italic; padding:2px 0; font-size:10px; }
 
         @keyframes spin { to { transform:rotate(360deg); } }
 
@@ -257,14 +274,17 @@
                     <div class="panel-spinner"></div>
                 </div>
 
-                {{-- Onglet "Aujourd'hui" : 7 graphes multi-modèles --}}
+                {{-- Onglet "Aujourd'hui" : 6 graphes multi-modèles --}}
                 <div x-show="!multimodelLoading && panelTab==='today' && multimodelData" class="panel-scroll">
                     <template x-for="cfg in CHART_CONFIGS" :key="cfg.id">
                         <div class="chart-section">
-                            <div class="chart-header">
+                            <div class="chart-header" @click="toggleChart(cfg.id)">
                                 <span><span class="chart-title" x-text="cfg.title"></span><span class="chart-unit" x-text="cfg.unit"></span></span>
+                                <span class="chart-toggle" :class="chartCollapsed[cfg.id]?'collapsed':''">▾</span>
                             </div>
-                            <svg :id="'svg-'+cfg.id" class="chart-svg"></svg>
+                            <div class="chart-svg-wrap" :class="chartCollapsed[cfg.id]?'collapsed':''">
+                                <svg :id="'svg-'+cfg.id" class="chart-svg"></svg>
+                            </div>
                         </div>
                     </template>
                 </div>
@@ -289,6 +309,24 @@
                     <span>Horizon 5 jours</span>
                 </div>
             </div>
+        </div>
+
+        {{-- ═══ TOOLTIP MULTI-MODÈLES (position:fixed) ═══ --}}
+        <div id="chart-tooltip" x-show="tooltip.visible" :style="`top:${tooltip.y}px;left:${tooltip.x}px;`">
+            <div class="tt-hour" x-text="tooltip.hour"></div>
+            <template x-if="tooltip.consensus !== null">
+                <div class="tt-row consensus">
+                    <span class="name"><span class="dot"></span>Consensus</span>
+                    <span class="val" x-text="tooltip.consensus"></span>
+                </div>
+            </template>
+            <template x-for="row in tooltip.rows" :key="row.id">
+                <div class="tt-row">
+                    <span class="name"><span class="dot" :style="`background:${row.color}`"></span><span x-text="row.name"></span></span>
+                    <span class="val" x-text="row.value"></span>
+                </div>
+            </template>
+            <div x-show="!tooltip.rows.length && tooltip.consensus===null" class="tt-empty">Aucune donnée</div>
         </div>
 
         {{-- ═══ DROPDOWNS (position:fixed) ═══════════════ --}}
@@ -614,7 +652,7 @@
         }
 
         // ── Graphe linéaire multi-modèles ────────────────────────────
-        function buildLineChart(svgId, cfg, data) {
+        function buildLineChart(svgId, cfg, data, app) {
             const svg = document.getElementById(svgId);
             if (!svg) return;
             while (svg.firstChild) svg.removeChild(svg.firstChild);
@@ -645,12 +683,14 @@
                     svgMk(svg, 'path', {d, fill:'none', stroke:'#fff', 'stroke-width':1.6, 'stroke-dasharray':'5,3', 'stroke-linecap':'round', 'stroke-linejoin':'round'});
                 }
             }
+
+            if (app) attachTooltipHandlers(svg, cfg, data, geo, app);
         }
 
         // ── Graphe en barres groupées (pour les précipitations) ──────
         // Pour chaque heure : N barres fines côte à côte (1 par modèle).
         // La convergence se lit visuellement à l'alignement des hauteurs.
-        function buildBarChart(svgId, cfg, data) {
+        function buildBarChart(svgId, cfg, data, app) {
             const svg = document.getElementById(svgId);
             if (!svg) return;
             while (svg.firstChild) svg.removeChild(svg.firstChild);
@@ -683,6 +723,100 @@
                     svgMk(svg, 'polygon', {points:`${xCenter-3.5},${cy-5} ${xCenter+3.5},${cy-5} ${xCenter},${cy-1}`, fill:'#fff', 'fill-opacity':.85});
                 }
             });
+
+            if (app) attachTooltipHandlers(svg, cfg, data, geo, app);
+        }
+
+        // ── Tooltip multi-modèles ────────────────────────────────────
+        const COMPASS_8 = ['N','NE','E','SE','S','SO','O','NO'];
+        function degToCompass(deg) {
+            return COMPASS_8[Math.round(((deg % 360) + 360) % 360 / 45) % 8];
+        }
+
+        function formatTooltipValue(cfg, v) {
+            if (v == null) return '—';
+            switch (cfg.id) {
+                case 'wind-dir':  return Math.round(v) + '° ' + degToCompass(v);
+                case 'precip':    return v.toFixed(1) + ' mm/h';
+                case 'temp':      return v.toFixed(1) + '°C';
+                case 'humidity':  return Math.round(v) + '%';
+                default:          return v.toFixed(1) + ' km/h';
+            }
+        }
+
+        // Attache un overlay + un curseur vertical sur le SVG du graphe.
+        // Met à jour app.tooltip au survol pour afficher les valeurs des
+        // 10 modèles + le consensus à l'heure pointée.
+        function attachTooltipHandlers(svg, cfg, data, geo, app) {
+            const { PAD_L, PAD_T, PAD_B, innerW, innerH, hours, N, xScale, H, W } = geo;
+
+            // Curseur vertical (initialement caché hors zone)
+            const cursor = svgMk(svg, 'line', {
+                x1: -10, y1: PAD_T, x2: -10, y2: PAD_T + innerH,
+                stroke: 'rgba(255,255,255,.45)', 'stroke-width': 1, 'stroke-dasharray': '3,3',
+                'pointer-events': 'none'
+            });
+
+            // Overlay invisible qui capte les events
+            const overlay = svgMk(svg, 'rect', {
+                x: PAD_L, y: PAD_T, width: innerW, height: innerH,
+                fill: 'transparent', 'pointer-events': 'all', style: 'cursor:crosshair;'
+            });
+
+            const onMove = (e) => {
+                const rect   = svg.getBoundingClientRect();
+                // Le SVG utilise viewBox 0 0 W H ; on convertit clientX → unités viewBox
+                const scaleX = rect.width  > 0 ? W / rect.width  : 1;
+                const localX = (e.clientX - rect.left) * scaleX;
+
+                // Trouver l'index d'heure le plus proche
+                let bestIdx = 0, bestDist = Infinity;
+                for (let i = 0; i < N; i++) {
+                    const d = Math.abs(localX - xScale(i));
+                    if (d < bestDist) { bestDist = d; bestIdx = i; }
+                }
+                const hour    = hours[bestIdx];
+                const xCursor = xScale(bestIdx);
+                cursor.setAttribute('x1', xCursor);
+                cursor.setAttribute('x2', xCursor);
+
+                // Construire les rows pour le tooltip (modèles avec valeur)
+                const rows = data.models.map(m => {
+                    const v = data.data[hour]?.[m.id]?.[cfg.key];
+                    if (v == null) return null;
+                    return { id: m.id, color: m.color, name: m.name, value: formatTooltipValue(cfg, +v) };
+                }).filter(Boolean);
+
+                let consensus = null;
+                if (cfg.consensusKey) {
+                    const cv = data.consensus[hour]?.[cfg.consensusKey];
+                    if (cv != null) consensus = formatTooltipValue(cfg, +cv);
+                }
+
+                // Mise à jour Alpine
+                app.tooltip.hour      = String(hour).padStart(2,'0') + 'h00';
+                app.tooltip.consensus = consensus;
+                app.tooltip.rows      = rows;
+                app.tooltip.visible   = true;
+
+                // Position : suit le curseur, évite les bords
+                const tw = 240, th = Math.min(320, rows.length * 20 + 60);
+                let tx = e.clientX + 14;
+                let ty = e.clientY + 14;
+                if (tx + tw > window.innerWidth)  tx = e.clientX - tw - 14;
+                if (ty + th > window.innerHeight) ty = e.clientY - th - 14;
+                app.tooltip.x = Math.max(8, tx);
+                app.tooltip.y = Math.max(8, ty);
+            };
+
+            const onLeave = () => {
+                cursor.setAttribute('x1', -10);
+                cursor.setAttribute('x2', -10);
+                app.tooltip.visible = false;
+            };
+
+            overlay.addEventListener('mousemove', onMove);
+            overlay.addEventListener('mouseleave', onLeave);
         }
 
         // ── Alpine component ─────────────────────────────────────────
@@ -703,6 +837,10 @@
             panelOpen:false,panelTab:'today',panelDayIdx:0,
             multimodelData:null,multimodelLoading:false,
             _panelMapState:null, // sauvegarde center+zoom carte avant ouverture
+            // État collapse de chaque section graphe
+            chartCollapsed:{},
+            // Tooltip flottant des graphes
+            tooltip:{visible:false, x:0, y:0, hour:'', consensus:null, rows:[]},
 
             // Configuration des graphes exposée pour le template
             CHART_CONFIGS,
@@ -877,9 +1015,22 @@
             renderCharts(){
                 if(!this.multimodelData) return;
                 CHART_CONFIGS.forEach(cfg => {
+                    if (this.chartCollapsed[cfg.id]) return; // SVG caché : on ne re-rend pas
                     const fn = cfg.type === 'bar' ? buildBarChart : buildLineChart;
-                    fn('svg-' + cfg.id, cfg, this.multimodelData);
+                    fn('svg-' + cfg.id, cfg, this.multimodelData, this);
                 });
+            },
+            toggleChart(id){
+                this.chartCollapsed[id] = !this.chartCollapsed[id];
+                if (!this.chartCollapsed[id]) {
+                    // Re-render quand on ré-ouvre (le SVG était caché → clientWidth = 0)
+                    this.$nextTick(() => {
+                        const cfg = CHART_CONFIGS.find(c => c.id === id);
+                        if (!cfg || !this.multimodelData) return;
+                        const fn = cfg.type === 'bar' ? buildBarChart : buildLineChart;
+                        fn('svg-' + id, cfg, this.multimodelData, this);
+                    });
+                }
             },
             _dayRawToYmd(raw){
                 const [d,m]=raw.split('/');
