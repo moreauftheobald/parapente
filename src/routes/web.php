@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\SiteController as AdminSiteController;
+use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\MapController;
 use Illuminate\Support\Facades\Route;
 
@@ -29,6 +30,14 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::delete('/sites/{site}',         [AdminSiteController::class, 'destroy'])->name('sites.destroy');
         Route::post('/sites/{site}/toggle',    [AdminSiteController::class, 'toggleActive'])->name('sites.toggle');
 
-        // Sections futures (users, balises, modèles…) à brancher ici
+        // ── Utilisateurs ─────────────────────────────────────────
+        Route::get('/users',              [AdminUserController::class, 'index'])->name('users.index');
+        Route::get('/users/create',       [AdminUserController::class, 'create'])->name('users.create');
+        Route::post('/users',             [AdminUserController::class, 'store'])->name('users.store');
+        Route::get('/users/{user}/edit',  [AdminUserController::class, 'edit'])->name('users.edit');
+        Route::patch('/users/{user}',     [AdminUserController::class, 'update'])->name('users.update');
+        Route::delete('/users/{user}',    [AdminUserController::class, 'destroy'])->name('users.destroy');
+
+        // Sections futures (balises, modèles…) à brancher ici
     });
 });

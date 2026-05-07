@@ -58,7 +58,7 @@
                     </a>
 
                     <div class="mt-3 px-3 text-[10px] uppercase tracking-widest text-gray-600">Système</div>
-                    <a href="#" class="{{ $linkClass($section === 'users') }} opacity-50 pointer-events-none" title="à venir">
+                    <a href="{{ route('admin.users.index') }}" class="{{ $linkClass($section === 'users') }}">
                         <span class="w-5 text-center">👤</span> Utilisateurs
                     </a>
                     <a href="#" class="{{ $linkClass($section === 'logs') }} opacity-50 pointer-events-none" title="à venir">
