@@ -7,3 +7,8 @@
         .dd-item:hover { background:rgba(255,255,255,.06); color:#e5e7eb; }
         .dd-item.is-active { background:rgba(255,255,255,.1); color:#fff; }
         .dd-sub { font-size:11px; color:#4b5563; }
+
+        /* Toggle ON/OFF (bouton Balises dans la toolbar) */
+        .pg-toggle { transition:background .15s, border-color .15s, color .15s; color:#9ca3af; }
+        .pg-toggle.is-on { background:rgba(56,189,248,.18); border-color:rgba(56,189,248,.5); color:#fff; }
+        .pg-toggle.is-on:hover { border-color:rgba(56,189,248,.7); }

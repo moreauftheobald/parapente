@@ -18,6 +18,14 @@
                 <span>/ <span x-text="sites.length"></span> volables</span>
             </div>
             <div style="flex:1;"></div>
+            <button class="dd-trigger pg-toggle" :class="balisesVisible?'is-on':''"
+                    style="padding:8px 14px;"
+                    @click.stop="toggleBalises()"
+                    :title="balisesVisible?'Masquer les balises météo':'Afficher les balises météo'">
+                <span style="font-size:14px;line-height:1;" x-text="balisesVisible?'🪁':'🪁'"></span>
+                <span style="font-size:13px;font-weight:500;">Balises</span>
+                <span style="font-size:11px;color:#6b7280;font-family:'DM Mono',monospace;" x-text="balises.length||''"></span>
+            </button>
             <div style="width:1px;height:24px;background:rgba(75,85,99,.4);"></div>
             <button class="dd-trigger" style="min-width:190px;" @click.stop="toggleBmDrop($el)">
                 <span x-text="currentBasemapObj.icon" style="font-size:16px;line-height:1;flex-shrink:0;"></span>

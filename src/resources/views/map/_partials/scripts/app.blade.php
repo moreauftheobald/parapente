@@ -24,6 +24,12 @@ function mapApp(){return{
     // Tooltip flottant des graphes
     tooltip:{visible:false, x:0, y:0, hour:'', consensus:null, rows:[]},
 
+    // Balises météo (PiouPiou pour la phase 1.1)
+    balises:[], balisesVisible:true,
+    _balisesLayer:null,         // L.layerGroup
+    _balisesMarkers:{},         // balise.id => L.marker
+    _balisesTimer:null,         // setInterval handle
+
     // Configuration des graphes exposée pour le template
     CHART_CONFIGS,
 
@@ -31,6 +37,9 @@ function mapApp(){return{
         await this.$nextTick();
         this.initMap();
         await this.loadSites();
+        // Charge les balises et rafraîchit toutes les 5 minutes
+        await this.loadBalises();
+        this._balisesTimer = setInterval(() => this.loadBalises(), 5 * 60 * 1000);
         // Re-rendu des graphes du panel sur redimensionnement
         window.addEventListener('resize', () => {
             if (!this.panelOpen) return;
@@ -343,5 +352,59 @@ function mapApp(){return{
         if(!this.map || !this._panelMapState) return;
         const s=this._panelMapState; this._panelMapState=null;
         this.map.flyTo(s.center, s.zoom, {duration:.5});
+    },
+
+    // ── Balises météo ────────────────────────────────────────────
+    async loadBalises(){
+        try {
+            const r = await fetch('/api/balises');
+            if (!r.ok) throw new Error('HTTP '+r.status);
+            this.balises = await r.json();
+            this.renderBalises();
+        } catch (e) {
+            console.warn('loadBalises failed', e);
+        }
+    },
+    renderBalises(){
+        if (!this.map) return;
+        // Layer group créé une fois, ajouté/retiré selon visibilité
+        if (!this._balisesLayer) {
+            this._balisesLayer = L.layerGroup();
+            if (this.balisesVisible) this._balisesLayer.addTo(this.map);
+        }
+        const seen = new Set();
+        for (const b of this.balises) {
+            seen.add(b.id);
+            const iconUrl = baliseIconUrl(b.reading);
+            const icon    = L.icon({iconUrl, iconSize:[40,40], iconAnchor:[20,20]});
+            const tooltip = baliseTooltipHtml(b);
+            const existing = this._balisesMarkers[b.id];
+            if (existing) {
+                existing.setIcon(icon);
+                existing.setLatLng([b.lat, b.lng]);
+                existing.setTooltipContent(tooltip);
+            } else {
+                const m = L.marker([b.lat, b.lng], {icon})
+                    .bindTooltip(tooltip, {direction:'top', offset:[0,-22], opacity:.95});
+                m.addTo(this._balisesLayer);
+                this._balisesMarkers[b.id] = m;
+            }
+        }
+        // Nettoie les marqueurs obsolètes (balise désactivée entre 2 polls)
+        for (const id of Object.keys(this._balisesMarkers)) {
+            if (!seen.has(parseInt(id, 10))) {
+                this._balisesLayer.removeLayer(this._balisesMarkers[id]);
+                delete this._balisesMarkers[id];
+            }
+        }
+    },
+    toggleBalises(){
+        this.balisesVisible = !this.balisesVisible;
+        if (!this._balisesLayer || !this.map) return;
+        if (this.balisesVisible) {
+            this._balisesLayer.addTo(this.map);
+        } else {
+            this.map.removeLayer(this._balisesLayer);
+        }
     },
 };}

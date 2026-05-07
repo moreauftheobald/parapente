@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use App\Jobs\FetchForecastsJob;
+use App\Jobs\FetchPiouPiouReadingsJob;
 use App\Jobs\PurgeOldForecastsJob;
 
 Artisan::command('inspire', function () {
@@ -21,5 +22,13 @@ Schedule::job(FetchForecastsJob::class)
 Schedule::job(PurgeOldForecastsJob::class)
     ->dailyAt('03:00')
     ->name('purge-old-forecasts')
+    ->withoutOverlapping();
+
+// Polling des balises PiouPiou toutes les 10 minutes
+//   - Insère les nouvelles lectures dans balise_readings
+//   - Désactive les balises sans lecture > 7 jours
+Schedule::job(FetchPiouPiouReadingsJob::class)
+    ->everyTenMinutes()
+    ->name('fetch-pioupiou')
     ->withoutOverlapping();
 

@@ -47,6 +47,7 @@
         @include('map._partials.scripts.chart-bar')
         @include('map._partials.scripts.popup-chart')
         @include('map._partials.scripts.tooltip')
+        @include('map._partials.scripts.balise-icon')
         @include('map._partials.scripts.app')
     </script>
 @endpush
