@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\BaliseController as AdminBaliseController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\LogController as AdminLogController;
 use App\Http\Controllers\Admin\SiteController as AdminSiteController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Admin\WeatherModelController as AdminModelController;
@@ -52,6 +53,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::patch('/models/{model}',        [AdminModelController::class, 'update'])->name('models.update');
         Route::post('/models/{model}/toggle',  [AdminModelController::class, 'toggleActive'])->name('models.toggle');
 
-        // Sections futures (logs, settings…) à brancher ici
+        // ── Logs / monitoring ─────────────────────────────────────
+        Route::get('/logs', [AdminLogController::class, 'index'])->name('logs.index');
+
+        // Sections futures (settings…) à brancher ici
     });
 });

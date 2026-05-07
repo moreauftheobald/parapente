@@ -61,7 +61,7 @@
                     <a href="{{ route('admin.users.index') }}" class="{{ $linkClass($section === 'users') }}">
                         <span class="w-5 text-center">👤</span> Utilisateurs
                     </a>
-                    <a href="#" class="{{ $linkClass($section === 'logs') }} opacity-50 pointer-events-none" title="à venir">
+                    <a href="{{ route('admin.logs.index') }}" class="{{ $linkClass($section === 'logs') }}">
                         <span class="w-5 text-center">📜</span> Logs / monitoring
                     </a>
                     <a href="#" class="{{ $linkClass($section === 'settings') }} opacity-50 pointer-events-none" title="à venir">
