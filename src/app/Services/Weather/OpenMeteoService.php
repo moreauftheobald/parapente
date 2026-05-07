@@ -11,10 +11,12 @@ use Illuminate\Support\Facades\Log;
 
 class OpenMeteoService
 {
-    private const BASE_URL   = 'https://api.open-meteo.com/v1/forecast';
-    private const DAYS       = 5;
-    private const WIND_UNIT  = 'kmh';
-    private const TIMEZONE   = 'Europe/Paris';
+    private const BASE_URL    = 'https://api.open-meteo.com/v1/forecast';
+    private const DAYS        = 5;
+    private const WIND_UNIT   = 'kmh';
+    private const TIMEZONE    = 'Europe/Paris';
+    private const BATCH_TIMEOUT_S = 60;
+    private const BATCH_CHUNK     = 40;
 
     private const HOURLY_VARS = [
         'wind_speed_10m',
@@ -122,12 +124,36 @@ class OpenMeteoService
             return [];
         }
 
+        // Chunking : les modèles régionaux lents (HARMONIE…) timeout au-delà
+        // d'une cinquantaine de points. On limite à 40 par appel HTTP.
+        $result = [];
+        $chunks = array_chunk(array_values($points), self::BATCH_CHUNK);
+        foreach ($chunks as $i => $chunk) {
+            $partial = $this->fetchBatchChunk($chunk, $model);
+            foreach ($partial as $id => $parsed) {
+                $result[$id] = $parsed;
+            }
+            if ($i < count($chunks) - 1) {
+                usleep(200_000); // 200ms entre chunks pour ménager l'API
+            }
+        }
+        return $result;
+    }
+
+    /**
+     * Un seul appel HTTP multi-coordonnées.
+     *
+     * @param  array<int, array{id:int|string, lat:float, lng:float}> $points
+     * @return array<int|string, array<string, array<string, mixed>>>
+     */
+    private function fetchBatchChunk(array $points, WeatherModel $model): array
+    {
         $lats = array_map(fn ($p) => (string) $p['lat'], $points);
         $lngs = array_map(fn ($p) => (string) $p['lng'], $points);
         $ids  = array_map(fn ($p) => $p['id'], $points);
 
         try {
-            $response = Http::timeout(30)
+            $response = Http::timeout(self::BATCH_TIMEOUT_S)
                 ->get(self::BASE_URL, [
                     'latitude'        => implode(',', $lats),
                     'longitude'       => implode(',', $lngs),
@@ -165,8 +191,9 @@ class OpenMeteoService
             return $result;
         } catch (\Exception $e) {
             Log::error('OpenMeteo batch failed', [
-                'model'   => $model->code,
-                'message' => $e->getMessage(),
+                'model'       => $model->code,
+                'message'     => $e->getMessage(),
+                'point_count' => count($points),
             ]);
             return [];
         }
