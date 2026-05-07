@@ -10,6 +10,7 @@ use App\Models\SiteCondition;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 /**
@@ -107,7 +108,6 @@ class SiteController extends Controller
         $data = $request->validate([
             // Site
             'name'        => ['required', 'string', 'max:255'],
-            'slug'        => ['required', 'string', 'max:255', 'regex:/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/'],
             'description' => ['nullable', 'string'],
             'region'      => ['nullable', 'string', 'max:100'],
             'level'       => ['required', 'in:debutant,intermediaire,confirme'],
@@ -129,10 +129,17 @@ class SiteController extends Controller
             'notes'               => ['nullable', 'string'],
         ]);
 
-        DB::transaction(function () use ($site, $data) {
+        // Slug regénéré automatiquement depuis le nom (suffixe -pge-{id}
+        // conservé pour les sites importés afin de garder la traçabilité).
+        $slug = Str::slug($data['name']);
+        if ($site->source === 'paraglidingearth' && $site->external_id) {
+            $slug .= '-pge-' . $site->external_id;
+        }
+
+        DB::transaction(function () use ($site, $data, $slug) {
             $site->fill([
                 'name'        => $data['name'],
-                'slug'        => $data['slug'],
+                'slug'        => $slug,
                 'description' => $data['description'] ?? null,
                 'region'      => $data['region']      ?? null,
                 'level'       => $data['level'],

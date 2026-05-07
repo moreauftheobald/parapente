@@ -2,23 +2,26 @@
 @section('title', 'Sites')
 
 @php
-    /** Helper pour générer un lien de tri sur l'en-tête */
+    /** Lien de tri sur l'en-tête (préserve les autres query params) */
     $sortLink = function (string $field, string $label) use ($sort, $dir) {
         $newDir = ($sort === $field && $dir === 'asc') ? 'desc' : 'asc';
         $arrow  = $sort === $field ? ($dir === 'asc' ? '↑' : '↓') : '';
         $params = array_merge(request()->query(), ['sort' => $field, 'dir' => $newDir]);
         return sprintf(
-            '<a href="?%s" class="hover:text-white">%s <span class="text-sky-400">%s</span></a>',
+            '<a href="?%s" class="text-gray-300 hover:text-white">%s <span class="text-sky-400">%s</span></a>',
             http_build_query($params),
             e($label),
             $arrow
         );
     };
+
+    $inputCls  = 'w-full mt-1 px-2 py-1 text-xs bg-gray-950 border border-gray-700 rounded text-gray-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/40';
+    $selectCls = $inputCls . ' cursor-pointer';
 @endphp
 
 @section('content')
 <div class="max-w-7xl">
-    <div class="flex items-baseline justify-between mb-6">
+    <div class="flex items-baseline justify-between mb-4">
         <div>
             <h1 class="text-2xl font-semibold text-white">Sites de vol</h1>
             <p class="text-sm text-gray-500 mt-1">
@@ -26,65 +29,79 @@
                 · {{ number_format($sites->total(), 0, ',', ' ') }} après filtre
             </p>
         </div>
-    </div>
-
-    {{-- Filtres ────────────────────────────────────────────────── --}}
-    <form method="GET" class="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4 grid grid-cols-1 md:grid-cols-6 gap-3">
-        <input type="text" name="search" placeholder="Rechercher un nom…"
-               value="{{ request('search') }}"
-               class="md:col-span-2 px-3 py-2 bg-gray-950 border border-gray-700 rounded-md text-sm text-gray-100 focus:outline-none focus:border-sky-500">
-
-        <select name="source" class="px-3 py-2 bg-gray-950 border border-gray-700 rounded-md text-sm text-gray-100 focus:outline-none focus:border-sky-500">
-            <option value="">Toutes sources</option>
-            @foreach ($sources as $s)
-                <option value="{{ $s }}" @selected(request('source') === $s)>{{ $s }}</option>
-            @endforeach
-        </select>
-
-        <select name="active" class="px-3 py-2 bg-gray-950 border border-gray-700 rounded-md text-sm text-gray-100 focus:outline-none focus:border-sky-500">
-            <option value="">Tous statuts</option>
-            <option value="1" @selected(request('active') === '1')>Actifs</option>
-            <option value="0" @selected(request('active') === '0')>Inactifs</option>
-        </select>
-
-        <select name="level" class="px-3 py-2 bg-gray-950 border border-gray-700 rounded-md text-sm text-gray-100 focus:outline-none focus:border-sky-500">
-            <option value="">Tous niveaux</option>
-            @foreach (['debutant','intermediaire','confirme'] as $lvl)
-                <option value="{{ $lvl }}" @selected(request('level') === $lvl)>{{ ucfirst($lvl) }}</option>
-            @endforeach
-        </select>
-
-        <select name="region" class="px-3 py-2 bg-gray-950 border border-gray-700 rounded-md text-sm text-gray-100 focus:outline-none focus:border-sky-500">
-            <option value="">Toutes régions</option>
-            @foreach ($regions as $r)
-                <option value="{{ $r }}" @selected(request('region') === $r)>{{ $r }}</option>
-            @endforeach
-        </select>
-
-        <div class="md:col-span-6 flex gap-2">
-            <button type="submit" class="px-4 py-2 bg-sky-500 hover:bg-sky-400 text-white text-sm font-medium rounded-md transition">
-                Filtrer
-            </button>
+        <div class="flex items-center gap-3">
             @if (request()->query())
-                <a href="{{ route('admin.sites.index') }}" class="px-4 py-2 border border-gray-700 hover:border-gray-500 text-gray-400 hover:text-gray-200 text-sm rounded-md transition">
-                    Réinitialiser
+                <a href="{{ route('admin.sites.index') }}"
+                   class="text-xs text-gray-400 hover:text-white transition" title="Réinitialiser les filtres">
+                    <i class="fa-solid fa-rotate-left"></i> Réinitialiser
                 </a>
             @endif
+            <button form="filters-form" type="submit"
+                    class="px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-white text-xs font-medium rounded-md transition">
+                <i class="fa-solid fa-filter"></i> Appliquer
+            </button>
         </div>
-    </form>
+    </div>
 
-    {{-- Tableau ────────────────────────────────────────────────── --}}
+    {{-- Form filtres "fantôme" : les inputs filtres dans les en-têtes du
+         tableau lui sont rattachés via l'attribut HTML5 form="filters-form".
+         Ça permet d'avoir des forms toggle/delete dans les lignes sans
+         imbrication HTML interdite. --}}
+    <form id="filters-form" method="GET"></form>
+
     <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
         <table class="w-full text-sm">
-            <thead class="bg-gray-950 text-xs uppercase tracking-wider text-gray-400 border-b border-gray-800">
+            <thead class="bg-gray-950 text-xs uppercase tracking-wider border-b border-gray-800">
                 <tr>
-                    <th class="px-4 py-3 text-left">{!! $sortLink('name', 'Nom') !!}</th>
-                    <th class="px-4 py-3 text-left">{!! $sortLink('source', 'Source') !!}</th>
-                    <th class="px-4 py-3 text-left">{!! $sortLink('region', 'Région') !!}</th>
-                    <th class="px-4 py-3 text-left">{!! $sortLink('level', 'Niveau') !!}</th>
-                    <th class="px-4 py-3 text-right">{!! $sortLink('altitude_m', 'Alt.') !!}</th>
-                    <th class="px-4 py-3 text-center">{!! $sortLink('active', 'Statut') !!}</th>
-                    <th class="px-4 py-3 text-right">Actions</th>
+                    <th class="px-4 py-3 text-left align-top">
+                        {!! $sortLink('name', 'Nom') !!}
+                        <input form="filters-form" name="search" type="search"
+                               value="{{ request('search') }}" placeholder="Rechercher…"
+                               class="{{ $inputCls }}">
+                    </th>
+                    <th class="px-4 py-3 text-left align-top w-44">
+                        {!! $sortLink('source', 'Source') !!}
+                        <select form="filters-form" name="source" class="{{ $selectCls }}"
+                                onchange="this.form.submit()">
+                            <option value="">— toutes —</option>
+                            @foreach ($sources as $s)
+                                <option value="{{ $s }}" @selected(request('source') === $s)>{{ $s }}</option>
+                            @endforeach
+                        </select>
+                    </th>
+                    <th class="px-4 py-3 text-left align-top w-40">
+                        {!! $sortLink('region', 'Région') !!}
+                        <select form="filters-form" name="region" class="{{ $selectCls }}"
+                                onchange="this.form.submit()">
+                            <option value="">— toutes —</option>
+                            @foreach ($regions as $r)
+                                <option value="{{ $r }}" @selected(request('region') === $r)>{{ $r }}</option>
+                            @endforeach
+                        </select>
+                    </th>
+                    <th class="px-4 py-3 text-left align-top w-40">
+                        {!! $sortLink('level', 'Niveau') !!}
+                        <select form="filters-form" name="level" class="{{ $selectCls }}"
+                                onchange="this.form.submit()">
+                            <option value="">— tous —</option>
+                            @foreach (['debutant'=>'Débutant','intermediaire'=>'Intermédiaire','confirme'=>'Confirmé'] as $val => $lbl)
+                                <option value="{{ $val }}" @selected(request('level') === $val)>{{ $lbl }}</option>
+                            @endforeach
+                        </select>
+                    </th>
+                    <th class="px-4 py-3 text-right align-top w-24">
+                        {!! $sortLink('altitude_m', 'Alt.') !!}
+                    </th>
+                    <th class="px-4 py-3 text-center align-top w-32">
+                        {!! $sortLink('active', 'Statut') !!}
+                        <select form="filters-form" name="active" class="{{ $selectCls }}"
+                                onchange="this.form.submit()">
+                            <option value="">— tous —</option>
+                            <option value="1" @selected(request('active') === '1')>Actifs</option>
+                            <option value="0" @selected(request('active') === '0')>Inactifs</option>
+                        </select>
+                    </th>
+                    <th class="px-4 py-3 text-right align-top w-24 text-gray-300">Actions</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-gray-800">
@@ -111,28 +128,31 @@
                         </td>
                         <td class="px-4 py-3 text-center">
                             @if ($site->active)
-                                <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">● Actif</span>
+                                <i class="fa-solid fa-circle-check text-emerald-400 text-xl" title="Actif"></i>
                             @else
-                                <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-gray-800 text-gray-500 border border-gray-700">○ Inactif</span>
+                                <i class="fa-solid fa-circle-xmark text-red-400 text-xl" title="Inactif"></i>
                             @endif
                         </td>
                         <td class="px-4 py-3 text-right whitespace-nowrap">
-                            <a href="{{ route('admin.sites.edit', $site) }}"
-                               class="inline-block px-3 py-1 text-xs rounded border border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white transition mr-1">
-                                Éditer
-                            </a>
-                            <form method="POST" action="{{ route('admin.sites.toggle', $site) }}" class="inline">
-                                @csrf
-                                <button type="submit"
-                                        class="px-3 py-1 text-xs rounded border transition
-                                            @class([
-                                                'border-amber-500/40 text-amber-300 hover:bg-amber-500/10' => $site->active,
-                                                'border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10' => ! $site->active,
-                                            ])"
-                                        title="{{ $site->active ? 'Désactiver' : 'Activer' }}">
-                                    {{ $site->active ? 'Désactiver' : 'Activer' }}
-                                </button>
-                            </form>
+                            <div class="inline-flex items-center gap-1">
+                                <a href="{{ route('admin.sites.edit', $site) }}"
+                                   class="w-8 h-8 inline-flex items-center justify-center rounded border border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white transition"
+                                   title="Éditer">
+                                    <i class="fa-solid fa-pen text-xs"></i>
+                                </a>
+                                <form method="POST" action="{{ route('admin.sites.toggle', $site) }}" class="inline">
+                                    @csrf
+                                    <button type="submit"
+                                            class="w-8 h-8 inline-flex items-center justify-center rounded border transition
+                                                @class([
+                                                    'border-amber-500/40 text-amber-300 hover:bg-amber-500/10' => $site->active,
+                                                    'border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10' => ! $site->active,
+                                                ])"
+                                            title="{{ $site->active ? 'Désactiver' : 'Activer' }}">
+                                        <i class="fa-solid fa-power-off text-xs"></i>
+                                    </button>
+                                </form>
+                            </div>
                         </td>
                     </tr>
                 @empty
@@ -146,7 +166,6 @@
         </table>
     </div>
 
-    {{-- Pagination ─────────────────────────────────────────────── --}}
     <div class="mt-4">
         {{ $sites->links() }}
     </div>
