@@ -135,6 +135,35 @@ services:
         restart: unless-stopped
 
     # ──────────────────────────────────────────
+    # Laravel Scheduler (équivalent du cron)
+    # ──────────────────────────────────────────
+    # Boucle infinie qui appelle schedule:run toutes les minutes
+    # → déclenche les jobs définis dans routes/console.php :
+    #   - FetchForecastsJob          (horaire)
+    #   - FetchPiouPiouReadingsJob   (toutes les 10 min)
+    #   - FetchBaliseForecastsJob    (horaire)
+    #   - PurgeOldForecastsJob       (quotidien à 03h00)
+    parapente-scheduler:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        container_name: parapente_scheduler
+        command: php artisan schedule:work
+        volumes:
+            - ./src:/var/www/html:rw
+            - /etc/timezone:/etc/timezone:ro
+            - /etc/localtime:/etc/localtime:ro
+        networks:
+            - parapente-internal-pod
+            - parapente-external-pod
+        depends_on:
+            parapente-mariadb:
+                condition: service_healthy
+            parapente-redis:
+                condition: service_healthy
+        restart: unless-stopped
+
+    # ──────────────────────────────────────────
     # Redis (cache + queues)
     # ──────────────────────────────────────────
     parapente-redis:

@@ -2,6 +2,7 @@
 
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use App\Jobs\FetchBaliseForecastsJob;
 use App\Jobs\FetchForecastsJob;
 use App\Jobs\FetchPiouPiouReadingsJob;
 use App\Jobs\PurgeOldForecastsJob;
@@ -30,5 +31,14 @@ Schedule::job(PurgeOldForecastsJob::class)
 Schedule::job(FetchPiouPiouReadingsJob::class)
     ->everyTenMinutes()
     ->name('fetch-pioupiou')
+    ->withoutOverlapping();
+
+// Archivage horaire des prévisions Open-Meteo aux coords des balises
+//   - Multi-coordonnées en batch (10 calls/heure tous modèles confondus)
+//   - Filtre à horizon ≤ 72h (J+2 max)
+//   - Upsert dans forecast_archive_balises
+Schedule::job(FetchBaliseForecastsJob::class)
+    ->hourly()
+    ->name('fetch-balise-forecasts')
     ->withoutOverlapping();
 

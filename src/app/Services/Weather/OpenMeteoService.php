@@ -99,6 +99,121 @@ class OpenMeteoService
     }
 
     /**
+     * Fetch batch multi-coordonnées pour les balises (payload réduit aux
+     * variables observables par les capteurs).
+     *
+     * Open-Meteo accepte plusieurs lat/lng séparés par des virgules :
+     * latitude=49.1,49.2&longitude=6.1,6.2 → réponse = tableau de
+     * résultats dans le même ordre. Quand une seule paire est passée,
+     * la réponse est un objet — on uniformise.
+     *
+     * @param  array<int, array{id:int|string, lat:float, lng:float}> $points
+     * @return array<int|string, array<string, array{
+     *     wind_direction:int,
+     *     wind_speed_avg:float,
+     *     wind_speed_min:float,
+     *     wind_speed_max:float,
+     *     temperature:float,
+     * }>>  Map id => (datetime => values)
+     */
+    public function fetchBatchForBalises(array $points, WeatherModel $model): array
+    {
+        if (empty($points)) {
+            return [];
+        }
+
+        $lats = array_map(fn ($p) => (string) $p['lat'], $points);
+        $lngs = array_map(fn ($p) => (string) $p['lng'], $points);
+        $ids  = array_map(fn ($p) => $p['id'], $points);
+
+        try {
+            $response = Http::timeout(30)
+                ->get(self::BASE_URL, [
+                    'latitude'        => implode(',', $lats),
+                    'longitude'       => implode(',', $lngs),
+                    'hourly'          => 'wind_speed_10m,wind_gusts_10m,wind_direction_10m,temperature_2m',
+                    'models'          => $model->code,
+                    'forecast_days'   => self::DAYS,
+                    'wind_speed_unit' => self::WIND_UNIT,
+                    'timezone'        => self::TIMEZONE,
+                ]);
+
+            if (! $response->successful()) {
+                Log::warning('OpenMeteo batch error', [
+                    'model'       => $model->code,
+                    'status'      => $response->status(),
+                    'point_count' => count($points),
+                ]);
+                return [];
+            }
+
+            $payload  = $response->json();
+            // Open-Meteo retourne un objet quand 1 seule coord, un tableau sinon
+            $stations = isset($payload[0]) ? $payload : [$payload];
+
+            $result = [];
+            foreach ($stations as $idx => $stationData) {
+                $id = $ids[$idx] ?? null;
+                if ($id === null) {
+                    continue;
+                }
+                $parsed = $this->parseBaliseResponse($stationData);
+                if (! empty($parsed)) {
+                    $result[$id] = $parsed;
+                }
+            }
+            return $result;
+        } catch (\Exception $e) {
+            Log::error('OpenMeteo batch failed', [
+                'model'   => $model->code,
+                'message' => $e->getMessage(),
+            ]);
+            return [];
+        }
+    }
+
+    /**
+     * Parse la réponse pour une balise : payload réduit aux variables
+     * observables (vent direction + speed, température). Pas de min
+     * dans Open-Meteo → on met l'avg comme fallback (cohérent avec
+     * parseResponse() pour les sites).
+     */
+    private function parseBaliseResponse(array $data): array
+    {
+        $hourly = $data['hourly'] ?? [];
+        $times  = $hourly['time'] ?? [];
+        if (empty($times)) {
+            return [];
+        }
+
+        $parsed = [];
+        foreach ($times as $index => $time) {
+            $forecastAt = \Carbon\Carbon::parse($time, self::TIMEZONE);
+            if ($forecastAt->isPast()) {
+                continue;
+            }
+
+            $dir   = $this->getValue($hourly, 'wind_direction_10m', $index);
+            $speed = $this->getValue($hourly, 'wind_speed_10m', $index);
+            if ($dir === null || $speed === null) {
+                continue;
+            }
+
+            $gust  = $this->getValue($hourly, 'wind_gusts_10m', $index);
+            $temp  = $this->getValue($hourly, 'temperature_2m', $index);
+
+            $parsed[$forecastAt->format('Y-m-d H:i:s')] = [
+                'wind_direction' => (int) $dir,
+                'wind_speed_avg' => (float) $speed,
+                'wind_speed_min' => (float) $speed,                 // pas de min dans Open-Meteo
+                'wind_speed_max' => (float) ($gust ?? $speed),
+                'temperature'    => $temp !== null ? (float) $temp : 0.0,
+            ];
+        }
+        return $parsed;
+    }
+
+    /**
      * Parse la réponse JSON Open-Meteo en tableau horaire exploitable.
      *
      * Retourne : [
