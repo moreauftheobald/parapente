@@ -1,0 +1,3 @@
+// ── Icône SVG des marqueurs (bouclier parapente) ─────────────
+// Couleur passée dynamiquement selon le statut du jour sélectionné.
+function pgIcon(c){return`<svg class="pg-marker" width="36" height="40" viewBox="0 0 36 40" fill="none"><path d="M18 2 L34 8 L34 22 Q34 34 18 38 Q2 34 2 22 L2 8 Z" fill="${c}" stroke="white" stroke-width="1.5"/><path d="M8 18 Q10 10 18 9 Q26 10 28 18" stroke="white" stroke-width="1.8" fill="rgba(255,255,255,.2)" stroke-linecap="round"/><line x1="12" y1="17" x2="18" y2="24" stroke="white" stroke-width="1.2"/><line x1="18" y1="11" x2="18" y2="24" stroke="white" stroke-width="1.2"/><line x1="24" y1="17" x2="18" y2="24" stroke="white" stroke-width="1.2"/><circle cx="18" cy="27" r="2.5" fill="white"/></svg>`;}
