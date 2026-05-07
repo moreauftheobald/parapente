@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\BaliseController as AdminBaliseController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\SiteController as AdminSiteController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
+use App\Http\Controllers\Admin\WeatherModelController as AdminModelController;
 use App\Http\Controllers\MapController;
 use Illuminate\Support\Facades\Route;
 
@@ -45,6 +46,12 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/balises/{balise}/toggle', [AdminBaliseController::class, 'toggleActive'])->name('balises.toggle');
         Route::delete('/balises/{balise}',      [AdminBaliseController::class, 'destroy'])->name('balises.destroy');
 
-        // Sections futures (modèles…) à brancher ici
+        // ── Modèles météo ────────────────────────────────────────
+        Route::get('/models',                  [AdminModelController::class, 'index'])->name('models.index');
+        Route::get('/models/{model}/edit',     [AdminModelController::class, 'edit'])->name('models.edit');
+        Route::patch('/models/{model}',        [AdminModelController::class, 'update'])->name('models.update');
+        Route::post('/models/{model}/toggle',  [AdminModelController::class, 'toggleActive'])->name('models.toggle');
+
+        // Sections futures (logs, settings…) à brancher ici
     });
 });

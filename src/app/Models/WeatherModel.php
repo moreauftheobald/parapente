@@ -17,15 +17,17 @@ class WeatherModel extends Model
         'max_horizon_h',
         'weight_short',
         'weight_medium',
+        'refresh_frequency_minutes',
         'active',
     ];
 
     protected $casts = [
-        'resolution_km' => 'decimal:1',
-        'max_horizon_h' => 'integer',
-        'weight_short'  => 'decimal:2',
-        'weight_medium' => 'decimal:2',
-        'active'        => 'boolean',
+        'resolution_km'             => 'decimal:1',
+        'max_horizon_h'             => 'integer',
+        'weight_short'              => 'decimal:2',
+        'weight_medium'             => 'decimal:2',
+        'refresh_frequency_minutes' => 'integer',
+        'active'                    => 'boolean',
     ];
 
     // ── Relations ───────────────────────────────────────────────
