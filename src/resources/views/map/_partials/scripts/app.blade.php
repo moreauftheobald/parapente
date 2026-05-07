@@ -101,13 +101,13 @@ function mapApp(){return{
             if(scores.some(s=>s.status==='green'))st='green';
             else if(scores.some(s=>s.status==='orange'))st='orange';
             else if(scores.length>0)st='red';
-            const icon=L.divIcon({className:'',html:pgIcon(SC[st]),iconSize:[36,40],iconAnchor:[18,20]});
+            const icon=L.divIcon({className:'',html:siteIconHtml(site,st),iconSize:[40,40],iconAnchor:[20,20]});
             if(this.markers[site.id]){
-                const was=this.markers[site.id].getElement()?.querySelector('.pg-marker')?.classList.contains('selected');
+                const was=this.markers[site.id].getElement()?.querySelector('.pg-site-marker')?.classList.contains('selected');
                 this.markers[site.id].setIcon(icon);
-                if(was)setTimeout(()=>this.markers[site.id]?.getElement()?.querySelector('.pg-marker')?.classList.add('selected'),10);
+                if(was)setTimeout(()=>this.markers[site.id]?.getElement()?.querySelector('.pg-site-marker')?.classList.add('selected'),10);
             }else{
-                const mk=L.marker([site.lat,site.lng],{icon}).addTo(this.map).bindTooltip(site.name,{permanent:false,direction:'top',offset:[0,-16]});
+                const mk=L.marker([site.lat,site.lng],{icon}).addTo(this.map).bindTooltip(site.name,{permanent:false,direction:'top',offset:[0,-22]});
                 mk.on('click',(e)=>{L.DomEvent.stopPropagation(e);this.clickSite(site,mk.getElement());});
                 this.markers[site.id]=mk;
             }
@@ -131,8 +131,8 @@ function mapApp(){return{
         this.chartPos={top,left};
 
         // Sélectionner le marqueur visuellement
-        Object.values(this.markers).forEach(m=>m.getElement()?.querySelector('.pg-marker')?.classList.remove('selected'));
-        markerEl?.querySelector('.pg-marker')?.classList.add('selected');
+        Object.values(this.markers).forEach(m=>m.getElement()?.querySelector('.pg-site-marker')?.classList.remove('selected'));
+        markerEl?.querySelector('.pg-site-marker')?.classList.add('selected');
 
         this.chartSite=null;this.chartSunWindow=null;this.chartData=null;
         this.chartLoading=true;this.chartOpen=true;
@@ -172,7 +172,7 @@ function mapApp(){return{
         this.multimodelData=null;
         this.multimodel5Data=null;
         this._restoreMapState();
-        Object.values(this.markers).forEach(m=>m.getElement()?.querySelector('.pg-marker')?.classList.remove('selected'));
+        Object.values(this.markers).forEach(m=>m.getElement()?.querySelector('.pg-site-marker')?.classList.remove('selected'));
         this.site={};
     },
 

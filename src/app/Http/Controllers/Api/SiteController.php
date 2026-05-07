@@ -16,14 +16,18 @@ class SiteController extends Controller
 {
     public function index(): JsonResponse
     {
-        $sites = Site::active()->get()->map(fn (Site $site) => [
-            'id'       => $site->id,
-            'name'     => $site->name,
-            'lat'      => (float) $site->latitude,
-            'lng'      => (float) $site->longitude,
-            'altitude' => $site->altitude_m,
-            'level'    => $site->level,
-            'region'   => $site->region,
+        $sites = Site::active()->with('conditions')->get()->map(fn (Site $site) => [
+            'id'           => $site->id,
+            'name'         => $site->name,
+            'lat'          => (float) $site->latitude,
+            'lng'          => (float) $site->longitude,
+            'altitude'     => $site->altitude_m,
+            'level'        => $site->level,
+            'region'       => $site->region,
+            // Plage favorable d'orientation du décollage (depuis site_conditions)
+            // utilisée par siteIconUrl() pour calculer le bitmask SpotAir.
+            'wind_dir_min' => $site->conditions?->wind_dir_min,
+            'wind_dir_max' => $site->conditions?->wind_dir_max,
         ]);
         return response()->json($sites);
     }

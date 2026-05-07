@@ -6,9 +6,23 @@ body { font-family:'DM Sans',sans-serif; }
 #map-wrap { flex:1 1 0%; min-height:0; overflow:hidden; position:relative; }
 #map { height:100%; width:100%; }
 
-.pg-marker { cursor:pointer; transition:transform .15s,filter .15s; filter:drop-shadow(0 3px 6px rgba(0,0,0,.45)); display:block; }
-.pg-marker:hover { transform:scale(1.15); filter:drop-shadow(0 4px 10px rgba(0,0,0,.6)); }
-.pg-marker.selected { transform:scale(1.2); filter:drop-shadow(0 0 6px rgba(255,255,255,.7)) drop-shadow(0 4px 10px rgba(0,0,0,.6)); }
+/* Marqueurs des sites de vol — icône SpotAir + glow flou coloré
+   selon statut météo. Glow plutôt que cercle solide pour mieux
+   contraster avec les fonds de carte (notamment topo, où il y a
+   déjà beaucoup de vert "nature"). Vert pomme/citron volontairement
+   lumineux pour ressortir du décor. */
+.pg-site-marker { width:38px; height:38px; border-radius:50%; display:grid; place-items:center; cursor:pointer; transition:transform .15s, filter .15s; }
+.pg-site-marker img { width:30px; height:30px; pointer-events:none; }
+.pg-site-marker.pg-status-green   { filter:drop-shadow(0 0 6px #3BFF00) drop-shadow(0 0 14px #3BFF00) drop-shadow(0 0 22px rgba(59,255,0,.85)) drop-shadow(0 2px 3px rgba(0,0,0,.7)); }
+.pg-site-marker.pg-status-orange  { filter:drop-shadow(0 0 6px #fb923c) drop-shadow(0 0 14px #fb923c) drop-shadow(0 0 22px rgba(251,146,60,.85))  drop-shadow(0 2px 3px rgba(0,0,0,.7)); }
+.pg-site-marker.pg-status-red     { filter:drop-shadow(0 0 6px #f87171) drop-shadow(0 0 14px #f87171) drop-shadow(0 0 22px rgba(248,113,113,.85)) drop-shadow(0 2px 3px rgba(0,0,0,.7)); }
+.pg-site-marker.pg-status-unknown { filter:drop-shadow(0 0 3px rgba(255,255,255,.6)) drop-shadow(0 2px 3px rgba(0,0,0,.6)); }
+.pg-site-marker:hover { transform:scale(1.18); }
+.pg-site-marker.selected { transform:scale(1.25); }
+.pg-site-marker.pg-status-green.selected   { filter:drop-shadow(0 0 8px #3BFF00) drop-shadow(0 0 18px #3BFF00)  drop-shadow(0 0 26px rgba(59,255,0,.9))  drop-shadow(0 0 3px #fff); }
+.pg-site-marker.pg-status-orange.selected  { filter:drop-shadow(0 0 8px #fb923c) drop-shadow(0 0 18px #fb923c) drop-shadow(0 0 26px rgba(251,146,60,.9)) drop-shadow(0 0 3px #fff); }
+.pg-site-marker.pg-status-red.selected     { filter:drop-shadow(0 0 8px #f87171) drop-shadow(0 0 18px #f87171) drop-shadow(0 0 26px rgba(248,113,113,.9)) drop-shadow(0 0 3px #fff); }
+.pg-site-marker.pg-status-unknown.selected { filter:drop-shadow(0 0 4px #fff) drop-shadow(0 0 10px rgba(255,255,255,.7)); }
 
 @keyframes spin { to { transform:rotate(360deg); } }
 
