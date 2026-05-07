@@ -20,12 +20,17 @@ function baliseIconColor(speedKmh) {
     return 'g';
 }
 
+// Seuils de fraîcheur visuelle. Calibrés sur la cadence native la
+// plus lente (METAR ~30 min) pour ne pas signaler comme "en retard"
+// des balises qui fonctionnent normalement. La désactivation totale
+// en base (active=false) reste indépendante et fixée à 7 jours
+// sans lecture, gérée par les jobs de polling.
 function baliseIconBg(readAtIso) {
     if (!readAtIso) return 'd';
     const ageMin = (Date.now() - new Date(readAtIso).getTime()) / 60000;
-    if (ageMin > 60) return 'd';
-    if (ageMin > 15) return 'l';
-    return 'w';
+    if (ageMin > 120) return 'd';   // > 2h : inactif (dead)
+    if (ageMin > 30)  return 'l';   // 30 min – 2h : en retard (late)
+    return 'w';                      // < 30 min : actif (white)
 }
 
 function baliseIconUrl(reading) {

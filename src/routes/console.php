@@ -4,6 +4,7 @@ use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use App\Jobs\FetchBaliseForecastsJob;
 use App\Jobs\FetchForecastsJob;
+use App\Jobs\FetchMetarReadingsJob;
 use App\Jobs\FetchPiouPiouReadingsJob;
 use App\Jobs\PurgeOldForecastsJob;
 
@@ -31,6 +32,14 @@ Schedule::job(PurgeOldForecastsJob::class)
 Schedule::job(FetchPiouPiouReadingsJob::class)
     ->everyTenMinutes()
     ->name('fetch-pioupiou')
+    ->withoutOverlapping();
+
+// Polling METAR (NOAA Aviation Weather) toutes les 30 minutes
+//   - Stations aéroportuaires officielles, fréquence native ~30 min
+//   - Mêmes mécaniques de dédup et désactivation que PiouPiou
+Schedule::job(FetchMetarReadingsJob::class)
+    ->everyThirtyMinutes()
+    ->name('fetch-metar')
     ->withoutOverlapping();
 
 // Archivage horaire des prévisions Open-Meteo aux coords des balises

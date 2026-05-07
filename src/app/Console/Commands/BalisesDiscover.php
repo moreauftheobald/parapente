@@ -6,6 +6,7 @@ namespace App\Console\Commands;
 
 use App\Models\Balise;
 use App\Services\Balises\BaliseProviderInterface;
+use App\Services\Balises\MetarProvider;
 use App\Services\Balises\PiouPiouProvider;
 use Illuminate\Console\Command;
 
@@ -43,7 +44,7 @@ class BalisesDiscover extends Command
 
         $provider = $this->resolveProvider($source);
         if (! $provider) {
-            $this->error("Source inconnue : '{$source}' (sources gérées : pioupiou)");
+            $this->error("Source inconnue : '{$source}' (sources gérées : pioupiou, metar)");
             return self::FAILURE;
         }
 
@@ -98,6 +99,7 @@ class BalisesDiscover extends Command
     {
         return match ($source) {
             'pioupiou' => app(PiouPiouProvider::class),
+            'metar'    => app(MetarProvider::class),
             default    => null,
         };
     }
