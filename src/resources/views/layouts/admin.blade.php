@@ -50,7 +50,7 @@
                     <a href="{{ route('admin.sites.index') }}" class="{{ $linkClass($section === 'sites') }}">
                         <span class="w-5 text-center">⛰</span> Sites
                     </a>
-                    <a href="#" class="{{ $linkClass($section === 'balises') }} opacity-50 pointer-events-none" title="à venir">
+                    <a href="{{ route('admin.balises.index') }}" class="{{ $linkClass($section === 'balises') }}">
                         <span class="w-5 text-center">🪁</span> Balises
                     </a>
                     <a href="#" class="{{ $linkClass($section === 'models') }} opacity-50 pointer-events-none" title="à venir">

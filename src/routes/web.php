@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AuthController;
+use App\Http\Controllers\Admin\BaliseController as AdminBaliseController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\SiteController as AdminSiteController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
@@ -38,6 +39,12 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::patch('/users/{user}',     [AdminUserController::class, 'update'])->name('users.update');
         Route::delete('/users/{user}',    [AdminUserController::class, 'destroy'])->name('users.destroy');
 
-        // Sections futures (balises, modèles…) à brancher ici
+        // ── Balises ──────────────────────────────────────────────
+        Route::get('/balises',                  [AdminBaliseController::class, 'index'])->name('balises.index');
+        Route::get('/balises/{balise}',         [AdminBaliseController::class, 'show'])->name('balises.show');
+        Route::post('/balises/{balise}/toggle', [AdminBaliseController::class, 'toggleActive'])->name('balises.toggle');
+        Route::delete('/balises/{balise}',      [AdminBaliseController::class, 'destroy'])->name('balises.destroy');
+
+        // Sections futures (modèles…) à brancher ici
     });
 });
