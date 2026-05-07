@@ -116,7 +116,11 @@
                                 <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-gray-800 text-gray-500 border border-gray-700">○ Inactif</span>
                             @endif
                         </td>
-                        <td class="px-4 py-3 text-right">
+                        <td class="px-4 py-3 text-right whitespace-nowrap">
+                            <a href="{{ route('admin.sites.edit', $site) }}"
+                               class="inline-block px-3 py-1 text-xs rounded border border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white transition mr-1">
+                                Éditer
+                            </a>
                             <form method="POST" action="{{ route('admin.sites.toggle', $site) }}" class="inline">
                                 @csrf
                                 <button type="submit"

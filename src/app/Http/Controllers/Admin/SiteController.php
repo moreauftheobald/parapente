@@ -6,8 +6,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Site;
+use App\Models\SiteCondition;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 /**
@@ -92,5 +94,84 @@ class SiteController extends Controller
                 $site->name,
                 $site->active ? 'activé' : 'désactivé'
             ));
+    }
+
+    public function edit(Site $site): View
+    {
+        $site->load('conditions');
+        return view('admin.sites.edit', ['site' => $site]);
+    }
+
+    public function update(Site $site, Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            // Site
+            'name'        => ['required', 'string', 'max:255'],
+            'slug'        => ['required', 'string', 'max:255', 'regex:/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/'],
+            'description' => ['nullable', 'string'],
+            'region'      => ['nullable', 'string', 'max:100'],
+            'level'       => ['required', 'in:debutant,intermediaire,confirme'],
+            'latitude'    => ['required', 'numeric', 'between:-90,90'],
+            'longitude'   => ['required', 'numeric', 'between:-180,180'],
+            'altitude_m'  => ['nullable', 'integer', 'between:0,9000'],
+            'landing_lat' => ['nullable', 'numeric', 'between:-90,90'],
+            'landing_lng' => ['nullable', 'numeric', 'between:-180,180'],
+            'active'      => ['nullable', 'boolean'],
+            // Conditions
+            'wind_dir_min'        => ['required', 'integer', 'between:0,360'],
+            'wind_dir_max'        => ['required', 'integer', 'between:0,360'],
+            'wind_speed_min'      => ['required', 'numeric', 'min:0',  'max:100'],
+            'wind_speed_max'      => ['required', 'numeric', 'min:0',  'max:100'],
+            'wind_speed_ideal'    => ['required', 'numeric', 'min:0',  'max:100'],
+            'precip_max'          => ['required', 'numeric', 'min:0',  'max:50'],
+            'cloud_base_min_m'    => ['required', 'integer', 'between:0,5000'],
+            'cloud_cover_low_max' => ['required', 'integer', 'between:0,100'],
+            'notes'               => ['nullable', 'string'],
+        ]);
+
+        DB::transaction(function () use ($site, $data) {
+            $site->fill([
+                'name'        => $data['name'],
+                'slug'        => $data['slug'],
+                'description' => $data['description'] ?? null,
+                'region'      => $data['region']      ?? null,
+                'level'       => $data['level'],
+                'latitude'    => $data['latitude'],
+                'longitude'   => $data['longitude'],
+                'altitude_m'  => $data['altitude_m']  ?? null,
+                'landing_lat' => $data['landing_lat'] ?? null,
+                'landing_lng' => $data['landing_lng'] ?? null,
+                'active'      => (bool) ($data['active'] ?? false),
+            ])->save();
+
+            SiteCondition::updateOrCreate(
+                ['site_id' => $site->id],
+                [
+                    'wind_dir_min'        => $data['wind_dir_min'],
+                    'wind_dir_max'        => $data['wind_dir_max'],
+                    'wind_speed_min'      => $data['wind_speed_min'],
+                    'wind_speed_max'      => $data['wind_speed_max'],
+                    'wind_speed_ideal'    => $data['wind_speed_ideal'],
+                    'precip_max'          => $data['precip_max'],
+                    'cloud_base_min_m'    => $data['cloud_base_min_m'],
+                    'cloud_cover_low_max' => $data['cloud_cover_low_max'],
+                    'notes'               => $data['notes'] ?? null,
+                ]
+            );
+        });
+
+        return redirect()
+            ->route('admin.sites.edit', $site)
+            ->with('status', 'Site "' . $site->name . '" enregistré.');
+    }
+
+    public function destroy(Site $site): RedirectResponse
+    {
+        $name = $site->name;
+        $site->delete(); // cascade DB sur site_conditions, forecasts, site_scores
+
+        return redirect()
+            ->route('admin.sites.index')
+            ->with('status', 'Site "' . $name . '" supprimé.');
     }
 }
