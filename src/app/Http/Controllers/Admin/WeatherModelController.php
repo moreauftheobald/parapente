@@ -177,13 +177,33 @@ class WeatherModelController extends Controller
             ], 422);
         }
 
+        $priorSuccessAt = $model->api->last_success_at;
+
         $startedAt  = microtime(true);
         $data       = $fetcher->fetch($site, $model);
         $durationMs = (int) ((microtime(true) - $startedAt) * 1000);
 
         $model->api->refresh();
 
+        $probeBumped = $model->api->last_success_at
+            && (! $priorSuccessAt || $model->api->last_success_at->gt($priorSuccessAt));
+
         if (empty($data)) {
+            if ($probeBumped) {
+                return response()->json([
+                    'success'     => true,
+                    'message'     => sprintf(
+                        'Probe OK en %d ms pour [%s] — auth + endpoint joignables. Pas encore de payload exploitable (parsing GRIB en PR3).',
+                        $durationMs,
+                        $site->slug,
+                    ),
+                    'site'        => $site->slug,
+                    'duration_ms' => $durationMs,
+                    'slots_count' => 0,
+                    'probe_only'  => true,
+                ]);
+            }
+
             return response()->json([
                 'success'     => false,
                 'message'     => "Le fetch n'a renvoyé aucune donnée. Vérifie credentials, endpoint et logs.",

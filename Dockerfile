@@ -25,6 +25,7 @@ RUN apt-get update -y \
         msmtp-mta \
         mailutils \
         supervisor \
+        libeccodes-tools \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
