@@ -56,8 +56,8 @@ class MetNorwayApi implements WeatherApiInterface
             $response = Http::timeout(15)
                 ->withHeaders(['User-Agent' => $this->userAgent])
                 ->get($this->baseUrl . '/locationforecast/2.0/compact', [
-                    'lat' => round($site->latitude, 4),
-                    'lon' => round($site->longitude, 4),
+                    'lat' => round((float) $site->latitude, 4),
+                    'lon' => round((float) $site->longitude, 4),
                 ]);
 
             $this->config?->incrementRequestsToday();
