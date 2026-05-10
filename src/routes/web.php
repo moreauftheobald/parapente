@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\LogController as AdminLogController;
 use App\Http\Controllers\Admin\SiteController as AdminSiteController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
+use App\Http\Controllers\Admin\WeatherApiController as AdminApiController;
 use App\Http\Controllers\Admin\WeatherModelController as AdminModelController;
 use App\Http\Controllers\MapController;
 use Illuminate\Support\Facades\Route;
@@ -52,6 +53,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/models/{model}/edit',     [AdminModelController::class, 'edit'])->name('models.edit');
         Route::patch('/models/{model}',        [AdminModelController::class, 'update'])->name('models.update');
         Route::post('/models/{model}/toggle',  [AdminModelController::class, 'toggleActive'])->name('models.toggle');
+        Route::post('/models/{model}/test',    [AdminModelController::class, 'test'])->name('models.test');
+
+        // ── APIs météo ───────────────────────────────────────────
+        Route::get('/apis',                [AdminApiController::class, 'index'])->name('apis.index');
+        Route::get('/apis/{api}/edit',     [AdminApiController::class, 'edit'])->name('apis.edit');
+        Route::patch('/apis/{api}',        [AdminApiController::class, 'update'])->name('apis.update');
+        Route::post('/apis/{api}/toggle',  [AdminApiController::class, 'toggleActive'])->name('apis.toggle');
 
         // ── Logs / monitoring ─────────────────────────────────────
         Route::get('/logs', [AdminLogController::class, 'index'])->name('logs.index');

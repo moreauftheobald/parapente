@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class WeatherModel extends Model
@@ -13,27 +14,50 @@ class WeatherModel extends Model
         'code',
         'name',
         'provider',
+        'weather_api_id',
+        'oauth_client_id',
+        'oauth_client_secret',
+        'oauth_token',
+        'oauth_expires_at',
+        'endpoint_url',
         'resolution_km',
         'max_horizon_h',
         'weight_short',
         'weight_medium',
         'refresh_frequency_minutes',
+        'last_fetch_at',
         'active',
     ];
 
     protected $casts = [
+        'weather_api_id'            => 'integer',
+        'oauth_client_id'           => 'encrypted',
+        'oauth_client_secret'       => 'encrypted',
+        'oauth_token'               => 'encrypted',
+        'oauth_expires_at'          => 'datetime',
         'resolution_km'             => 'decimal:1',
         'max_horizon_h'             => 'integer',
         'weight_short'              => 'decimal:2',
         'weight_medium'             => 'decimal:2',
         'refresh_frequency_minutes' => 'integer',
+        'last_fetch_at'             => 'datetime',
         'active'                    => 'boolean',
+    ];
+
+    protected $hidden = [
+        'oauth_client_secret',
+        'oauth_token',
     ];
 
     // ── Relations ───────────────────────────────────────────────
     public function forecasts(): HasMany
     {
         return $this->hasMany(Forecast::class);
+    }
+
+    public function api(): BelongsTo
+    {
+        return $this->belongsTo(WeatherApi::class, 'weather_api_id');
     }
 
     // ── Scopes ──────────────────────────────────────────────────
@@ -70,5 +94,23 @@ class WeatherModel extends Model
     public function coversHorizon(int $hours): bool
     {
         return $hours <= $this->max_horizon_h;
+    }
+
+    /**
+     * Indique si le modèle est dû pour un refresh selon sa cadence.
+     * `last_fetch_at` est mis à jour globalement par l'orchestrateur de
+     * fetch (FetchForecastsJob) — la cadence est une propriété du modèle
+     * NWP, pas du site.
+     */
+    public function isDueForRefresh(): bool
+    {
+        if (! $this->active) {
+            return false;
+        }
+        if ($this->last_fetch_at === null) {
+            return true;
+        }
+        $interval = max(1, (int) $this->refresh_frequency_minutes);
+        return $this->last_fetch_at->lt(now()->subMinutes($interval));
     }
 }

@@ -11,10 +11,12 @@ class WeatherModelSeeder extends Seeder
 {
     public function run(): void
     {
-        // refresh_frequency_minutes : cadence de fetch envisagée pour
-        //   adapter par modèle (les runs Open-Meteo ne sortent pas tous
-        //   à la même fréquence). Servira plus tard à filtrer les
-        //   appels dans FetchSiteForecastsJob.
+        // L'API par défaut pour tous les modèles existants reste Open-Meteo.
+        // L'admin peut basculer ensuite vers Météo-France / DWD / ECMWF
+        // selon les capacités déclarées par chaque WeatherApi (voir
+        // App\Services\Weather\Apis\*::supportedModelCodes()).
+        $openMeteoId = DB::table('weather_apis')->where('code', 'openmeteo')->value('id');
+
         $models = [
             // ── Court terme — haute résolution locale ────────────
             [
@@ -24,8 +26,8 @@ class WeatherModelSeeder extends Seeder
                 'resolution_km'             => 2.5,
                 'max_horizon_h'             => 48,
                 'weight_short'              => 1.00,
-                'weight_medium'             => 0.00, // indisponible au-delà de 48h
-                'refresh_frequency_minutes' => 60,
+                'weight_medium'             => 0.00,
+                'refresh_frequency_minutes' => 180, // run 8x/jour (toutes 3h)
                 'active'                    => true,
             ],
             [
@@ -36,7 +38,7 @@ class WeatherModelSeeder extends Seeder
                 'max_horizon_h'             => 48,
                 'weight_short'              => 1.00,
                 'weight_medium'             => 0.00,
-                'refresh_frequency_minutes' => 60,
+                'refresh_frequency_minutes' => 180, // run 8x/jour
                 'active'                    => true,
             ],
             [
@@ -47,7 +49,7 @@ class WeatherModelSeeder extends Seeder
                 'max_horizon_h'             => 48,
                 'weight_short'              => 0.90,
                 'weight_medium'             => 0.00,
-                'refresh_frequency_minutes' => 60,
+                'refresh_frequency_minutes' => 360, // run 4x/jour
                 'active'                    => true,
             ],
 
@@ -60,7 +62,7 @@ class WeatherModelSeeder extends Seeder
                 'max_horizon_h'             => 96,
                 'weight_short'              => 0.80,
                 'weight_medium'             => 0.90,
-                'refresh_frequency_minutes' => 360, // run 4x/jour
+                'refresh_frequency_minutes' => 360,
                 'active'                    => true,
             ],
             [
@@ -71,7 +73,7 @@ class WeatherModelSeeder extends Seeder
                 'max_horizon_h'             => 120,
                 'weight_short'              => 0.80,
                 'weight_medium'             => 0.90,
-                'refresh_frequency_minutes' => 180, // run 8x/jour
+                'refresh_frequency_minutes' => 360,
                 'active'                    => true,
             ],
             [
@@ -82,7 +84,7 @@ class WeatherModelSeeder extends Seeder
                 'max_horizon_h'             => 240,
                 'weight_short'              => 0.85,
                 'weight_medium'             => 1.00,
-                'refresh_frequency_minutes' => 720, // run 2x/jour 00z/12z
+                'refresh_frequency_minutes' => 360,
                 'active'                    => true,
             ],
             [
@@ -93,7 +95,7 @@ class WeatherModelSeeder extends Seeder
                 'max_horizon_h'             => 240,
                 'weight_short'              => 0.70,
                 'weight_medium'             => 0.90,
-                'refresh_frequency_minutes' => 720,
+                'refresh_frequency_minutes' => 360,
                 'active'                    => true,
             ],
 
@@ -106,7 +108,7 @@ class WeatherModelSeeder extends Seeder
                 'max_horizon_h'             => 180,
                 'weight_short'              => 0.70,
                 'weight_medium'             => 0.85,
-                'refresh_frequency_minutes' => 180,
+                'refresh_frequency_minutes' => 360,
                 'active'                    => true,
             ],
             [
@@ -117,7 +119,7 @@ class WeatherModelSeeder extends Seeder
                 'max_horizon_h'             => 240,
                 'weight_short'              => 0.65,
                 'weight_medium'             => 0.80,
-                'refresh_frequency_minutes' => 720,
+                'refresh_frequency_minutes' => 360,
                 'active'                    => true,
             ],
             [
@@ -128,11 +130,41 @@ class WeatherModelSeeder extends Seeder
                 'max_horizon_h'             => 384,
                 'weight_short'              => 0.60,
                 'weight_medium'             => 0.75,
-                'refresh_frequency_minutes' => 360, // run 4x/jour
+                'refresh_frequency_minutes' => 360,
                 'active'                    => true,
             ],
         ];
 
-        DB::table('weather_models')->insertOrIgnore($models);
+        foreach ($models as $model) {
+            DB::table('weather_models')->updateOrInsert(
+                ['code' => $model['code']],
+                array_merge($model, [
+                    'weather_api_id' => $openMeteoId,
+                    'updated_at'     => now(),
+                    'created_at'     => now(),
+                ])
+            );
+        }
+
+        // ── Modèle alternatif servi par MET Norway (inactif par défaut) ──
+        // À activer dans l'admin si l'on souhaite l'utiliser comme source
+        // complémentaire pour la voting logic.
+        $metnoApiId = DB::table('weather_apis')->where('code', 'metno')->value('id');
+        DB::table('weather_models')->updateOrInsert(
+            ['code' => 'metno_seamless'],
+            [
+                'name'                      => 'MET Norway (MEPS+IFS)',
+                'provider'                  => 'MET Norway',
+                'weather_api_id'            => $metnoApiId,
+                'resolution_km'             => 2.5,
+                'max_horizon_h'             => 60,
+                'weight_short'              => 0.85,
+                'weight_medium'             => 0.00,
+                'refresh_frequency_minutes' => 180,
+                'active'                    => false,
+                'updated_at'                => now(),
+                'created_at'                => now(),
+            ]
+        );
     }
 }

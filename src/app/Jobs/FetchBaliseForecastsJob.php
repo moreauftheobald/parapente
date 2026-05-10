@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Models\Balise;
+use App\Models\WeatherApi;
 use App\Models\WeatherModel;
-use App\Services\Weather\OpenMeteoService;
+use App\Services\Weather\Apis\OpenMeteoApi;
 use Carbon\Carbon;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -43,7 +44,7 @@ class FetchBaliseForecastsJob implements ShouldQueue
     /** Au-delà, on n'archive plus (voting logic dynamique limitée à J+2) */
     private const MAX_HORIZON_HOURS = 72;
 
-    public function handle(OpenMeteoService $openMeteo): void
+    public function handle(OpenMeteoApi $openMeteo): void
     {
         $balises = Balise::active()
             ->whereNotNull('latitude')
@@ -55,14 +56,24 @@ class FetchBaliseForecastsJob implements ShouldQueue
             return;
         }
 
+        // Le batch multi-coordonnées est spécifique à Open-Meteo. On
+        // injecte la config WeatherApi correspondante.
+        $omConfig = WeatherApi::where('code', 'openmeteo')->first();
+        if ($omConfig) {
+            $openMeteo->setConfig($omConfig);
+        }
+
         $points = $balises->map(fn (Balise $b) => [
             'id'  => $b->id,
             'lat' => (float) $b->latitude,
             'lng' => (float) $b->longitude,
         ])->all();
 
-        $models = WeatherModel::where('active', true)
-            ->where('max_horizon_h', '>=', 24)  // au moins J+1
+        // On ne batch que les modèles servis par Open-Meteo.
+        $omApiId = $omConfig?->id;
+        $models  = WeatherModel::where('active', true)
+            ->where('max_horizon_h', '>=', 24)
+            ->when($omApiId, fn ($q) => $q->where('weather_api_id', $omApiId))
             ->get();
 
         $fetchedAt = Carbon::now();

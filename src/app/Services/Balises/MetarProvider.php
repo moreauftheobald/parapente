@@ -32,7 +32,7 @@ use Illuminate\Support\Facades\Log;
  *  - Direction : convention FROM (météo standard) — alignée avec
  *    notre stack.
  *  - METAR ne fournit pas wind_speed_min ; on met l'avg comme
- *    fallback (cohérent avec OpenMeteoService).
+ *    fallback (cohérent avec OpenMeteoApi).
  */
 class MetarProvider implements BaliseProviderInterface
 {
