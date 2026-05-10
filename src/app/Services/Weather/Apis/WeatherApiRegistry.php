@@ -17,11 +17,7 @@ class WeatherApiRegistry
 {
     /** @var array<string, class-string<WeatherApiInterface>> */
     private const REGISTRY = [
-        'openmeteo'   => OpenMeteoApi::class,
-        'metno'       => MetNorwayApi::class,
-        'meteofrance' => MeteoFranceApi::class,
-        'dwd'         => DwdOpenDataApi::class,
-        'ecmwf'       => EcmwfOpenDataApi::class,
+        'openmeteo' => OpenMeteoApi::class,
     ];
 
     /**

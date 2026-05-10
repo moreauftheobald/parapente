@@ -7,62 +7,40 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * WeatherApiSeeder — pile self-hosted.
+ *
+ * Le projet utilise un serveur Open-Meteo dédié (https://github.com/
+ * open-meteo/open-meteo) qui agrège 13 modèles publics (MF AROME/ARPEGE,
+ * DWD ICON, ECMWF, GFS, UKMO, BOM, CMA, JMA). URL paramétrable via
+ * l'env `OPEN_METEO_BASE_URL` (défaut http://localhost:8888/v1 en dev,
+ * http://open-meteo-api:8080/v1 en prod docker-compose).
+ *
+ * Les anciennes intégrations natives (MF DPS, DWD OpenData, ECMWF Open
+ * Data, MET Norway) ont été supprimées au profit de cette unique source.
+ * Pour réintroduire un fournisseur, repartir de l'historique git PR4.
+ */
 class WeatherApiSeeder extends Seeder
 {
     public function run(): void
     {
-        $apis = [
+        DB::table('weather_apis')->updateOrInsert(
+            ['code' => 'openmeteo'],
             [
-                'code'        => 'openmeteo',
-                'name'        => 'Open-Meteo',
-                'base_url'    => 'https://api.open-meteo.com/v1',
+                'name'        => 'Open-Meteo (self-hosted)',
+                'base_url'    => env('OPEN_METEO_BASE_URL', 'http://localhost:8888/v1'),
                 'auth_type'   => 'none',
-                'daily_quota' => 10000,
-                'active'      => true,
-            ],
-            [
-                'code'        => 'metno',
-                'name'        => 'MET Norway',
-                'base_url'    => 'https://api.met.no/weatherapi',
-                'auth_type'   => 'user_agent',
-                'user_agent'  => 'ParapenteFR/1.0 contact@parapentefr.local',
                 'daily_quota' => null,
                 'active'      => true,
-            ],
-            [
-                'code'        => 'meteofrance',
-                'name'        => 'Météo-France',
-                'base_url'    => 'https://public-api.meteofrance.fr',
-                'auth_type'   => 'oauth2',
-                'daily_quota' => 144000, // 100 req/min × 60 × 24
-                'active'      => false,  // requiert client_id/secret
-            ],
-            [
-                'code'        => 'dwd',
-                'name'        => 'DWD OpenData',
-                'base_url'    => 'https://opendata.dwd.de/weather/nwp',
-                'auth_type'   => 'none',
-                'daily_quota' => null,
-                'active'      => false, // implémentation GRIB en PR2/3
-            ],
-            [
-                'code'        => 'ecmwf',
-                'name'        => 'ECMWF Open Data',
-                'base_url'    => 'https://data.ecmwf.int/forecasts',
-                'auth_type'   => 'none',
-                'daily_quota' => null,
-                'active'      => false, // implémentation GRIB en PR2/3
-            ],
-        ];
+                'created_at'  => now(),
+                'updated_at'  => now(),
+            ]
+        );
 
-        foreach ($apis as $api) {
-            DB::table('weather_apis')->updateOrInsert(
-                ['code' => $api['code']],
-                array_merge($api, [
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ])
-            );
-        }
+        // Désactive les éventuelles entrées d'anciennes APIs encore en
+        // base (BD existante migrée). Idempotent.
+        DB::table('weather_apis')
+            ->whereNotIn('code', ['openmeteo'])
+            ->update(['active' => false, 'updated_at' => now()]);
     }
 }

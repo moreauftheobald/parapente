@@ -47,7 +47,11 @@ src/                        ← Racine Laravel
 │   │   └── BaliseReading.php
 │   ├── Services/
 │   │   └── Weather/
-│   │       ├── OpenMeteoService.php     ← Fetch API Open-Meteo
+│   │       ├── Apis/
+│   │       │   ├── OpenMeteoApi.php     ← Unique source météo (self-hosted)
+│   │       │   ├── WeatherApiInterface.php
+│   │       │   └── WeatherApiRegistry.php
+│   │       ├── ForecastFetcher.php      ← Orchestrateur (site, modèle)
 │   │       └── ScoringService.php       ← Voting logic + scores
 │   └── Jobs/
 │       ├── FetchForecastsJob.php        ← Orchestre par site
@@ -175,8 +179,25 @@ Couleur = statut du jour sélectionné dans le toolbar.
 
 ### Services météo
 
-**`OpenMeteoService`** :
-- `fetchForSiteAndModel()` / `fetchAllModelsForSite()` (pause 200ms entre appels)
+**Architecture self-hosted (depuis PR5)** :
+Le projet utilise un **serveur Open-Meteo dédié** (image `open-meteo/open-meteo`)
+pour agréger 13 modèles publics. Plus de fetch direct sur les APIs externes
+(Météo-France DPS, DWD OpenData, ECMWF Open Data, MET Norway sont supprimés).
+
+URL configurable via `OPEN_METEO_BASE_URL` dans `.env` :
+- dev local : `http://localhost:8888/v1`
+- prod docker-compose : `http://open-meteo-api:8080/v1`
+
+13 modèles servis : `meteofrance_arome_france_hd`, `meteofrance_arome_france_hd_15m`,
+`meteofrance_arpege_europe`, `dwd_icon_eu`, `dwd_icon_d2`, `dwd_icon`,
+`ncep_gfs013`, `ecmwf_ifs025`, `ecmwf_aifs025_single`,
+`ukmo_global_deterministic_10km`, `bom_access_global`, `cma_grapes_global`,
+`jma_gsm`. (Les 3 derniers inactifs par défaut, hémisphère sud / Asie.)
+
+**`OpenMeteoApi`** (`app/Services/Weather/Apis/`) :
+- `fetchForSiteAndModel()` : 1 appel par (site, modèle)
+- `fetchBatchForBalises()` : appel batch multi-coordonnées (40 points/chunk)
+- Pas de pause entre appels (serveur dédié, pas de rate limit)
 - Formule plafond Henning : `(T - Td) / 8 × 1000`
 - Format datetime `Y-m-d H:i:s` pour MariaDB (pas ISO avec `T`)
 

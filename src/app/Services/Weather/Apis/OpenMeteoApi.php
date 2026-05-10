@@ -47,18 +47,22 @@ class OpenMeteoApi implements WeatherApiInterface
 
     public function supportedModelCodes(): array
     {
-        // Open-Meteo agrège la quasi-totalité des modèles publics utiles.
+        // 13 modèles servis par le serveur Open-Meteo self-hosted dédié
+        // au projet (cf. OPEN_METEO_MODELS dans la config docker).
         return [
-            'meteofrance_arome_france',
+            'meteofrance_arome_france_hd',
+            'meteofrance_arome_france_hd_15m',
             'meteofrance_arpege_europe',
-            'icon_d2',
-            'icon_eu',
-            'icon_seamless',
-            'knmi_harmonie_arome_europe',
+            'dwd_icon_eu',
+            'dwd_icon_d2',
+            'dwd_icon',
+            'ncep_gfs013',
             'ecmwf_ifs025',
-            'ecmwf_aifs025',
-            'gem_seamless',
-            'gfs_seamless',
+            'ecmwf_aifs025_single',
+            'ukmo_global_deterministic_10km',
+            'bom_access_global',
+            'cma_grapes_global',
+            'jma_gsm',
         ];
     }
 
@@ -112,13 +116,10 @@ class OpenMeteoApi implements WeatherApiInterface
 
         $result = [];
         $chunks = array_chunk(array_values($points), self::BATCH_CHUNK);
-        foreach ($chunks as $i => $chunk) {
+        foreach ($chunks as $chunk) {
             $partial = $this->fetchBatchChunk($chunk, $model);
             foreach ($partial as $id => $parsed) {
                 $result[$id] = $parsed;
-            }
-            if ($i < count($chunks) - 1) {
-                usleep(200_000);
             }
         }
         return $result;

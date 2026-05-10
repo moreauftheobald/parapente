@@ -7,49 +7,63 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * 13 modèles servis par le serveur Open-Meteo self-hosted dédié.
+ *
+ * Codes alignés sur la liste OPEN_METEO_MODELS du conteneur dédié :
+ * meteofrance_arome_france_hd, meteofrance_arome_france_hd_15m,
+ * meteofrance_arpege_europe, dwd_icon_eu, dwd_icon_d2, dwd_icon,
+ * ncep_gfs013, ecmwf_ifs025, ecmwf_aifs025_single,
+ * ukmo_global_deterministic_10km, bom_access_global,
+ * cma_grapes_global, jma_gsm.
+ *
+ * Désactive automatiquement les modèles d'anciennes intégrations (icon_eu,
+ * icon_d2, icon_seamless, gfs_seamless, gem_seamless,
+ * knmi_harmonie_arome_europe, meteofrance_arome_france, metno_seamless,
+ * dwd_*_native, ecmwf_*_native) si présents en base.
+ */
 class WeatherModelSeeder extends Seeder
 {
     public function run(): void
     {
-        // L'API par défaut pour tous les modèles existants reste Open-Meteo.
-        // L'admin peut basculer ensuite vers Météo-France / DWD / ECMWF
-        // selon les capacités déclarées par chaque WeatherApi (voir
-        // App\Services\Weather\Apis\*::supportedModelCodes()).
         $openMeteoId = DB::table('weather_apis')->where('code', 'openmeteo')->value('id');
+        if ($openMeteoId === null) {
+            throw new \RuntimeException('WeatherApi `openmeteo` introuvable — exécuter WeatherApiSeeder d\'abord.');
+        }
 
         $models = [
-            // ── Court terme — haute résolution locale ────────────
+            // ── Court terme — haute résolution locale (1.3 km) ───
             [
-                'code'                      => 'meteofrance_arome_france',
-                'name'                      => 'AROME',
+                'code'                      => 'meteofrance_arome_france_hd',
+                'name'                      => 'AROME-HD',
                 'provider'                  => 'Météo-France',
-                'resolution_km'             => 2.5,
+                'resolution_km'             => 1.3,
                 'max_horizon_h'             => 48,
                 'weight_short'              => 1.00,
                 'weight_medium'             => 0.00,
-                'refresh_frequency_minutes' => 180, // run 8x/jour (toutes 3h)
+                'refresh_frequency_minutes' => 180,
                 'active'                    => true,
             ],
             [
-                'code'                      => 'icon_d2',
+                'code'                      => 'meteofrance_arome_france_hd_15m',
+                'name'                      => 'AROME-HD 15min',
+                'provider'                  => 'Météo-France',
+                'resolution_km'             => 1.3,
+                'max_horizon_h'             => 6,
+                'weight_short'              => 1.00,
+                'weight_medium'             => 0.00,
+                'refresh_frequency_minutes' => 60,
+                'active'                    => true,
+            ],
+            [
+                'code'                      => 'dwd_icon_d2',
                 'name'                      => 'ICON-D2',
                 'provider'                  => 'DWD',
                 'resolution_km'             => 2.0,
                 'max_horizon_h'             => 48,
                 'weight_short'              => 1.00,
                 'weight_medium'             => 0.00,
-                'refresh_frequency_minutes' => 180, // run 8x/jour
-                'active'                    => true,
-            ],
-            [
-                'code'                      => 'knmi_harmonie_arome_europe',
-                'name'                      => 'HARMONIE',
-                'provider'                  => 'KNMI',
-                'resolution_km'             => 5.0,
-                'max_horizon_h'             => 48,
-                'weight_short'              => 0.90,
-                'weight_medium'             => 0.00,
-                'refresh_frequency_minutes' => 360, // run 4x/jour
+                'refresh_frequency_minutes' => 180,
                 'active'                    => true,
             ],
 
@@ -66,7 +80,7 @@ class WeatherModelSeeder extends Seeder
                 'active'                    => true,
             ],
             [
-                'code'                      => 'icon_eu',
+                'code'                      => 'dwd_icon_eu',
                 'name'                      => 'ICON-EU',
                 'provider'                  => 'DWD',
                 'resolution_km'             => 7.0,
@@ -88,8 +102,8 @@ class WeatherModelSeeder extends Seeder
                 'active'                    => true,
             ],
             [
-                'code'                      => 'ecmwf_aifs025',
-                'name'                      => 'AIFS',
+                'code'                      => 'ecmwf_aifs025_single',
+                'name'                      => 'AIFS Single',
                 'provider'                  => 'ECMWF',
                 'resolution_km'             => 25.0,
                 'max_horizon_h'             => 240,
@@ -101,8 +115,8 @@ class WeatherModelSeeder extends Seeder
 
             // ── Modèles globaux complémentaires ──────────────────
             [
-                'code'                      => 'icon_seamless',
-                'name'                      => 'ICON',
+                'code'                      => 'dwd_icon',
+                'name'                      => 'ICON Global',
                 'provider'                  => 'DWD',
                 'resolution_km'             => 13.0,
                 'max_horizon_h'             => 180,
@@ -112,10 +126,10 @@ class WeatherModelSeeder extends Seeder
                 'active'                    => true,
             ],
             [
-                'code'                      => 'gem_seamless',
-                'name'                      => 'GEM',
-                'provider'                  => 'Environment Canada',
-                'resolution_km'             => 15.0,
+                'code'                      => 'ncep_gfs013',
+                'name'                      => 'GFS 0.13°',
+                'provider'                  => 'NOAA',
+                'resolution_km'             => 13.0,
                 'max_horizon_h'             => 240,
                 'weight_short'              => 0.65,
                 'weight_medium'             => 0.80,
@@ -123,15 +137,48 @@ class WeatherModelSeeder extends Seeder
                 'active'                    => true,
             ],
             [
-                'code'                      => 'gfs_seamless',
-                'name'                      => 'GFS',
-                'provider'                  => 'NOAA',
-                'resolution_km'             => 25.0,
-                'max_horizon_h'             => 384,
-                'weight_short'              => 0.60,
-                'weight_medium'             => 0.75,
+                'code'                      => 'ukmo_global_deterministic_10km',
+                'name'                      => 'UKMO Global',
+                'provider'                  => 'UK Met Office',
+                'resolution_km'             => 10.0,
+                'max_horizon_h'             => 144,
+                'weight_short'              => 0.75,
+                'weight_medium'             => 0.85,
                 'refresh_frequency_minutes' => 360,
                 'active'                    => true,
+            ],
+            [
+                'code'                      => 'bom_access_global',
+                'name'                      => 'ACCESS-G',
+                'provider'                  => 'BoM Australia',
+                'resolution_km'             => 12.0,
+                'max_horizon_h'             => 240,
+                'weight_short'              => 0.55,
+                'weight_medium'             => 0.70,
+                'refresh_frequency_minutes' => 360,
+                'active'                    => false,
+            ],
+            [
+                'code'                      => 'cma_grapes_global',
+                'name'                      => 'CMA GRAPES',
+                'provider'                  => 'CMA Chine',
+                'resolution_km'             => 15.0,
+                'max_horizon_h'             => 240,
+                'weight_short'              => 0.55,
+                'weight_medium'             => 0.70,
+                'refresh_frequency_minutes' => 360,
+                'active'                    => false,
+            ],
+            [
+                'code'                      => 'jma_gsm',
+                'name'                      => 'JMA GSM',
+                'provider'                  => 'JMA Japon',
+                'resolution_km'             => 18.0,
+                'max_horizon_h'             => 264,
+                'weight_short'              => 0.55,
+                'weight_medium'             => 0.70,
+                'refresh_frequency_minutes' => 360,
+                'active'                    => false,
             ],
         ];
 
@@ -146,25 +193,24 @@ class WeatherModelSeeder extends Seeder
             );
         }
 
-        // ── Modèle alternatif servi par MET Norway (inactif par défaut) ──
-        // À activer dans l'admin si l'on souhaite l'utiliser comme source
-        // complémentaire pour la voting logic.
-        $metnoApiId = DB::table('weather_apis')->where('code', 'metno')->value('id');
-        DB::table('weather_models')->updateOrInsert(
-            ['code' => 'metno_seamless'],
-            [
-                'name'                      => 'MET Norway (MEPS+IFS)',
-                'provider'                  => 'MET Norway',
-                'weather_api_id'            => $metnoApiId,
-                'resolution_km'             => 2.5,
-                'max_horizon_h'             => 60,
-                'weight_short'              => 0.85,
-                'weight_medium'             => 0.00,
-                'refresh_frequency_minutes' => 180,
-                'active'                    => false,
-                'updated_at'                => now(),
-                'created_at'                => now(),
-            ]
-        );
+        // Désactive les anciens codes obsolètes encore en base.
+        $obsoleteCodes = [
+            'meteofrance_arome_france',
+            'icon_d2',
+            'icon_eu',
+            'icon_seamless',
+            'gfs_seamless',
+            'gem_seamless',
+            'knmi_harmonie_arome_europe',
+            'ecmwf_aifs025',
+            'metno_seamless',
+            'dwd_icon_eu_native',
+            'dwd_icon_global_native',
+            'ecmwf_ifs025_native',
+            'ecmwf_aifs025_native',
+        ];
+        DB::table('weather_models')
+            ->whereIn('code', $obsoleteCodes)
+            ->update(['active' => false, 'updated_at' => now()]);
     }
 }

@@ -182,7 +182,7 @@
                                placeholder="https://public-api.meteofrance.fr/public/arome/1.0/wcs/...">
                         @error('endpoint_url')<p class="{{ $errorCls }}">{{ $message }}</p>@enderror
                         <p class="text-[10px] text-gray-600 mt-1">
-                            Visible sur le portail dans la fiche de la souscription. Vide = utiliser l'URL par défaut de la classe MeteoFranceApi.
+                            Vide = utiliser l'URL par défaut de l'API.
                         </p>
                     </div>
                 </div>

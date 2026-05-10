@@ -119,7 +119,7 @@ services:
             context: .
             dockerfile: Dockerfile
         container_name: parapente_worker
-        command: php artisan queue:work redis --sleep=3 --tries=3 --timeout=120
+        command: php artisan queue:work redis --queue=meteo,default --sleep=3 --tries=3 --timeout=300
         volumes:
             - ./src:/var/www/html:rw
             - /etc/timezone:/etc/timezone:ro
