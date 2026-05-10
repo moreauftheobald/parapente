@@ -89,7 +89,28 @@
              x-data="{
                  apiId: {{ (int) old('weather_api_id', $model->weather_api_id ?? 0) }},
                  oauth2Ids: {{ json_encode($oauth2ApiIds) }},
-                 get isOauth2() { return this.oauth2Ids.includes(Number(this.apiId)); }
+                 get isOauth2() { return this.oauth2Ids.includes(Number(this.apiId)); },
+                 testing: false,
+                 testResult: null,
+                 async runTest() {
+                     this.testing = true;
+                     this.testResult = null;
+                     try {
+                         const r = await fetch('{{ route('admin.models.test', $model) }}', {
+                             method: 'POST',
+                             headers: {
+                                 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content,
+                                 'Accept': 'application/json',
+                             },
+                         });
+                         this.testResult = await r.json();
+                         this.testResult.httpStatus = r.status;
+                     } catch (e) {
+                         this.testResult = { success: false, message: 'Erreur réseau: ' + e.message };
+                     } finally {
+                         this.testing = false;
+                     }
+                 }
              }">
             <div class="flex items-center gap-2 mb-4 pb-3 border-b border-amber-500/20">
                 <span class="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-300">
