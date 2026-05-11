@@ -59,6 +59,9 @@
                     <a href="{{ route('admin.apis.index') }}" class="{{ $linkClass($section === 'apis') }}">
                         <span class="w-5 text-center">🔌</span> APIs météo
                     </a>
+                    <a href="{{ route('admin.sync.index') }}" class="{{ $linkClass($section === 'sync') }}">
+                        <span class="w-5 text-center">🔄</span> Synchronisation
+                    </a>
 
                     <div class="mt-3 px-3 text-[10px] uppercase tracking-widest text-gray-600">Système</div>
                     <a href="{{ route('admin.users.index') }}" class="{{ $linkClass($section === 'users') }}">

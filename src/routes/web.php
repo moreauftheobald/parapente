@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\BaliseController as AdminBaliseController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\DataSyncController as AdminSyncController;
 use App\Http\Controllers\Admin\LogController as AdminLogController;
 use App\Http\Controllers\Admin\SiteController as AdminSiteController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
@@ -60,6 +61,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/apis/{api}/edit',     [AdminApiController::class, 'edit'])->name('apis.edit');
         Route::patch('/apis/{api}',        [AdminApiController::class, 'update'])->name('apis.update');
         Route::post('/apis/{api}/toggle',  [AdminApiController::class, 'toggleActive'])->name('apis.toggle');
+
+        // ── Synchronisation des données (sites / balises) ─────────
+        Route::get('/sync',          [AdminSyncController::class, 'index'])->name('sync.index');
+        Route::post('/sync/sites',   [AdminSyncController::class, 'importSites'])->name('sync.sites');
+        Route::post('/sync/balises', [AdminSyncController::class, 'discoverBalises'])->name('sync.balises');
 
         // ── Logs / monitoring ─────────────────────────────────────
         Route::get('/logs', [AdminLogController::class, 'index'])->name('logs.index');
