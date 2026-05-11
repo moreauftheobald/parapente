@@ -8,17 +8,26 @@ use App\Models\Site;
 use App\Models\WeatherModel;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Orchestrateur planifié (cron horaire ou plus court).
+ * Orchestrateur planifié (cron horaire).
  *
- * Pour chaque modèle dû pour un refresh (selon
- * `refresh_frequency_minutes` + `last_fetch_at`), on dispatche un job
- * `FetchSiteModelJob` par site actif. Une fois la salve dispatchée, on
- * met à jour `weather_models.last_fetch_at` pour fermer la fenêtre.
+ * Pour chaque site actif, on dispatche une CHAÎNE de jobs reprenant les
+ * modèles dûs pour un refresh (selon `refresh_frequency_minutes` +
+ * `last_fetch_at`) :
  *
- * Le scoring est déclenché à la fin de chaque FetchSiteModelJob.
+ *   FetchSiteModelJob (modèle 1, sans rescore)
+ *   → FetchSiteModelJob (modèle 2, sans rescore)
+ *   → …
+ *   → ScoreSiteJob  (un seul recalcul des scores, en fin de salve)
+ *
+ * Le rescoring n'est donc fait qu'une fois par site et par cycle, après
+ * ingestion de tous les modèles (au lieu d'une fois après chaque modèle).
+ *
+ * Une fois les chaînes dispatchées, on met à jour
+ * `weather_models.last_fetch_at` pour fermer la fenêtre de refresh.
  */
 class FetchForecastsJob implements ShouldQueue
 {
@@ -35,34 +44,56 @@ class FetchForecastsJob implements ShouldQueue
             return;
         }
 
-        $models    = WeatherModel::with('api')->where('active', true)->get();
-        $dueModels = $models->filter(fn (WeatherModel $m) => $m->isDueForRefresh());
+        $dueModels = WeatherModel::with('api')
+            ->where('active', true)
+            ->get()
+            ->filter(fn (WeatherModel $m) => $m->isDueForRefresh())
+            ->filter(function (WeatherModel $m) {
+                if (! $m->api || ! $m->api->active) {
+                    Log::info("FetchForecastsJob: modèle {$m->code} sans API active, ignoré.");
+                    return false;
+                }
+                return true;
+            })
+            ->values();
 
         if ($dueModels->isEmpty()) {
             Log::info('FetchForecastsJob: aucun modèle dû pour refresh.');
             return;
         }
 
-        $dispatched = 0;
-        foreach ($dueModels as $model) {
-            if (! $model->api || ! $model->api->active) {
-                Log::info("FetchForecastsJob: modèle {$model->code} sans API active, ignoré.");
+        $chains = 0;
+        foreach ($sites as $site) {
+            if (! $site->conditions) {
                 continue;
             }
 
-            foreach ($sites as $site) {
-                if (! $site->conditions) {
-                    continue;
-                }
-                FetchSiteModelJob::dispatch($site->id, $model->id)
-                    ->onQueue('meteo');
-                $dispatched++;
-            }
+            $siteId = $site->id;
 
+            $jobs   = $dueModels
+                ->map(fn (WeatherModel $m) => new FetchSiteModelJob($siteId, $m->id, false))
+                ->all();
+            $jobs[] = new ScoreSiteJob($siteId);
+
+            Bus::chain($jobs)
+                ->onQueue('meteo')
+                ->catch(function (\Throwable $e) use ($siteId) {
+                    // Une chaîne interrompue (erreur PHP inattendue) ne doit
+                    // pas priver le site de son rescoring : on le relance
+                    // avec les données déjà ingérées.
+                    Log::warning("FetchForecastsJob: chaîne interrompue (site {$siteId}): {$e->getMessage()}");
+                    ScoreSiteJob::dispatch($siteId)->onQueue('meteo');
+                })
+                ->dispatch();
+
+            $chains++;
+        }
+
+        foreach ($dueModels as $model) {
             $model->last_fetch_at = now();
             $model->save();
         }
 
-        Log::info("FetchForecastsJob: {$dispatched} jobs dispatchés (". $dueModels->count() ." modèles × {$sites->count()} sites).");
+        Log::info("FetchForecastsJob: {$chains} chaîne(s) dispatchée(s) ({$dueModels->count()} modèle(s) × {$sites->count()} site(s)).");
     }
 }

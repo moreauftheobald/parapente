@@ -75,16 +75,22 @@ class SiteController extends Controller
     {
         $site = Site::active()->with('conditions')->findOrFail($id);
 
+        // Fenêtre temporelle : du début de la journée courante (pour exposer
+        // toute la fenêtre solaire du jour, y compris les heures déjà passées)
+        // jusqu'à l'horizon de prévision (5 jours).
+        $from = now()->startOfDay();
+        $to   = now()->addDays(5);
+
         // Scores (pour direction consensus + statut)
         $scores = SiteScore::where('site_id', $id)
-            ->upcoming()
+            ->whereBetween('forecast_at', [$from, $to])
             ->orderBy('forecast_at')
             ->get()
             ->keyBy(fn ($s) => $s->forecast_at->format('Y-m-d H:i:s'));
 
         // Prévisions brutes agrégées (vent min/max + nuages)
         $rawForecasts = Forecast::where('site_id', $id)
-            ->upcoming()
+            ->whereBetween('forecast_at', [$from, $to])
             ->whereNotNull('wind_speed_avg')
             ->get()
             ->groupBy(fn ($f) => $f->forecast_at->format('Y-m-d H:i:s'));
