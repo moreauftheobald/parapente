@@ -317,3 +317,129 @@ docker logs parapente_worker -f
 7. **Le scheduler** (`php artisan schedule:run`) est à configurer dans `routes/console.php`
    pour le fetch automatique toutes les heures (PENDING).
 8. **Authentification** non encore implémentée — Laravel Breeze prévu (admin/user).
+
+---
+
+## Architecture de déploiement production
+
+### Infrastructure VPS
+
+| Élément | Valeur |
+|---|---|
+| Domaine | `qui-vole.fr` + `www.qui-vole.fr` |
+| IP VPS | `213.199.51.57` |
+| OS | Ubuntu 24.04 LTS |
+| Chemin projet | `/srv/parapente-app/parapente/` |
+| Chemin proxy | `/srv/proxy/` |
+| Chemin Open-Meteo | `/srv/openmeteo/` |
+
+---
+
+### Architecture Docker sur le VPS
+
+```
+Internet (80/443)
+       │
+       ▼
+Nginx Proxy Manager       (/srv/proxy/ — réseau: proxy)
+       │  HTTPS + Let's Encrypt automatique
+       ▼
+parapente_nginx:80        (réseau: proxy + parapente-external-pod)
+       │  PHP-FPM
+       ▼
+parapente_php:9000        (réseau: parapente-internal-pod + meteo-net)
+       │
+       ├── parapente_mariadb:3306   (réseau: parapente-internal-pod)
+       ├── parapente_redis:6379     (réseau: parapente-internal-pod)
+       └── open-meteo-api:8080      (réseau: meteo-net — projet séparé)
+
+parapente_worker          (réseau: parapente-internal-pod + meteo-net)
+parapente_scheduler       (réseau: parapente-internal-pod + meteo-net)
+```
+
+---
+
+### Réseaux Docker
+
+| Réseau | Type | Rôle |
+|---|---|---|
+| `proxy` | external, bridge | Partagé entre NPM et Nginx app |
+| `parapente-internal-pod` | internal | Communication interne app (PHP ↔ DB ↔ Redis) |
+| `parapente-external-pod` | bridge | Accès internet depuis les conteneurs |
+| `meteo-net` | external, bridge | Partagé avec le conteneur `open-meteo-api` |
+
+---
+
+### Fichiers de configuration prod
+
+| Fichier | Rôle |
+|---|---|
+| `docker-compose.prod.yml` | Orchestration production (sans Xdebug, MailDev, phpMyAdmin) |
+| `Dockerfile.prod` | Image PHP prod (sans Xdebug, php.ini-production, opcache optimisé) |
+| `nginx/nginx.prod.conf` | Config Nginx prod (server_name, real_ip, headers sécurité) |
+| `src/.env` | Variables d'environnement Laravel (jamais committé) |
+| `.env.prod` | Référence prod pour Docker Compose (jamais committé) |
+| `.env` | Copie de `.env.prod` à la racine, lue par Docker Compose |
+
+---
+
+### Open-Meteo auto-hébergé
+
+- Conteneur : `open-meteo-api`
+- Réseau interne : `meteo-net`
+- URL depuis Laravel : `http://open-meteo-api:8080/v1`
+- Port hôte exposé : `8888` (accès externe si besoin)
+
+---
+
+### Commandes de déploiement
+
+**Première installation :**
+```bash
+ssh franck@213.199.51.57
+cd /srv/parapente-app/parapente
+git clone <repo> .
+cp .env.prod src/.env
+cp .env.prod .env
+docker network create proxy          # si pas encore créé
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml up -d
+docker exec parapente_php composer install --no-dev --optimize-autoloader
+docker exec parapente_php npm install && npm run build
+docker exec parapente_php php artisan migrate --force
+docker exec parapente_php php artisan db:seed --force
+docker exec parapente_php php artisan config:cache
+docker exec parapente_php php artisan route:cache
+docker exec parapente_php php artisan view:cache
+```
+
+**Mise à jour (déploiement) :**
+```bash
+cd /srv/parapente-app/parapente
+git pull
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml up -d
+docker exec parapente_php composer install --no-dev --optimize-autoloader
+docker exec parapente_php npm run build
+docker exec parapente_php php artisan migrate --force
+docker exec parapente_php php artisan config:cache
+docker exec parapente_php php artisan route:cache
+docker exec parapente_php php artisan view:cache
+```
+
+**Vérification santé :**
+```bash
+docker compose -f docker-compose.prod.yml ps
+docker logs parapente_worker --tail 20
+docker logs parapente_scheduler --tail 20
+```
+
+---
+
+### Points d'attention prod
+
+- `opcache.validate_timestamps=0` en prod — **redémarrer `parapente_php` après chaque déploiement** pour vider l'OPcache
+- `src/.env` et `.env.prod` ne sont **jamais committés** (dans `.gitignore`)
+- Le `.env` racine (lu par Docker Compose pour les variables MariaDB) doit être **identique à `.env.prod`**
+- `APP_DEBUG=false` en prod — ne jamais activer sans redéployer immédiatement
+- Les assets Vite (`public/build/`) sont buildés directement sur le VPS via `docker exec parapente_php npm run build`
