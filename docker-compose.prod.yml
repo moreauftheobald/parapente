@@ -4,7 +4,9 @@ networks:
   parapente-external-pod:
     internal: false
   proxy:
-    external: true          # Réseau partagé avec Nginx Proxy Manager
+    external: true
+  meteo-net:
+    external: true        # ← réseau Open-Meteo
 
 volumes:
   mariadb-parapente:
@@ -78,6 +80,8 @@ services:
     # Pas de port Xdebug exposé
     networks:
       - parapente-internal-pod
+      - parapente-external-pod
+      - meteo-net
     restart: unless-stopped
     depends_on:
       parapente-mariadb:
@@ -103,6 +107,8 @@ services:
       - /etc/localtime:/etc/localtime:ro
     networks:
       - parapente-internal-pod
+      - parapente-external-pod
+      - meteo-net
     restart: unless-stopped
     depends_on:
       parapente-mariadb:
@@ -125,6 +131,8 @@ services:
       - /etc/localtime:/etc/localtime:ro
     networks:
       - parapente-internal-pod
+      - parapente-external-pod
+      - meteo-net
     restart: unless-stopped
     depends_on:
       parapente-mariadb:
