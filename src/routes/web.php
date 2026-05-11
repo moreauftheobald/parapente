@@ -30,6 +30,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
         // ── Sites ────────────────────────────────────────────────
         Route::get('/sites',                   [AdminSiteController::class, 'index'])->name('sites.index');
+        Route::get('/sites/map',               [AdminSiteController::class, 'map'])->name('sites.map');
         Route::get('/sites/{site}/edit',       [AdminSiteController::class, 'edit'])->name('sites.edit');
         Route::patch('/sites/{site}',          [AdminSiteController::class, 'update'])->name('sites.update');
         Route::delete('/sites/{site}',         [AdminSiteController::class, 'destroy'])->name('sites.destroy');

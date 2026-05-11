@@ -30,6 +30,10 @@
             </p>
         </div>
         <div class="flex items-center gap-3">
+            <a href="{{ route('admin.sites.map') }}"
+               class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-medium rounded-md transition" title="Vue carte (activation/désactivation)">
+                <i class="fa-solid fa-map-location-dot"></i> Vue carte
+            </a>
             @if (request()->query())
                 <a href="{{ route('admin.sites.index') }}"
                    class="text-xs text-gray-400 hover:text-white transition" title="Réinitialiser les filtres">

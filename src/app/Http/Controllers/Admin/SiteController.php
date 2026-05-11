@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Site;
 use App\Models\SiteCondition;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -78,23 +79,76 @@ class SiteController extends Controller
     }
 
     /**
+     * Vue carte du back-office : tous les sites (actifs et inactifs)
+     * sur une carte Leaflet, avec toggle au clic et panneau latéral.
+     */
+    public function map(): View
+    {
+        $sites = Site::with('conditions')
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Site $s) => [
+                'id'           => $s->id,
+                'name'         => $s->name,
+                'slug'         => $s->slug,
+                'region'       => $s->region,
+                'source'       => $s->source,
+                'level'        => $s->level,
+                'lat'          => (float) $s->latitude,
+                'lng'          => (float) $s->longitude,
+                'altitude_m'   => $s->altitude_m,
+                'landing_lat'  => $s->landing_lat !== null ? (float) $s->landing_lat : null,
+                'landing_lng'  => $s->landing_lng !== null ? (float) $s->landing_lng : null,
+                'active'       => (bool) $s->active,
+                'description'  => $s->description,
+                'edit_url'     => route('admin.sites.edit', $s),
+                'toggle_url'   => route('admin.sites.toggle', $s),
+                'conditions'   => $s->conditions ? [
+                    'wind_dir_min'     => $s->conditions->wind_dir_min,
+                    'wind_dir_max'     => $s->conditions->wind_dir_max,
+                    'wind_speed_min'   => $s->conditions->wind_speed_min,
+                    'wind_speed_max'   => $s->conditions->wind_speed_max,
+                    'wind_speed_ideal' => $s->conditions->wind_speed_ideal,
+                ] : null,
+            ])
+            ->values();
+
+        return view('admin.sites.map', [
+            'sites'        => $sites,
+            'activeCount'  => $sites->where('active', true)->count(),
+            'totalCount'   => $sites->count(),
+        ]);
+    }
+
+    /**
      * Toggle l'activation d'un site (active=true ↔ false).
      * L'activation rend le site éligible au fetch météo et le fait
      * apparaître sur la carte publique.
+     *
+     * Répond en JSON pour les appels AJAX (vue carte), en redirect
+     * sinon (boutons des listes).
      */
-    public function toggleActive(Site $site, Request $request): RedirectResponse
+    public function toggleActive(Site $site, Request $request): RedirectResponse|JsonResponse
     {
         $site->active = ! $site->active;
         $site->save();
 
-        return redirect()
-            ->back()
-            ->with('status', sprintf(
-                '%s "%s" %s.',
-                $site->active ? '✓' : '○',
-                $site->name,
-                $site->active ? 'activé' : 'désactivé'
-            ));
+        $message = sprintf(
+            '%s "%s" %s.',
+            $site->active ? '✓' : '○',
+            $site->name,
+            $site->active ? 'activé' : 'désactivé'
+        );
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'id'      => $site->id,
+                'active'  => $site->active,
+                'message' => $message,
+            ]);
+        }
+
+        return redirect()->back()->with('status', $message);
     }
 
     public function edit(Site $site): View
