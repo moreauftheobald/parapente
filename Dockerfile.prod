@@ -1,0 +1,93 @@
+FROM php:8.4-fpm-bookworm
+
+ENV PHP_INI_MEMORY_LIMIT=512M
+
+# ──────────────────────────────────────────
+# Dépendances système
+# ──────────────────────────────────────────
+RUN apt-get update -y \
+    && apt-get install -y --no-install-recommends \
+        libfreetype6-dev \
+        libjpeg-dev \
+        libpng-dev \
+        libxml2-dev \
+        libzip-dev \
+        zlib1g-dev \
+        libicu-dev \
+        libonig-dev \
+        g++ \
+        default-mysql-client \
+        unzip \
+        curl \
+        git \
+        apt-utils \
+        libeccodes-tools \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+
+# ──────────────────────────────────────────
+# Node.js 22 LTS (pour Vite / npm run build)
+# ──────────────────────────────────────────
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# ──────────────────────────────────────────
+# Extensions PHP
+# ──────────────────────────────────────────
+RUN docker-php-ext-install -j$(nproc) \
+        pdo_mysql \
+        mysqli \
+        mbstring \
+        xml \
+        bcmath \
+        zip \
+        intl \
+        pcntl \
+        opcache \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j$(nproc) gd
+
+# Redis via PECL (Xdebug non installé en prod)
+RUN pecl install redis \
+    && docker-php-ext-enable redis
+
+# ──────────────────────────────────────────
+# Composer
+# ──────────────────────────────────────────
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+# ──────────────────────────────────────────
+# php.ini — configuration production
+# ──────────────────────────────────────────
+RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
+    && sed -E -i -e 's/max_execution_time = 30/max_execution_time = 300/'    ${PHP_INI_DIR}/php.ini \
+    && sed -E -i -e 's/memory_limit = 128M/memory_limit = 512M/'             ${PHP_INI_DIR}/php.ini \
+    && sed -E -i -e 's/post_max_size = 8M/post_max_size = 64M/'              ${PHP_INI_DIR}/php.ini \
+    && sed -E -i -e 's/upload_max_filesize = 2M/upload_max_filesize = 64M/'  ${PHP_INI_DIR}/php.ini \
+    && echo "date.timezone = Europe/Paris"                                  >> ${PHP_INI_DIR}/php.ini
+
+# ──────────────────────────────────────────
+# OPcache — configuration production
+# validate_timestamps=0 : pas de vérification
+# des fichiers à chaque requête (gain perf)
+# → nécessite un restart après déploiement
+# ──────────────────────────────────────────
+RUN echo 'opcache.enable=1'                                >> ${PHP_INI_DIR}/php.ini \
+    && echo 'opcache.memory_consumption=256'               >> ${PHP_INI_DIR}/php.ini \
+    && echo 'opcache.interned_strings_buffer=16'           >> ${PHP_INI_DIR}/php.ini \
+    && echo 'opcache.max_accelerated_files=20000'          >> ${PHP_INI_DIR}/php.ini \
+    && echo 'opcache.validate_timestamps=0'                >> ${PHP_INI_DIR}/php.ini
+
+# ──────────────────────────────────────────
+# msmtp — non configuré en prod
+# Utiliser MAIL_MAILER=smtp dans .env.prod
+# avec un vrai provider (Mailgun, Brevo…)
+# ──────────────────────────────────────────
+
+# ──────────────────────────────────────────
+# Permissions & workdir
+# ──────────────────────────────────────────
+WORKDIR /var/www/html
+
+RUN chown -R www-data:www-data /var/www

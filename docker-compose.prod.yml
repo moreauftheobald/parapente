@@ -1,0 +1,158 @@
+networks:
+  parapente-internal-pod:
+    internal: true
+  parapente-external-pod:
+    internal: false
+  proxy:
+    external: true          # Réseau partagé avec Nginx Proxy Manager
+
+volumes:
+  mariadb-parapente:
+    external: false
+  redis-parapente:
+    external: false
+
+services:
+
+  # ──────────────────────────────────────────
+  # MariaDB 10.11
+  # ──────────────────────────────────────────
+  parapente-mariadb:
+    image: mariadb:10.11
+    command:
+      - --max_allowed_packet=512M
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    container_name: parapente_mariadb
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    # Pas de port exposé en prod — DB accessible uniquement via le réseau interne
+    networks:
+      - parapente-internal-pod
+    volumes:
+      - mariadb-parapente:/var/lib/mysql
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ──────────────────────────────────────────
+  # Nginx (pas de port exposé — NPM fait le reverse proxy)
+  # ──────────────────────────────────────────
+  parapente-nginx:
+    image: nginx:1.26-alpine
+    container_name: parapente_nginx
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/log:/var/log/nginx/
+      - ./src:/var/www/html:rw
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    # Pas de ports exposés — NPM atteint ce conteneur via le réseau proxy
+    networks:
+      - parapente-internal-pod
+      - proxy                 # Visible par Nginx Proxy Manager
+    restart: unless-stopped
+    depends_on:
+      - parapente-php
+
+  # ──────────────────────────────────────────
+  # PHP 8.4 FPM (app principale — sans Xdebug)
+  # ──────────────────────────────────────────
+  parapente-php:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod   # Sans Xdebug, optimisé prod
+    container_name: parapente_php
+    volumes:
+      - ./src:/var/www/html:rw
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    # Pas de port Xdebug exposé
+    networks:
+      - parapente-internal-pod
+    restart: unless-stopped
+    depends_on:
+      parapente-mariadb:
+        condition: service_healthy
+      parapente-redis:
+        condition: service_healthy
+    environment:
+      - APP_ENV=production
+      - XDEBUG_MODE=off
+
+  # ──────────────────────────────────────────
+  # Laravel Queue Worker (jobs météo)
+  # ──────────────────────────────────────────
+  parapente-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: parapente_worker
+    command: php artisan queue:work redis --queue=meteo,default --sleep=3 --tries=3 --timeout=300
+    volumes:
+      - ./src:/var/www/html:rw
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - parapente-internal-pod
+    restart: unless-stopped
+    depends_on:
+      parapente-mariadb:
+        condition: service_healthy
+      parapente-redis:
+        condition: service_healthy
+
+  # ──────────────────────────────────────────
+  # Laravel Scheduler
+  # ──────────────────────────────────────────
+  parapente-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: parapente_scheduler
+    command: php artisan schedule:work
+    volumes:
+      - ./src:/var/www/html:rw
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - parapente-internal-pod
+    restart: unless-stopped
+    depends_on:
+      parapente-mariadb:
+        condition: service_healthy
+      parapente-redis:
+        condition: service_healthy
+
+  # ──────────────────────────────────────────
+  # Redis (cache + queues)
+  # ──────────────────────────────────────────
+  parapente-redis:
+    image: redis:7-alpine
+    container_name: parapente_redis
+    volumes:
+      - redis-parapente:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - parapente-internal-pod
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ──────────────────────────────────────────
+  # Supprimés en prod :
+  #   - parapente-phpmyadmin  (risque sécurité)
+  #   - parapente-mail        (MailDev inutile)
+  # ──────────────────────────────────────────
