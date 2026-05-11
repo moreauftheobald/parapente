@@ -28,6 +28,8 @@
 
             @include('map._partials.html.popup-chart')
 
+            @include('map._partials.html.balise-popup')
+
             @include('map._partials.html.panel')
         </div>
 
@@ -48,6 +50,7 @@
         @include('map._partials.scripts.popup-chart')
         @include('map._partials.scripts.tooltip')
         @include('map._partials.scripts.balise-icon')
+        @include('map._partials.scripts.balise-chart')
         @include('map._partials.scripts.app')
     </script>
 @endpush

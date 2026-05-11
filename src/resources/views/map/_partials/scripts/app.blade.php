@@ -29,6 +29,9 @@ function mapApp(){return{
     _balisesLayer:null,         // L.layerGroup
     _balisesMarkers:{},         // balise.id => L.marker
     _balisesTimer:null,         // setInterval handle
+    // Popup balise (relevés temps réel + historique du jour)
+    balisePopupOpen:false, balisePos:{top:0,left:0},
+    baliseLoading:false, baliseData:null, _baliseObj:null,
 
     // Configuration des graphes exposée pour le template
     CHART_CONFIGS,
@@ -117,6 +120,7 @@ function mapApp(){return{
     // Clic sur un marker → ouvre le popup chart
     async clickSite(site, markerEl){
         this.chartOpen=false;
+        this.balisePopupOpen=false;
         this._chartSiteObj=site;
 
         // Positionner le popup
@@ -386,6 +390,7 @@ function mapApp(){return{
             } else {
                 const m = L.marker([b.lat, b.lng], {icon})
                     .bindTooltip(tooltip, {direction:'top', offset:[0,-22], opacity:.95});
+                m.on('click', (e) => { L.DomEvent.stopPropagation(e); this.clickBalise(b.id, m.getElement()); });
                 m.addTo(this._balisesLayer);
                 this._balisesMarkers[b.id] = m;
             }
@@ -406,5 +411,58 @@ function mapApp(){return{
         } else {
             this.map.removeLayer(this._balisesLayer);
         }
+        if (!this.balisesVisible) this.balisePopupOpen = false;
+    },
+
+    // Clic sur une balise → popup relevés + historique du jour
+    async clickBalise(id, markerEl){
+        const b = this.balises.find(x => x.id === id);
+        if (!b) return;
+        this._baliseObj = b;
+        this.chartOpen = false; // ferme un éventuel popup site
+
+        // Positionnement : la popup a max-height = 100vh-24px + scroll
+        // interne, on s'assure juste qu'elle tient dans le viewport.
+        const r = markerEl?.getBoundingClientRect() ?? {top:200,left:200,right:220,bottom:240};
+        const pw = 600;
+        const ph = Math.min(640, window.innerHeight - 24); // estimation hauteur
+        let left = r.right + 12;
+        if (left + pw > window.innerWidth - 10) left = r.left - pw - 12;
+        if (left < 10) left = 10;
+        let top = r.top - 90;
+        if (top + ph > window.innerHeight - 12) top = window.innerHeight - ph - 12;
+        if (top < 12) top = 12;
+        this.balisePos = {top, left};
+
+        this.baliseData = null;
+        this.baliseLoading = true;
+        this.balisePopupOpen = true;
+        try {
+            const res = await fetch(`/api/balises/${id}/history`);
+            this.baliseData = await res.json();
+            this.baliseLoading = false;
+            this.$nextTick(() => { buildBaliseRoseSVG(this.baliseData); buildBaliseChartSVG(this.baliseData); });
+        } catch (e) {
+            console.error('balise history failed', e);
+            this.baliseLoading = false;
+        }
+    },
+    baliseFreshness(){
+        const iso = this.baliseData?.latest?.read_at ?? this._baliseObj?.reading?.read_at;
+        if (!iso) return 'aucune lecture';
+        const ageMin = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+        if (ageMin < 1)  return "à l'instant";
+        if (ageMin < 60) return `il y a ${ageMin} min`;
+        return `il y a ${Math.round(ageMin/60)} h`;
+    },
+    baliseTrendArrow(){
+        const t = this._baliseObj?.reading?.trend ?? 0;
+        return ['↓↓','↓','→','↑','↑↑'][t + 2] ?? '→';
+    },
+    baliseTrendColor(){
+        const t = this._baliseObj?.reading?.trend ?? 0;
+        if (t >= 1)  return '#fb923c';
+        if (t <= -1) return '#60a5fa';
+        return '#9ca3af';
     },
 };}

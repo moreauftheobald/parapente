@@ -11,4 +11,7 @@ Route::prefix('sites')->group(function () {
     Route::get('/{id}/multimodel', [SiteController::class, 'multimodel']);
 });
 
-Route::get('/balises', [BaliseController::class, 'index']);
+Route::prefix('balises')->group(function () {
+    Route::get('/',             [BaliseController::class, 'index']);
+    Route::get('/{id}/history', [BaliseController::class, 'history']);
+});

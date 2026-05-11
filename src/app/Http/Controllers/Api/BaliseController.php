@@ -6,6 +6,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Balise;
+use App\Models\BaliseReading;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -77,6 +79,71 @@ class BaliseController extends Controller
         })->values();
 
         return response()->json($payload);
+    }
+
+    /**
+     * Historique des relevés du jour pour une balise (popup carte).
+     *
+     * GET /api/balises/{id}/history
+     *
+     * Renvoie les métadonnées de la balise, le dernier relevé et la
+     * série des relevés depuis minuit (heure de Paris). Si la balise
+     * n'a rien émis aujourd'hui, on remonte jusqu'à 24 h en arrière
+     * pour avoir tout de même quelque chose à afficher.
+     */
+    public function history(int $id): JsonResponse
+    {
+        $balise = Balise::active()->findOrFail($id);
+
+        $tz       = new \DateTimeZone('Europe/Paris');
+        $dayStart = Carbon::now($tz)->startOfDay();
+
+        $cols = ['read_at', 'wind_direction', 'wind_speed_avg', 'wind_speed_min', 'wind_speed_max', 'temperature', 'humidity'];
+
+        $readings = $balise->readings()
+            ->where('read_at', '>=', $dayStart)
+            ->orderBy('read_at')
+            ->get($cols);
+
+        $fallback = false;
+        if ($readings->isEmpty()) {
+            $fallback = true;
+            $readings = $balise->readings()
+                ->where('read_at', '>=', Carbon::now()->subDay())
+                ->orderBy('read_at')
+                ->get($cols);
+        }
+
+        $latest = $balise->readings()->orderByDesc('read_at')->first($cols);
+
+        $serialize = fn (BaliseReading $r) => [
+            'read_at'        => $r->read_at->toIso8601String(),
+            'time'           => $r->read_at->copy()->setTimezone($tz)->format('H:i'),
+            'min_of_day'     => (int) $r->read_at->copy()->setTimezone($tz)->format('G') * 60
+                              + (int) $r->read_at->copy()->setTimezone($tz)->format('i'),
+            'wind_direction' => $r->wind_direction,
+            'wind_speed_avg' => $r->wind_speed_avg !== null ? (float) $r->wind_speed_avg : null,
+            'wind_speed_min' => $r->wind_speed_min !== null ? (float) $r->wind_speed_min : null,
+            'wind_speed_max' => $r->wind_speed_max !== null ? (float) $r->wind_speed_max : null,
+            'temperature'    => $r->temperature !== null ? (float) $r->temperature : null,
+            'humidity'       => $r->humidity,
+        ];
+
+        return response()->json([
+            'balise' => [
+                'id'          => $balise->id,
+                'name'        => $balise->name,
+                'source'      => $balise->source,
+                'external_id' => $balise->external_id,
+                'lat'         => (float) $balise->latitude,
+                'lng'         => (float) $balise->longitude,
+                'altitude_m'  => $balise->altitude_m,
+            ],
+            'latest'   => $latest ? $serialize($latest) : null,
+            'readings' => $readings->map($serialize)->values(),
+            'day'      => $dayStart->format('Y-m-d'),
+            'fallback' => $fallback, // true = pas de relevé aujourd'hui, série = dernières 24 h
+        ]);
     }
 
     /**
