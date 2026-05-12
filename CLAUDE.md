@@ -21,6 +21,18 @@ d'architecture, modifications de base de données, ruptures de compatibilité) �
 
 ---
 
+## Convention de branches Git
+
+- **Branches conservées en permanence** :
+  - branches **majeures** : `V1`, `V2`, `V3`… (une par grande version) ;
+  - branches **versionnées** : `V1.1`, `V1.2`, `V2.1`, `V2.2`… (incréments d'une version).
+  - Ne **jamais** supprimer ces branches, même si leur contenu semble repris ailleurs.
+- Les branches de travail temporaires (`feature/*`, `fix/*`, `claude/*`, etc.) sont
+  jetables une fois fusionnées dans la branche de version correspondante.
+- Le travail courant se fait sur la branche de version active (actuellement `V2`).
+
+---
+
 ## Stack technique
 
 | Composant       | Technologie                         |
