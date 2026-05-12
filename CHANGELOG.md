@@ -47,8 +47,12 @@ Conventions :
 - `config/modules.php` (remplacé par la table `modules`).
 
 ### Déploiement
+- Mis en production le 2026-05-12 (branche `V2`).
 - Penser à `php artisan migrate`, `php artisan db:seed --class=ModuleSeeder`
   et `php artisan storage:link` (images des articles).
+- Procédure de déploiement de `CLAUDE.md` complétée : recréer un conteneur PHP
+  impose de **redémarrer Nginx** (IP figée → 502), re-`chown` `storage`/`bootstrap/cache`,
+  `optimize:clear` + `optimize`, puis `restart parapente-php` & `restart parapente-nginx`.
 
 ---
 

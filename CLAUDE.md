@@ -488,16 +488,40 @@ docker exec parapente_php php artisan view:cache
 **Mise à jour (déploiement) :**
 ```bash
 cd /srv/parapente-app/parapente
-git pull
+
+# 1. Code
+git fetch origin
+git checkout <branche>        # ex: V2
+git pull origin <branche>
+
+# 2. Images + (re)démarrage des conteneurs
 docker compose -f docker-compose.prod.yml build
 docker compose -f docker-compose.prod.yml up -d
+
+# 3. Dépendances
 docker exec parapente_php composer install --no-dev --optimize-autoloader
+docker exec parapente_php npm install
 docker exec parapente_php npm run build
+
+# 4. Base de données
 docker exec parapente_php php artisan migrate --force
-docker exec parapente_php php artisan config:cache
-docker exec parapente_php php artisan route:cache
-docker exec parapente_php php artisan view:cache
+docker exec parapente_php php artisan storage:link                       # idempotent
+# si de nouveaux seeders sont arrivés : cibler la classe (PAS `db:seed` seul, qui reseed tout)
+# docker exec parapente_php php artisan db:seed --class=ModuleSeeder --force
+
+# 5. Droits + caches (les commandes ci-dessus tournent en root → re-chown ce que PHP-FPM doit écrire)
+docker exec parapente_php chown -R www-data:www-data storage bootstrap/cache
+docker exec parapente_php php artisan optimize:clear
+docker exec parapente_php php artisan optimize                           # config + routes + views
+
+# 6. Redémarrages : PHP (OPcache validate_timestamps=0) PUIS Nginx (re-résoudre l'IP du conteneur PHP recréé)
+docker compose -f docker-compose.prod.yml restart parapente-php
+docker compose -f docker-compose.prod.yml restart parapente-nginx
 ```
+
+> Noms : `docker compose ... restart <service>` prend le **nom de service**
+> (`parapente-php`, `parapente-nginx`, avec tiret) ; `docker exec <conteneur>`
+> prend le **nom de conteneur** (`parapente_php`, avec underscore).
 
 **Vérification santé :**
 ```bash
@@ -510,7 +534,9 @@ docker logs parapente_scheduler --tail 20
 
 ### Points d'attention prod
 
-- `opcache.validate_timestamps=0` en prod — **redémarrer `parapente_php` après chaque déploiement** pour vider l'OPcache
+- `opcache.validate_timestamps=0` en prod — **redémarrer `parapente-php` après chaque déploiement** pour vider l'OPcache
+- **Recréation du conteneur PHP ⇒ redémarrer Nginx** : `docker compose ... build/up -d` recrée `parapente_php` avec une **nouvelle IP** ; `parapente_nginx` garde l'ancienne IP en cache (`fastcgi_pass parapente_php:9000` résolu une seule fois) → **502 Bad Gateway** tant qu'on n'a pas fait `restart parapente-nginx`. (Solution propre possible : `resolver 127.0.0.11 valid=10s;` + `set $up parapente_php:9000; fastcgi_pass $up;` dans `nginx/nginx.prod.conf`.)
+- Les commandes `artisan`/`composer` lancées via `docker exec` tournent en **root** ; PHP-FPM en **www-data** → après déploiement, `chown -R www-data:www-data storage bootstrap/cache`. Un cache de config/routes/vues incohérent peut donner un 500 (`Target class [view] does not exist`) → `php artisan optimize:clear && php artisan optimize`.
 - `src/.env` et `.env.prod` ne sont **jamais committés** (dans `.gitignore`)
 - Le `.env` racine (lu par Docker Compose pour les variables MariaDB) doit être **identique à `.env.prod`**
 - `APP_DEBUG=false` en prod — ne jamais activer sans redéployer immédiatement
