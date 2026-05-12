@@ -12,6 +12,7 @@ function formatTooltipValue(cfg, v) {
         case 'precip':    return v.toFixed(1) + ' mm/h';
         case 'temp':      return v.toFixed(1) + '°C';
         case 'humidity':  return Math.round(v) + '%';
+        case 'ceiling':   return Math.round(v) + ' m';
         default:          return v.toFixed(1) + ' km/h';
     }
 }

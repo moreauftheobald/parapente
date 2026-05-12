@@ -111,6 +111,9 @@ class SiteController extends Controller
                 $key   = $score->forecast_at->format('Y-m-d H:i:s');
                 $fcsts = ($rawForecasts[$key] ?? collect())->filter(fn ($f) => $f->wind_speed_avg !== null);
 
+                // Plafonds annoncés par chaque modèle pour ce créneau (pour min/max)
+                $cbVals = $fcsts->pluck('cloud_base_m')->reject(fn ($v) => $v === null);
+
                 // wind_max : on utilise le consensus (voting logic) plutôt que la
                 // moyenne arithmétique pour éviter qu'une valeur aberrante d'un
                 // modèle ne fausse la rafale affichée.
@@ -125,6 +128,9 @@ class SiteController extends Controller
                     'cloud_high' => $fcsts->isNotEmpty() ? (int) round($fcsts->avg('cloud_cover_high')) : null,
                     'cloud_mid'  => $fcsts->isNotEmpty() ? (int) round($fcsts->avg('cloud_cover_mid'))  : null,
                     'cloud_low'  => $fcsts->isNotEmpty() ? (int) round($fcsts->avg('cloud_cover_low'))  : null,
+                    'cloud_base'     => $score->cloud_base_consensus,
+                    'cloud_base_min' => $cbVals->isNotEmpty() ? (int) $cbVals->min() : null,
+                    'cloud_base_max' => $cbVals->isNotEmpty() ? (int) $cbVals->max() : null,
                 ];
             }
 
@@ -212,6 +218,7 @@ class SiteController extends Controller
                 'precip'      => $f->precipitation !== null ? (float) $f->precipitation : null,
                 'humidity'    => $f->humidity,
                 'temperature' => $f->temperature !== null ? (float) $f->temperature : null,
+                'cloud_base'  => $f->cloud_base_m !== null ? (int) $f->cloud_base_m : null,
             ];
         }
 
@@ -229,6 +236,7 @@ class SiteController extends Controller
                     'wind_speed' => $s->wind_speed_consensus !== null ? (float) $s->wind_speed_consensus : null,
                     'wind_gust'  => $s->wind_gust_consensus  !== null ? (float) $s->wind_gust_consensus  : null,
                     'precip'     => $s->precip_consensus !== null ? (float) $s->precip_consensus : null,
+                    'cloud_base' => $s->cloud_base_consensus,
                     'status'     => $s->status,
                     'confidence' => $s->confidence_pct,
                 ];

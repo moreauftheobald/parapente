@@ -1,29 +1,30 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" class="h-full">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Qui Vole ?')</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+
+    {{-- Font Awesome 6 (icônes de la barre de menu globale) --}}
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+          integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A=="
+          crossorigin="anonymous" referrerpolicy="no-referrer">
+
     @stack('styles')
 </head>
 <body class="bg-gray-950 text-gray-100 h-screen flex flex-col overflow-hidden">
 
-{{-- Navbar --}}
-<nav class="bg-gray-900 border-b border-gray-800 px-4 py-2 flex items-center gap-6 shrink-0 z-50">
-    <span class="font-bold text-sky-400 text-lg tracking-tight">⛶ Qui Vole ?</span>
-    <a href="{{ route('map') }}"
-       class="text-sm text-gray-300 hover:text-white transition {{ request()->routeIs('map') ? 'text-white font-medium' : '' }}">
-        Carte météo
-    </a>
-    {{-- Futurs liens : Journal de vol, Comparatif --}}
-</nav>
+{{-- Barre de menu globale (commune à tous les écrans de l'application) --}}
+@include('partials.app-shell-navbar', ['pageTitle' => 'Carte météo'])
 
 {{-- Contenu principal --}}
 <main class="flex-1 overflow-hidden">
     @yield('content')
 </main>
 
+@stack('scripts')
 </body>
 </html>

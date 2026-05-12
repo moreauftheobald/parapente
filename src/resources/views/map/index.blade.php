@@ -5,8 +5,8 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
         @include('map._partials.styles.base')
+        @include('map._partials.styles.left-panel')
         @include('map._partials.styles.toolbar')
-        @include('map._partials.styles.popup')
         @include('map._partials.styles.panel')
         @include('map._partials.styles.charts')
         @include('map._partials.styles.tooltip')
@@ -18,19 +18,19 @@
     <div id="pg-app" x-data="mapApp()" x-init="init()"
          @click.window="dayDropOpen=false; bmDropOpen=false;">
 
-        @include('map._partials.html.toolbar')
-
-        {{-- ═══ CARTE ═══════════════════════════════════ --}}
+        {{-- ═══ VOLET GAUCHE (filtres) · CARTE · VOLET DROIT (détail) ═══ --}}
         <div id="map-wrap">
-            <div id="map"></div>
 
-            @include('map._partials.html.legend')
+            @include('map._partials.html.left-panel')
 
-            @include('map._partials.html.popup-chart')
+            <div id="map-area">
+                <div id="map"></div>
 
-            @include('map._partials.html.balise-popup')
+                @include('map._partials.html.day-selector')
+            </div>
 
-            @include('map._partials.html.panel')
+            @include('map._partials.html.right-panel')
+
         </div>
 
         @include('map._partials.html.tooltip')

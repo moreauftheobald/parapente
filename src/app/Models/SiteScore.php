@@ -19,6 +19,7 @@ class SiteScore extends Model
         'wind_speed_consensus',
         'wind_gust_consensus',
         'precip_consensus',
+        'cloud_base_consensus',
         'models_count',
         'models_converging',
         'detail',
@@ -32,6 +33,7 @@ class SiteScore extends Model
         'wind_speed_consensus' => 'decimal:1',
         'wind_gust_consensus'  => 'decimal:1',
         'precip_consensus'     => 'decimal:1',
+        'cloud_base_consensus' => 'integer',
         'models_count'         => 'integer',
         'models_converging'    => 'integer',
         'detail'               => 'array',   // JSON auto-décodé

@@ -29,6 +29,14 @@ class OpenMeteoApi implements WeatherApiInterface
         'cloud_cover_high',
         'temperature_2m',
         'relative_humidity_2m',
+        'dew_point_2m',
+    ];
+
+    // Variables journalières — agrégées à la volée par Open-Meteo.
+    // temperature_2m_max sert de "température de déclenchement" des
+    // thermiques pour l'estimation de la base des cumulus.
+    private const DAILY_VARS = [
+        'temperature_2m_max',
     ];
 
     private string $baseUrl = 'https://api.open-meteo.com/v1';
@@ -74,6 +82,7 @@ class OpenMeteoApi implements WeatherApiInterface
                     'latitude'        => $site->latitude,
                     'longitude'       => $site->longitude,
                     'hourly'          => implode(',', self::HOURLY_VARS),
+                    'daily'           => implode(',', self::DAILY_VARS),
                     'models'          => $model->code,
                     'forecast_days'   => self::DAYS,
                     'wind_speed_unit' => self::WIND_UNIT,
@@ -90,7 +99,7 @@ class OpenMeteoApi implements WeatherApiInterface
             }
 
             $this->config?->recordSuccess();
-            return $this->parseResponse($response->json());
+            return $this->parseResponse($response->json(), (int) ($site->altitude_m ?? 0));
         } catch (\Exception $e) {
             Log::error('OpenMeteoApi fetch failed', [
                 'site'    => $site->slug,
@@ -214,13 +223,31 @@ class OpenMeteoApi implements WeatherApiInterface
         return $parsed;
     }
 
-    private function parseResponse(array $data): array
+    private function parseResponse(array $data, int $siteAltitudeM = 0): array
     {
         $hourly = $data['hourly'] ?? [];
         $times  = $hourly['time'] ?? [];
 
         if (empty($times)) {
             return [];
+        }
+
+        // Référence "sol" pour la base des cumulus = élévation réelle du
+        // point de grille du modèle (renvoyée par Open-Meteo), sinon
+        // l'altitude du site en repli.
+        $refElevationM = isset($data['elevation']) ? (int) round((float) $data['elevation']) : $siteAltitudeM;
+
+        // T max journalière de T₂ₘ (température de déclenchement des
+        // thermiques), indexée par date (Y-m-d).
+        $tMaxByDay = [];
+        $daily = $data['daily'] ?? [];
+        if (! empty($daily['time']) && ! empty($daily['temperature_2m_max'])) {
+            foreach ($daily['time'] as $i => $d) {
+                $v = $daily['temperature_2m_max'][$i] ?? null;
+                if ($v !== null) {
+                    $tMaxByDay[(string) $d] = (float) $v;
+                }
+            }
         }
 
         $parsed = [];
@@ -250,7 +277,10 @@ class OpenMeteoApi implements WeatherApiInterface
                 'cloud_cover_high' => $this->getValue($hourly, 'cloud_cover_high', $index, 0),
                 'cloud_base_m'     => $this->estimateCloudBase(
                     $this->getValue($hourly, 'temperature_2m', $index),
-                    $this->getValue($hourly, 'relative_humidity_2m', $index)
+                    $tMaxByDay[$forecastAt->format('Y-m-d')] ?? null,
+                    $this->getValue($hourly, 'dew_point_2m', $index),
+                    $this->getValue($hourly, 'relative_humidity_2m', $index),
+                    $refElevationM
                 ),
                 'temperature'      => $this->getValue($hourly, 'temperature_2m', $index),
                 'humidity'         => $this->getValue($hourly, 'relative_humidity_2m', $index),
@@ -266,17 +296,46 @@ class OpenMeteoApi implements WeatherApiInterface
     }
 
     /**
-     * Plafond nuageux estimé via formule de Henning.
+     * Base des cumulus estimée (altitude absolue ASL, en mètres).
+     *
+     * Règle d'Espy / "spread rule" avec température de déclenchement :
+     *
+     *   plafond_AGL ≈ 125 m × (T_déclenchement − Td₂ₘ)
+     *   plafond_ASL  = élévation_modèle + plafond_AGL
+     *
+     * Le 125 vient du resserrement de l'écart T/Td à la montée :
+     * adiabatique sèche ≈ 9,8 °C/km, lapse rate du point de rosée
+     * ≈ 1,8 °C/km ⇒ le spread se referme à ≈ 8 °C/km, soit 1 °C / 125 m.
+     *
+     * - T_déclenchement = T₂ₘ max du jour (la base des cumulus thermiques
+     *   est fixée par la phase de chauffe la plus forte) ; repli sur la
+     *   T₂ₘ horaire si la max journalière est absente.
+     * - Td : `dew_point_2m` du modèle ; à défaut, approximé depuis
+     *   l'humidité relative (règle du 1/5e).
+     * - Référence verticale : élévation du point de grille du modèle.
      */
-    private function estimateCloudBase(?float $temperature, ?int $humidity): ?int
-    {
-        if ($temperature === null || $humidity === null) {
+    private function estimateCloudBase(
+        ?float $temperatureHour,
+        ?float $temperatureMaxDay,
+        ?float $dewPoint,
+        ?int $humidity,
+        int $referenceElevationM
+    ): ?int {
+        $trigger = $temperatureMaxDay ?? $temperatureHour;
+        if ($trigger === null) {
             return null;
         }
 
-        $dewPoint  = $temperature - ((100 - $humidity) / 5);
-        $cloudBase = (int) (($temperature - $dewPoint) / 8 * 1000);
+        if ($dewPoint === null) {
+            if ($humidity === null) {
+                return null;
+            }
+            $dewPoint = ($temperatureHour ?? $trigger) - ((100 - $humidity) / 5);
+        }
 
-        return max(0, $cloudBase);
+        $spread       = max(0.0, $trigger - $dewPoint); // l'écart ne peut être négatif
+        $cloudBaseAgl = (int) round(125 * $spread);
+
+        return max(0, $referenceElevationM + $cloudBaseAgl);
     }
 }

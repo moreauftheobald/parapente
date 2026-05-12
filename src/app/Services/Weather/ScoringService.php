@@ -59,7 +59,7 @@ class ScoringService
                 [
                     'computed_at', 'status', 'confidence_pct',
                     'wind_dir_consensus', 'wind_speed_consensus', 'wind_gust_consensus',
-                    'precip_consensus',
+                    'precip_consensus', 'cloud_base_consensus',
                     'models_count', 'models_converging', 'detail',
                 ]
             );
@@ -83,6 +83,7 @@ class ScoringService
         $windSpeeds = $this->extractWeighted($modelForecasts, 'wind_speed_avg', $horizonHours);
         $windGusts  = $this->extractWeighted($modelForecasts, 'wind_speed_max', $horizonHours);
         $precips    = $this->extractWeighted($modelForecasts, 'precipitation',  $horizonHours);
+        $cloudBases = $this->extractWeighted($modelForecasts, 'cloud_base_m',   $horizonHours);
 
         if (empty($windDirs) || empty($windSpeeds) || empty($precips)) {
             return null;
@@ -94,6 +95,9 @@ class ScoringService
         // (cas rare), on retombe sur wind_speed_consensus.
         $windGustConsensus  = !empty($windGusts) ? $this->weightedMeanInverseSquare($windGusts) : $windSpeedConsensus;
         $precipConsensus    = $this->weightedMeanInverseSquare($precips);
+        // Plafond de vol estimé : même voting logic (moyenne pondérée inverse
+        // carré). null si aucun modèle ne fournit de plafond (ciel dégagé).
+        $cloudBaseConsensus = !empty($cloudBases) ? $this->weightedMeanInverseSquare($cloudBases) : null;
 
         // ── 2. Convergence par variable ──────────────────────────
         $windDirConvergence   = $this->convergenceCircular($windDirs, $windDirConsensus, self::WIND_DIR_TOLERANCE_DEG);
@@ -148,6 +152,10 @@ class ScoringService
                 'convergence' => round($precipConvergence, 2),
                 'values'      => array_column($precips, 'value'),
             ],
+            'cloud_base' => [
+                'consensus' => $cloudBaseConsensus !== null ? (int) round($cloudBaseConsensus) : null,
+                'values'    => array_column($cloudBases, 'value'),
+            ],
         ];
 
         return [
@@ -160,6 +168,7 @@ class ScoringService
             'wind_speed_consensus' => round($windSpeedConsensus, 1),
             'wind_gust_consensus'  => round($windGustConsensus, 1),
             'precip_consensus'     => round($precipConsensus, 1),
+            'cloud_base_consensus' => $cloudBaseConsensus !== null ? (int) round($cloudBaseConsensus) : null,
             'models_count'         => $modelsCount,
             'models_converging'    => $modelsConverging,
             'detail'               => json_encode($detail),

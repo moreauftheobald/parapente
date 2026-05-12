@@ -1,4 +1,4 @@
-        {{-- ═══ DROPDOWNS (position:fixed) ═══════════════ --}}
+        {{-- ═══ DROPDOWN SÉLECTEUR DE JOUR (position:fixed) ═══════════════ --}}
         <div x-show="dayDropOpen" class="dd-menu" :style="`top:${dayDropPos.top}px;left:${dayDropPos.left}px;min-width:260px;`" @click.stop>
             <template x-for="(day,idx) in days" :key="idx">
                 <button class="dd-item" :class="selectedDayIdx===idx?'is-active':''" @click="selectDay(idx);dayDropOpen=false">
@@ -10,7 +10,9 @@
                 </button>
             </template>
         </div>
-        <div x-show="bmDropOpen" class="dd-menu" :style="`top:${bmDropPos.top}px;right:${bmDropPos.right}px;width:230px;`" @click.stop>
+
+        {{-- ═══ DROPDOWN FOND DE CARTE (position:fixed, ancré sous le bouton du volet gauche) ═══ --}}
+        <div x-show="bmDropOpen" class="dd-menu" :style="`top:${bmDropPos.top}px;left:${bmDropPos.left}px;width:${Math.max(bmDropPos.width,220)}px;`" @click.stop>
             <template x-for="bm in basemapList" :key="bm.key">
                 <button class="dd-item" :class="currentBasemap===bm.key?'is-active':''" @click="switchBasemap(bm.key);bmDropOpen=false">
                     <span x-text="bm.icon" style="font-size:16px;width:20px;text-align:center;flex-shrink:0;"></span>

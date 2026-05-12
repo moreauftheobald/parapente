@@ -2,8 +2,8 @@
 body { font-family:'DM Sans',sans-serif; }
 .mono { font-family:'DM Mono',monospace; }
 #pg-app  { display:flex; flex-direction:column; height:100%; overflow:hidden; }
-#pg-toolbar { flex-shrink:0; height:56px; background:#111827; border-bottom:1px solid rgba(55,65,81,.6); display:flex; align-items:center; padding:0 16px; gap:12px; position:relative; z-index:100; }
-#map-wrap { flex:1 1 0%; min-height:0; overflow:hidden; position:relative; }
+#map-wrap { flex:1 1 0%; min-height:0; overflow:hidden; display:flex; }
+#map-area { flex:1 1 0%; min-width:0; position:relative; }
 #map { height:100%; width:100%; }
 
 /* Marqueurs des sites de vol — icône SpotAir + glow flou coloré

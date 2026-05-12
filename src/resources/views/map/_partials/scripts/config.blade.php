@@ -22,6 +22,7 @@ const CHART_CONFIGS = [
     {id:'wind-avg', title:'Vent — Vitesse moyenne',   unit:'km/h',  type:'line', key:'wind_avg',    yMin:0,    yMax:'auto', favBand:'speed', consensusKey:'wind_speed', wrap:false},
     {id:'wind-max', title:'Vent — Rafales (max)',     unit:'km/h',  type:'line', key:'wind_max',    yMin:0,    yMax:'auto', favBand:null,    consensusKey:'wind_gust',  wrap:false},
     {id:'wind-dir', title:'Direction du vent',        unit:'',      type:'line', key:'wind_dir',    yMin:0,    yMax:360,    favBand:'dir',   consensusKey:'wind_dir',   wrap:true,  yTicks:'compass'},
+    {id:'ceiling',  title:'Plafond de vol estimé',    unit:'m',     type:'line', key:'cloud_base',  yMin:0,    yMax:'auto', favBand:null,    consensusKey:'cloud_base', wrap:false},
     {id:'precip',   title:'Précipitations',           unit:'mm/h',  type:'bar',  key:'precip',      yMin:0,    yMax:'auto', favBand:null,    consensusKey:'precip',     wrap:false},
     {id:'humidity', title:'Humidité relative',        unit:'%',     type:'line', key:'humidity',    yMin:0,    yMax:100,    favBand:null,    consensusKey:null,         wrap:false},
     {id:'temp',     title:'Température',              unit:'°C',    type:'line', key:'temperature', yMin:'auto', yMax:'auto', favBand:null,  consensusKey:null,         wrap:false},

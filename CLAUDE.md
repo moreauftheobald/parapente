@@ -278,7 +278,12 @@ URL configurable via `OPEN_METEO_BASE_URL` dans `.env` :
 - `fetchForSiteAndModel()` : 1 appel par (site, modèle)
 - `fetchBatchForBalises()` : appel batch multi-coordonnées (40 points/chunk)
 - Pas de pause entre appels (serveur dédié, pas de rate limit)
-- Formule plafond Henning : `(T - Td) / 8 × 1000`
+- Plafond (base des cumulus) — règle d'Espy avec température de déclenchement,
+  en **altitude absolue (ASL)** : `cloud_base_m = elevation_modèle + 125 × (T₂ₘ_max_jour − Td₂ₘ)`
+  (`temperature_2m_max` journalière, `dew_point_2m` ; `elevation` = point de grille
+  du modèle, renvoyé par Open-Meteo ; fallbacks : T horaire / Td approx. depuis l'humidité).
+  Le consensus multi-modèles est stocké dans `site_scores.cloud_base_consensus`
+  (même voting logic que le reste).
 - Format datetime `Y-m-d H:i:s` pour MariaDB (pas ISO avec `T`)
 
 **`ScoringService`** :

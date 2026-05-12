@@ -8,30 +8,23 @@ function mapApp(){return{
     site:{},
     currentBasemap:'topo',basemapList:BASEMAP_LIST,
     dayDropOpen:false,dayDropPos:{top:0,left:0},
-    bmDropOpen:false,bmDropPos:{top:0,right:0},
-    // Popup chart
-    chartOpen:false,chartPos:{top:0,left:0},
-    chartLoading:false,chartData:null,
-    chartSite:null,chartSunWindow:null,
-    _chartSiteObj:null, // référence site pour "Détails >"
-    // Side panel (mode comparaison multi-modèles)
-    panelOpen:false,panelTab:'today',panelDayIdx:0,
-    multimodelData:null,multimodelLoading:false,
-    multimodel5Data:null,multimodel5Loading:false,
-    _panelMapState:null, // sauvegarde center+zoom carte avant ouverture
-    // État collapse de chaque section graphe (séparé par onglet)
-    chartCollapsed:{},chartCollapsed5:{},
-    // Tooltip flottant des graphes
-    tooltip:{visible:false, x:0, y:0, hour:'', consensus:null, rows:[]},
+    bmDropOpen:false,bmDropPos:{top:0,left:0,width:0},
+    // Volet gauche (onglets Paramètres / Légende, repliable) ; volet droit (détail)
+    leftCollapsed:false, lpTab:'params', rightPanelOpen:false, selectedFeature:null,
+    // Filtres d'affichage des sites par statut météo
+    showGreen:true, showOrange:true, showRed:true,
 
-    // Balises météo (PiouPiou pour la phase 1.1)
+    // ── Volet droit (site) : onglets + données ──
+    rpTab:'synthese',                              // synthese | models | models5
+    chartData:null, chartLoading:false, chartSite:null,   // onglet « Synthèse » (= ancienne popup)
+    multimodelData:null,  multimodelLoading:false,        // onglet « Modèles du jour »
+    multimodel5Data:null, multimodel5Loading:false,       // onglet « Modèles 5 jours »
+    chartCollapsed:{}, chartCollapsed5:{},                // état replié de chaque section graphe
+    tooltip:{visible:false, x:0, y:0, hour:'', consensus:null, rows:[]},  // tooltip flottant des graphes
+
+    // Balises météo (PiouPiou — phase 1.1)
     balises:[], balisesVisible:true,
-    _balisesLayer:null,         // L.layerGroup
-    _balisesMarkers:{},         // balise.id => L.marker
-    _balisesTimer:null,         // setInterval handle
-    // Popup balise (relevés temps réel + historique du jour)
-    balisePopupOpen:false, balisePos:{top:0,left:0},
-    baliseLoading:false, baliseData:null, _baliseObj:null,
+    _balisesLayer:null, _balisesMarkers:{}, _balisesTimer:null,
 
     // Configuration des graphes exposée pour le template
     CHART_CONFIGS,
@@ -40,19 +33,20 @@ function mapApp(){return{
         await this.$nextTick();
         this.initMap();
         await this.loadSites();
-        // Charge les balises et rafraîchit toutes les 5 minutes
         await this.loadBalises();
         this._balisesTimer = setInterval(() => this.loadBalises(), 5 * 60 * 1000);
-        // Re-rendu des graphes du panel sur redimensionnement
+        // Re-rendu des graphes du volet droit sur redimensionnement
         window.addEventListener('resize', () => {
-            if (!this.panelOpen) return;
-            if (this.panelTab === 'today'    && this.multimodelData)  this.renderCharts();
-            if (this.panelTab === 'fivedays' && this.multimodel5Data) this.renderCharts5();
+            if (!this.rightPanelOpen || this.selectedFeature?.type !== 'site') return;
+            if (this.rpTab === 'synthese' && this.chartData)       this.renderSynthese();
+            if (this.rpTab === 'models'   && this.multimodelData)  this.renderCharts();
+            if (this.rpTab === 'models5'  && this.multimodel5Data) this.renderCharts5();
         });
     },
 
     initMap(){
-        this.map=L.map('map',{center:[49.1,5.5],zoom:7});
+        this.map=L.map('map',{center:[49.1,5.5],zoom:7,zoomControl:false});
+        L.control.zoom({position:'topright'}).addTo(this.map);
         const b=BASEMAP_LIST[0];
         this.tl=L.tileLayer(b.url,{attribution:b.attribution,maxZoom:b.maxZoom}).addTo(this.map);
     },
@@ -64,10 +58,34 @@ function mapApp(){return{
         this.tl=L.tileLayer(b.url,{attribution:b.attribution,maxZoom:b.maxZoom}).addTo(this.map);
         this.currentBasemap=key;
     },
+    toggleDayDrop(btn){if(!this.dayDropOpen){const r=btn.getBoundingClientRect();this.dayDropPos={top:r.bottom+6,left:r.left};}this.dayDropOpen=!this.dayDropOpen;this.bmDropOpen=false;},
+    toggleBmDrop(btn){if(!this.bmDropOpen){const r=btn.getBoundingClientRect();this.bmDropPos={top:r.bottom+6,left:r.left,width:r.width};}this.bmDropOpen=!this.bmDropOpen;this.dayDropOpen=false;},
     get currentBasemapObj(){return BASEMAP_LIST.find(b=>b.key===this.currentBasemap)??BASEMAP_LIST[0];},
 
-    toggleDayDrop(btn){if(!this.dayDropOpen){const r=btn.getBoundingClientRect();this.dayDropPos={top:r.bottom+6,left:r.left};}this.dayDropOpen=!this.dayDropOpen;this.bmDropOpen=false;},
-    toggleBmDrop(btn){if(!this.bmDropOpen){const r=btn.getBoundingClientRect();this.bmDropPos={top:r.bottom+6,right:window.innerWidth-r.right};}this.bmDropOpen=!this.bmDropOpen;this.dayDropOpen=false;},
+    // ── Volet gauche : repli en barre étroite ────────────────────
+    toggleLeftPanel(){
+        this.leftCollapsed=!this.leftCollapsed;
+        setTimeout(()=>this.map?.invalidateSize(),320);
+    },
+
+    // ── Volet droit : ouverture / fermeture ──────────────────────
+    openRightPanel(){
+        this.rightPanelOpen=true;
+        // Largeur animée (.35s) : on revalide la taille de la carte et on
+        // recentre sur le marqueur une fois la transition finie.
+        setTimeout(()=>{
+            this.map?.invalidateSize();
+            if(this.selectedFeature?.lat!=null) this.map?.panTo([this.selectedFeature.lat,this.selectedFeature.lng]);
+        },380);
+    },
+    closeRightPanel(){
+        this.rightPanelOpen=false;
+        this.selectedFeature=null;
+        this.chartData=null; this.chartSite=null;
+        this.multimodelData=null; this.multimodel5Data=null;
+        Object.values(this.markers).forEach(m=>m.getElement()?.querySelector('.pg-site-marker')?.classList.remove('selected'));
+        setTimeout(()=>this.map?.invalidateSize(),380);
+    },
 
     async loadSites(){
         const r=await fetch('/api/sites');this.sites=await r.json();
@@ -92,10 +110,23 @@ function mapApp(){return{
             return{label,raw:day,bestStatus:sl.some(s=>s.status==='green')?'green':sl.some(s=>s.status==='orange')?'orange':'red',greenSlots:gs};
         });
     },
-    selectDay(idx){this.selectedDayIdx=idx;this.renderMarkers();if(this.chartOpen&&this.chartData)this.$nextTick(()=>this.refreshChart());},
+    selectDay(idx){
+        this.selectedDayIdx=idx;
+        this.renderMarkers();
+        // Si le volet droit affiche un site : le jour a changé → MAJ contenu
+        if(this.rightPanelOpen && this.selectedFeature?.type==='site'){
+            this.multimodelData=null; // endpoint multimodèle est par jour → invalidé
+            if(this.rpTab==='synthese' && this.chartData) this.$nextTick(()=>this.renderSynthese());
+            if(this.rpTab==='models') this.loadMultimodel();
+        }
+    },
 
-    get greenCount(){const day=this.days[this.selectedDayIdx]?.raw;if(!day)return 0;return this.sites.filter(s=>(this.allScores[s.id]||[]).some(sc=>sc.day===day&&sc.status==='green')).length;},
-
+    _statusVisible(st){
+        if(st==='green') return this.showGreen;
+        if(st==='orange') return this.showOrange;
+        if(st==='red') return this.showRed;
+        return true; // statut inconnu : toujours affiché
+    },
     renderMarkers(){
         const day=this.days[this.selectedDayIdx]?.raw;
         this.sites.forEach(site=>{
@@ -104,6 +135,13 @@ function mapApp(){return{
             if(scores.some(s=>s.status==='green'))st='green';
             else if(scores.some(s=>s.status==='orange'))st='orange';
             else if(scores.length>0)st='red';
+
+            // Filtre d'affichage par statut météo
+            if(!this._statusVisible(st)){
+                if(this.markers[site.id]){this.map.removeLayer(this.markers[site.id]);delete this.markers[site.id];}
+                return;
+            }
+
             const icon=L.divIcon({className:'',html:siteIconHtml(site,st),iconSize:[40,40],iconAnchor:[20,20]});
             if(this.markers[site.id]){
                 const was=this.markers[site.id].getElement()?.querySelector('.pg-site-marker')?.classList.contains('selected');
@@ -113,115 +151,111 @@ function mapApp(){return{
                 const mk=L.marker([site.lat,site.lng],{icon}).addTo(this.map).bindTooltip(site.name,{permanent:false,direction:'top',offset:[0,-22]});
                 mk.on('click',(e)=>{L.DomEvent.stopPropagation(e);this.clickSite(site,mk.getElement());});
                 this.markers[site.id]=mk;
+                if(this.selectedFeature?.type==='site'&&this.selectedFeature.id===site.id)
+                    setTimeout(()=>mk.getElement()?.querySelector('.pg-site-marker')?.classList.add('selected'),10);
             }
         });
     },
 
-    // Clic sur un marker → ouvre le popup chart
-    async clickSite(site, markerEl){
-        this.chartOpen=false;
-        this.balisePopupOpen=false;
-        this._chartSiteObj=site;
-
-        // Positionner le popup
-        const r=markerEl?.getBoundingClientRect()??{top:200,left:200,right:220,bottom:240};
-        const pw=600, ph=400;
-        let left=r.right+12;
-        if(left+pw>window.innerWidth-10) left=r.left-pw-12;
-        if(left<10) left=10;
-        let top=r.top-100;
-        if(top<60) top=60;
-        if(top+ph>window.innerHeight-10) top=window.innerHeight-ph-10;
-        this.chartPos={top,left};
-
-        // Sélectionner le marqueur visuellement
+    // ── Clic sur un site → volet droit (onglet Synthèse par défaut) ──
+    clickSite(site, markerEl){
         Object.values(this.markers).forEach(m=>m.getElement()?.querySelector('.pg-site-marker')?.classList.remove('selected'));
         markerEl?.querySelector('.pg-site-marker')?.classList.add('selected');
-
-        this.chartSite=null;this.chartSunWindow=null;this.chartData=null;
-        this.chartLoading=true;this.chartOpen=true;
-
-        try{
-            const res=await fetch(`/api/sites/${site.id}/chart`);
-            this.chartData=await res.json();
-            this.chartSite=this.chartData.site;
-            this.refreshChart();
-        }catch(e){console.error(e);}
-        this.chartLoading=false;
+        this.site=site;
+        this.selectedFeature={type:'site',...site};
+        this.rpTab='synthese';
+        this.chartData=null; this.chartSite=null;
+        this.multimodelData=null; this.multimodel5Data=null;
+        this.openRightPanel();
+        this.loadSiteChart();
     },
 
-    refreshChart(){
+    // ── Onglet « Synthèse pour la journée » (ancienne popup site) ──
+    async loadSiteChart(){
+        if(!this.site?.id) return;
+        this.chartLoading=true;
+        try{
+            const res=await fetch(`/api/sites/${this.site.id}/chart`);
+            this.chartData=await res.json();
+            this.chartSite=this.chartData.site;
+        }catch(e){console.error('chart load failed',e);}
+        this.chartLoading=false;
+        this.$nextTick(()=>this.renderSynthese());
+    },
+    renderSynthese(){
         if(!this.chartData) return;
         const day=this.days[this.selectedDayIdx]?.raw;
         const dayData=this.chartData.days?.[day]??[];
-        this.chartSunWindow=this.chartData.sun_windows?.[day]??null;
-        this.$nextTick(()=>buildChartSVG(dayData,this.chartData.site));
+        this.$nextTick(()=>{
+            buildChartSVG(dayData,this.chartData.site);
+            buildCeilingSVG(dayData,this.chartData.site);
+        });
     },
+    get chartHasData(){
+        const day=this.days[this.selectedDayIdx]?.raw;
+        return (this.chartData?.days?.[day]?.length ?? 0) > 0;
+    },
+    get chartDayCount(){
+        const day=this.days[this.selectedDayIdx]?.raw;
+        return this.chartData?.days?.[day]?.length ?? 0;
+    },
+    get panelSunWindow(){
+        if(!this.chartData) return null;
+        const day=this.days[this.selectedDayIdx]?.raw;
+        return this.chartData.sun_windows?.[day] ?? null;
+    },
+    get siteLevelLabel(){
+        const lv=this.selectedFeature?.level;
+        return {debutant:'Débutant', intermediaire:'Intermédiaire', confirme:'Confirmé'}[lv] ?? (lv || '');
+    },
+    get siteOrientationLabel(){
+        const a=this.selectedFeature?.wind_dir_min, b=this.selectedFeature?.wind_dir_max;
+        if(a==null || b==null) return '';
+        // Direction médiane de la plage favorable (gère le passage par le Nord)
+        const mid = a<=b ? (a+b)/2 : ((a+b+360)/2)%360;
+        return `${COMPASS_8[Math.round(mid/45)%8]} (${Math.round(a)}–${Math.round(b)}°)`;
+    },
+    get chartConfidence(){
+        const day=this.days[this.selectedDayIdx]?.raw;
+        const arr=(this.chartData?.days?.[day]??[]).map(h=>h.confidence).filter(c=>c!=null);
+        if(!arr.length) return null;
+        return Math.round(arr.reduce((a,b)=>a+b,0)/arr.length);
+    },
+    get chartConfidenceColor(){ return this._conformityColor(this.chartConfidence); },
 
-    // Bouton "Détails ›" dans le popup → ouvre le panel multi-modèles
-    openPanel(){
-        if(!this._chartSiteObj) return;
-        const s=this._chartSiteObj;
-        this.site=s;
-        this.panelTab='today';
-        this.panelDayIdx=this.selectedDayIdx;
-        this.panelOpen=true;
-        document.getElementById('panel').classList.add('open');
-        this._recenterMapForPanel(s);
-        this.loadMultimodel();
-    },
-    closePanel(){
-        document.getElementById('panel').classList.remove('open');
-        this.panelOpen=false;
-        this.multimodelData=null;
-        this.multimodel5Data=null;
-        this._restoreMapState();
-        Object.values(this.markers).forEach(m=>m.getElement()?.querySelector('.pg-site-marker')?.classList.remove('selected'));
-        this.site={};
-    },
-
-    // ── Side panel : navigation jour + chargement multi-modèles ──
-    get panelDay(){return this.days[this.panelDayIdx]??null;},
-    get conformityColor(){
-        return this._conformityColor(this.multimodelData?.conformity_pct);
-    },
-    get conformity5Color(){
-        return this._conformityColor(this.multimodel5Data?.conformity_pct);
-    },
-    get fiveDaysRangeLabel(){
-        const slice = this.days.slice(0, 5);
-        if (!slice.length) return '—';
-        return slice[0].raw + ' → ' + slice[slice.length-1].raw;
-    },
-    _conformityColor(c){
-        if (c == null) return '#6b7280';
-        if (c >= 75) return '#22c55e';
-        if (c >= 50) return '#f59e0b';
-        return '#ef4444';
-    },
-    panelDayShift(delta){
-        const next=Math.max(0, Math.min(this.days.length-1, this.panelDayIdx+delta));
-        if(next===this.panelDayIdx) return;
-        this.panelDayIdx=next;
-        this.loadMultimodel();
-    },
-    // Bascule d'onglet : déclenche le chargement de la vue 5 jours à
-    // la première activation, puis re-render après changement.
-    async setPanelTab(tab){
-        this.panelTab = tab;
-        if (tab === 'fivedays') {
-            if (!this.multimodel5Data && !this.multimodel5Loading) {
-                await this.loadFiveDays();
-            } else if (this.multimodel5Data) {
-                this.$nextTick(() => this.renderCharts5());
-            }
-        } else if (tab === 'today' && this.multimodelData) {
-            this.$nextTick(() => this.renderCharts());
+    // ── Onglets du volet droit ───────────────────────────────────
+    async setRpTab(tab){
+        this.rpTab=tab;
+        if(tab==='synthese'){
+            if(this.chartData) this.$nextTick(()=>this.renderSynthese());
+        }else if(tab==='models'){
+            if(!this.multimodelData && !this.multimodelLoading) await this.loadMultimodel();
+            else if(this.multimodelData) this.$nextTick(()=>this.renderCharts());
+        }else if(tab==='models5'){
+            if(!this.multimodel5Data && !this.multimodel5Loading) await this.loadFiveDays();
+            else if(this.multimodel5Data) this.$nextTick(()=>this.renderCharts5());
         }
     },
+
+    // ── Conformité / libellés ────────────────────────────────────
+    get conformityColor(){ return this._conformityColor(this.multimodelData?.conformity_pct); },
+    get conformity5Color(){ return this._conformityColor(this.multimodel5Data?.conformity_pct); },
+    get fiveDaysRangeLabel(){
+        const slice=this.days.slice(0,5);
+        if(!slice.length) return '—';
+        return slice[0].raw+' → '+slice[slice.length-1].raw;
+    },
+    _conformityColor(c){
+        if(c==null) return '#6b7280';
+        if(c>=75) return '#22c55e';
+        if(c>=50) return '#f59e0b';
+        return '#ef4444';
+    },
+
+    // ── Chargement des modèles météo ─────────────────────────────
     async loadMultimodel(){
         if(!this.site?.id) return;
-        const day=this.days[this.panelDayIdx]?.raw;
+        const day=this.days[this.selectedDayIdx]?.raw;
         if(!day) return;
         const ymd=this._dayRawToYmd(day);
         this.multimodelData=null;
@@ -235,96 +269,80 @@ function mapApp(){return{
         this.$nextTick(()=>this.renderCharts());
     },
     // Charge les 5 jours en parallèle et fusionne en une structure
-    // unique avec hours = [0..119] (5 jours × 24h). Stocke aussi les
-    // séparateurs et labels pour l'affichage de l'axe X.
+    // unique avec hours = [0..119] (5 jours × 24h).
     async loadFiveDays(){
         if(!this.site?.id || !this.days.length) return;
-        this.multimodel5Loading = true;
-        this.multimodel5Data    = null;
-        try {
-            const slice  = this.days.slice(0, 5);
-            const ymds   = slice.map(d => this._dayRawToYmd(d.raw));
-            const reqs   = ymds.map(ymd =>
-                fetch(`/api/sites/${this.site.id}/multimodel?day=${ymd}&period=24h`).then(r => {
-                    if (!r.ok) throw new Error('HTTP ' + r.status);
+        this.multimodel5Loading=true;
+        this.multimodel5Data=null;
+        try{
+            const slice=this.days.slice(0,5);
+            const ymds=slice.map(d=>this._dayRawToYmd(d.raw));
+            const reqs=ymds.map(ymd=>
+                fetch(`/api/sites/${this.site.id}/multimodel?day=${ymd}&period=24h`).then(r=>{
+                    if(!r.ok) throw new Error('HTTP '+r.status);
                     return r.json();
                 })
             );
-            const responses = await Promise.all(reqs);
-
-            const merged = {
-                viewMode:       'fivedays',
-                site:           responses[0].site,
-                models:         responses[0].models,
-                hours:          [],
-                data:           {},
-                consensus:      {},
-                day_separators: [],
-                day_labels:     [],
-                sun_windows_by_day: [],
+            const responses=await Promise.all(reqs);
+            const merged={
+                viewMode:'fivedays',
+                site:responses[0].site,
+                models:responses[0].models,
+                hours:[], data:{}, consensus:{},
+                day_separators:[], day_labels:[], sun_windows_by_day:[],
             };
-            responses.forEach((resp, dayIdx) => {
-                const offset = dayIdx * 24;
-                for (let h = 0; h < 24; h++) {
-                    const flat = offset + h;
+            responses.forEach((resp,dayIdx)=>{
+                const offset=dayIdx*24;
+                for(let h=0;h<24;h++){
+                    const flat=offset+h;
                     merged.hours.push(flat);
-                    if (resp.data && resp.data[h])      merged.data[flat]      = resp.data[h];
-                    if (resp.consensus && resp.consensus[h]) merged.consensus[flat] = resp.consensus[h];
+                    if(resp.data && resp.data[h]) merged.data[flat]=resp.data[h];
+                    if(resp.consensus && resp.consensus[h]) merged.consensus[flat]=resp.consensus[h];
                 }
-                if (dayIdx < responses.length - 1) merged.day_separators.push((dayIdx + 1) * 24);
-                merged.day_labels.push({offset, label: slice[dayIdx]?.label || slice[dayIdx]?.raw || '', raw: slice[dayIdx]?.raw});
-                merged.sun_windows_by_day.push({
-                    offset,
-                    start: resp.sun_window?.start_hour ?? null,
-                    end:   resp.sun_window?.end_hour   ?? null,
-                });
+                if(dayIdx<responses.length-1) merged.day_separators.push((dayIdx+1)*24);
+                merged.day_labels.push({offset, label:slice[dayIdx]?.label||slice[dayIdx]?.raw||'', raw:slice[dayIdx]?.raw});
+                merged.sun_windows_by_day.push({offset, start:resp.sun_window?.start_hour??null, end:resp.sun_window?.end_hour??null});
             });
-            const conformities = responses.map(r => r.conformity_pct).filter(c => c != null);
-            merged.conformity_pct = conformities.length
-                ? Math.round(conformities.reduce((a, b) => a + b, 0) / conformities.length)
-                : null;
-            this.multimodel5Data = merged;
-        } catch (e) {
-            console.error('5-day load failed', e);
-        }
-        this.multimodel5Loading = false;
-        this.$nextTick(() => this.renderCharts5());
+            const conformities=responses.map(r=>r.conformity_pct).filter(c=>c!=null);
+            merged.conformity_pct=conformities.length?Math.round(conformities.reduce((a,b)=>a+b,0)/conformities.length):null;
+            this.multimodel5Data=merged;
+        }catch(e){console.error('5-day load failed',e);}
+        this.multimodel5Loading=false;
+        this.$nextTick(()=>this.renderCharts5());
     },
     renderCharts(){
         if(!this.multimodelData) return;
-        CHART_CONFIGS.forEach(cfg => {
-            if (this.chartCollapsed[cfg.id]) return;
-            const fn = cfg.type === 'bar' ? buildBarChart : buildLineChart;
-            fn('svg-' + cfg.id, cfg, this.multimodelData, this);
+        CHART_CONFIGS.forEach(cfg=>{
+            if(this.chartCollapsed[cfg.id]) return;
+            const fn=cfg.type==='bar'?buildBarChart:buildLineChart;
+            fn('svg-'+cfg.id, cfg, this.multimodelData, this);
         });
     },
     renderCharts5(){
         if(!this.multimodel5Data) return;
-        CHART_CONFIGS.forEach(cfg => {
-            if (this.chartCollapsed5[cfg.id]) return;
-            const fn = cfg.type === 'bar' ? buildBarChart : buildLineChart;
-            fn('svg5-' + cfg.id, cfg, this.multimodel5Data, this);
+        CHART_CONFIGS.forEach(cfg=>{
+            if(this.chartCollapsed5[cfg.id]) return;
+            const fn=cfg.type==='bar'?buildBarChart:buildLineChart;
+            fn('svg5-'+cfg.id, cfg, this.multimodel5Data, this);
         });
     },
     toggleChart(id){
-        this.chartCollapsed[id] = !this.chartCollapsed[id];
-        if (!this.chartCollapsed[id]) {
-            this.$nextTick(() => {
-                const cfg = CHART_CONFIGS.find(c => c.id === id);
-                if (!cfg || !this.multimodelData) return;
-                const fn = cfg.type === 'bar' ? buildBarChart : buildLineChart;
-                fn('svg-' + id, cfg, this.multimodelData, this);
+        this.chartCollapsed[id]=!this.chartCollapsed[id];
+        if(!this.chartCollapsed[id]){
+            this.$nextTick(()=>{
+                const cfg=CHART_CONFIGS.find(c=>c.id===id);
+                if(!cfg || !this.multimodelData) return;
+                (cfg.type==='bar'?buildBarChart:buildLineChart)('svg-'+id, cfg, this.multimodelData, this);
             });
         }
     },
     toggleChart5(id){
-        this.chartCollapsed5[id] = !this.chartCollapsed5[id];
-        if (!this.chartCollapsed5[id]) {
-            this.$nextTick(() => {
-                const cfg = CHART_CONFIGS.find(c => c.id === id);
-                if (!cfg || !this.multimodel5Data) return;
-                const fn = cfg.type === 'bar' ? buildBarChart : buildLineChart;
-                fn('svg5-' + id, cfg, this.multimodel5Data, this);
+        this.chartCollapsed5[id]=!this.chartCollapsed5[id];
+        if(!this.chartCollapsed5[id]){
+            this.$nextTick(()=>{
+                const cfg=CHART_CONFIGS.find(c=>c.id===id);
+                if(!cfg || !this.multimodel5Data) return;
+                (cfg.type==='bar'?buildBarChart:buildLineChart)('svg5-'+id, cfg, this.multimodel5Data, this);
             });
         }
     },
@@ -334,135 +352,60 @@ function mapApp(){return{
         return `${yyyy}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     },
 
-    // ── Recentrage carte à l'ouverture/fermeture du panel ──
-    // Le panel est en position:absolute par-dessus la carte : le
-    // conteneur ne change pas de taille (pas d'invalidateSize).
-    // On décale juste le centre géographique de panelW/2 vers la
-    // droite pour que le site apparaisse au milieu de la zone
-    // visible (à gauche du panel). Le zoom courant est conservé.
-    _recenterMapForPanel(site){
-        if(!this.map) return;
-        if(!this._panelMapState){
-            this._panelMapState={center:this.map.getCenter(),zoom:this.map.getZoom()};
-        }
-        const panelW=document.getElementById('panel')?.offsetWidth??0;
-        if(panelW===0) return;
-        const sitePoint=this.map.latLngToContainerPoint([site.lat,site.lng]);
-        const newCenterPoint=L.point(sitePoint.x + panelW/2, sitePoint.y);
-        const newCenter=this.map.containerPointToLatLng(newCenterPoint);
-        this.map.flyTo(newCenter, this.map.getZoom(), {duration:.6});
-    },
-    _restoreMapState(){
-        if(!this.map || !this._panelMapState) return;
-        const s=this._panelMapState; this._panelMapState=null;
-        this.map.flyTo(s.center, s.zoom, {duration:.5});
-    },
-
     // ── Balises météo ────────────────────────────────────────────
     async loadBalises(){
-        try {
-            const r = await fetch('/api/balises');
-            if (!r.ok) throw new Error('HTTP '+r.status);
-            this.balises = await r.json();
+        try{
+            const r=await fetch('/api/balises');
+            if(!r.ok) throw new Error('HTTP '+r.status);
+            this.balises=await r.json();
             this.renderBalises();
-        } catch (e) {
-            console.warn('loadBalises failed', e);
-        }
+        }catch(e){console.warn('loadBalises failed',e);}
     },
     renderBalises(){
-        if (!this.map) return;
-        // Layer group créé une fois, ajouté/retiré selon visibilité
-        if (!this._balisesLayer) {
-            this._balisesLayer = L.layerGroup();
-            if (this.balisesVisible) this._balisesLayer.addTo(this.map);
+        if(!this.map) return;
+        if(!this._balisesLayer){
+            this._balisesLayer=L.layerGroup();
+            if(this.balisesVisible) this._balisesLayer.addTo(this.map);
         }
-        const seen = new Set();
-        for (const b of this.balises) {
+        const seen=new Set();
+        for(const b of this.balises){
             seen.add(b.id);
-            const iconUrl = baliseIconUrl(b.reading);
-            const icon    = L.icon({iconUrl, iconSize:[40,40], iconAnchor:[20,20]});
-            const tooltip = baliseTooltipHtml(b);
-            const existing = this._balisesMarkers[b.id];
-            if (existing) {
+            const icon=L.icon({iconUrl:baliseIconUrl(b.reading), iconSize:[40,40], iconAnchor:[20,20]});
+            const tooltip=baliseTooltipHtml(b);
+            const existing=this._balisesMarkers[b.id];
+            if(existing){
                 existing.setIcon(icon);
-                existing.setLatLng([b.lat, b.lng]);
+                existing.setLatLng([b.lat,b.lng]);
                 existing.setTooltipContent(tooltip);
-            } else {
-                const m = L.marker([b.lat, b.lng], {icon})
-                    .bindTooltip(tooltip, {direction:'top', offset:[0,-22], opacity:.95});
-                m.on('click', (e) => { L.DomEvent.stopPropagation(e); this.clickBalise(b.id, m.getElement()); });
+            }else{
+                const m=L.marker([b.lat,b.lng],{icon}).bindTooltip(tooltip,{direction:'top',offset:[0,-22],opacity:.95});
+                m.on('click',(e)=>{L.DomEvent.stopPropagation(e);this.clickBalise(b.id,m.getElement());});
                 m.addTo(this._balisesLayer);
-                this._balisesMarkers[b.id] = m;
+                this._balisesMarkers[b.id]=m;
             }
         }
-        // Nettoie les marqueurs obsolètes (balise désactivée entre 2 polls)
-        for (const id of Object.keys(this._balisesMarkers)) {
-            if (!seen.has(parseInt(id, 10))) {
+        for(const id of Object.keys(this._balisesMarkers)){
+            if(!seen.has(parseInt(id,10))){
                 this._balisesLayer.removeLayer(this._balisesMarkers[id]);
                 delete this._balisesMarkers[id];
             }
         }
     },
     toggleBalises(){
-        this.balisesVisible = !this.balisesVisible;
-        if (!this._balisesLayer || !this.map) return;
-        if (this.balisesVisible) {
-            this._balisesLayer.addTo(this.map);
-        } else {
-            this.map.removeLayer(this._balisesLayer);
-        }
-        if (!this.balisesVisible) this.balisePopupOpen = false;
+        this.balisesVisible=!this.balisesVisible;
+        if(!this._balisesLayer || !this.map) return;
+        if(this.balisesVisible) this._balisesLayer.addTo(this.map);
+        else this.map.removeLayer(this._balisesLayer);
     },
 
-    // Clic sur une balise → popup relevés + historique du jour
-    async clickBalise(id, markerEl){
-        const b = this.balises.find(x => x.id === id);
-        if (!b) return;
-        this._baliseObj = b;
-        this.chartOpen = false; // ferme un éventuel popup site
-
-        // Positionnement : la popup a max-height = 100vh-24px + scroll
-        // interne, on s'assure juste qu'elle tient dans le viewport.
-        const r = markerEl?.getBoundingClientRect() ?? {top:200,left:200,right:220,bottom:240};
-        const pw = 600;
-        const ph = Math.min(640, window.innerHeight - 24); // estimation hauteur
-        let left = r.right + 12;
-        if (left + pw > window.innerWidth - 10) left = r.left - pw - 12;
-        if (left < 10) left = 10;
-        let top = r.top - 90;
-        if (top + ph > window.innerHeight - 12) top = window.innerHeight - ph - 12;
-        if (top < 12) top = 12;
-        this.balisePos = {top, left};
-
-        this.baliseData = null;
-        this.baliseLoading = true;
-        this.balisePopupOpen = true;
-        try {
-            const res = await fetch(`/api/balises/${id}/history`);
-            this.baliseData = await res.json();
-            this.baliseLoading = false;
-            this.$nextTick(() => { buildBaliseRoseSVG(this.baliseData); buildBaliseChartSVG(this.baliseData); });
-        } catch (e) {
-            console.error('balise history failed', e);
-            this.baliseLoading = false;
-        }
-    },
-    baliseFreshness(){
-        const iso = this.baliseData?.latest?.read_at ?? this._baliseObj?.reading?.read_at;
-        if (!iso) return 'aucune lecture';
-        const ageMin = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-        if (ageMin < 1)  return "à l'instant";
-        if (ageMin < 60) return `il y a ${ageMin} min`;
-        return `il y a ${Math.round(ageMin/60)} h`;
-    },
-    baliseTrendArrow(){
-        const t = this._baliseObj?.reading?.trend ?? 0;
-        return ['↓↓','↓','→','↑','↑↑'][t + 2] ?? '→';
-    },
-    baliseTrendColor(){
-        const t = this._baliseObj?.reading?.trend ?? 0;
-        if (t >= 1)  return '#fb923c';
-        if (t <= -1) return '#60a5fa';
-        return '#9ca3af';
+    // ── Clic sur une balise → volet droit (design détaillé à venir) ──
+    clickBalise(id, markerEl){
+        const b=this.balises.find(x=>x.id===id);
+        if(!b) return;
+        Object.values(this.markers).forEach(m=>m.getElement()?.querySelector('.pg-site-marker')?.classList.remove('selected'));
+        this.site={};
+        this.selectedFeature={type:'balise', ...b};
+        this.chartData=null; this.multimodelData=null; this.multimodel5Data=null;
+        this.openRightPanel();
     },
 };}
