@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', 'ParapenteFR')</title>
+    <title>@yield('title', 'Qui Vole ?')</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @stack('styles')
 </head>
@@ -12,7 +12,7 @@
 
 {{-- Navbar --}}
 <nav class="bg-gray-900 border-b border-gray-800 px-4 py-2 flex items-center gap-6 shrink-0 z-50">
-    <span class="font-bold text-sky-400 text-lg tracking-tight">⛶ ParapenteFR</span>
+    <span class="font-bold text-sky-400 text-lg tracking-tight">⛶ Qui Vole ?</span>
     <a href="{{ route('map') }}"
        class="text-sm text-gray-300 hover:text-white transition {{ request()->routeIs('map') ? 'text-white font-medium' : '' }}">
         Carte météo

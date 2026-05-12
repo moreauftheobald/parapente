@@ -2,7 +2,7 @@
 
 ## Présentation du projet
 
-**ParapenteFR** est une plateforme web dédiée aux pilotes de parapente du Grand Est,
+**Qui Vole ?** (anciennement « ParapenteFR ») est une plateforme web nationale dédiée aux pilotes de parapente,
 construite en Laravel. Le projet est modulaire : chaque grande fonctionnalité est un module indépendant.
 
 ---
@@ -130,10 +130,11 @@ models_converging       ← Nombre de modèles convergents
 detail                  ← JSON détail du scoring
 ```
 
-### Sites en base (14 total)
-Volmerange EST (49.4468, 6.0999, 420m, vent E 75°-105°) + 13 sites Grand Est :
+### Sites en base (14 total — seed initial)
+Volmerange EST (49.4468, 6.0999, 420m, vent E 75°-105°) + 13 autres sites de vol :
 Jouy-sous-les-Côtes, Beauring, Losheim, Houéville, Létanne, Lion-devant-Dun,
 Coo Ouest, Algrange, Fumay, Coo Sud, Revin Fallières, Klusserath, Markstein.
+(La couverture a vocation nationale ; le `GrandEstSitesSeeder` n'est que le jeu de données initial.)
 
 ---
 

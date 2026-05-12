@@ -38,9 +38,9 @@
         </ul>
     </x-slot:help>
 
-    <div class="max-w-3xl mx-auto px-5 sm:px-8 py-8 sm:py-12">
+    <div class="w-full lg:w-4/5 mx-auto px-5 sm:px-8 py-8 sm:py-12">
         <header class="mb-8">
-            <h1 class="text-2xl sm:text-3xl font-semibold text-white">ParapenteFR — Grand Est</h1>
+            <h1 class="text-2xl sm:text-3xl font-semibold text-white">Qui Vole ?</h1>
             <p class="text-gray-400 mt-1">Actualités &amp; nouveautés de la plateforme.</p>
         </header>
 

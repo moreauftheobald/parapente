@@ -1,4 +1,4 @@
-# Changelog — ParapenteFR
+# Changelog — Qui Vole ?
 
 Ce fichier retrace les évolutions **majeures** du code (nouvelles fonctionnalités,
 changements d'architecture, modifications de base de données, ruptures de

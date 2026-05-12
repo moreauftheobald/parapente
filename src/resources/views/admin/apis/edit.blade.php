@@ -104,7 +104,7 @@
                 <div>
                     <label class="{{ $labelCls }}">User-Agent <span class="text-red-400">*</span></label>
                     <input name="user_agent" type="text" class="{{ $inputCls }} font-mono text-xs" value="{{ old('user_agent', $api->user_agent) }}"
-                           placeholder="ParapenteFR/1.0 contact@parapentefr.local">
+                           placeholder="QuiVole/1.0 contact@qui-vole.fr">
                     <p class="text-xs text-gray-500 mt-1">Obligatoire pour MET Norway. Inclure un email de contact.</p>
                 </div>
             @elseif ($api->auth_type === 'api_key')

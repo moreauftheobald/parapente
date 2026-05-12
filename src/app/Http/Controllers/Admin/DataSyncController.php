@@ -38,7 +38,7 @@ class DataSyncController extends Controller
         'es' => 'Espagne',
     ];
 
-    /** Bounding box par défaut : Grand Est (large) */
+    /** Bounding box par défaut : large couverture (France + zones frontalières) */
     private const DEFAULT_BBOX = [
         'lat_min' => 47.0,
         'lat_max' => 50.5,

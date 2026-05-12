@@ -28,7 +28,7 @@
     {{-- Logo --}}
     <a href="{{ route('home') }}" class="flex items-center gap-2 font-bold text-sky-400 text-lg tracking-tight shrink-0 px-1">
         <span aria-hidden="true">⛶</span>
-        <span class="hidden sm:inline">ParapenteFR</span>
+        <span class="hidden sm:inline">Qui Vole ?</span>
     </a>
 
     @if ($pageTitle)

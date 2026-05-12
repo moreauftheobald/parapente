@@ -1,5 +1,5 @@
 {{-- Champs bbox réutilisés par les formulaires de découverte de balises.
-     Valeurs par défaut : Grand Est (large). --}}
+     Valeurs par défaut : large (France + zones frontalières). --}}
 @php
     $bboxInputCls = 'w-full mt-1 px-2 py-1.5 text-sm bg-gray-950 border border-gray-700 rounded text-gray-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/40';
 @endphp

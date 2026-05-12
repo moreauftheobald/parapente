@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Carte météo parapente — Grand Est')
+@section('title', 'Carte météo parapente')
 
 @push('styles')
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
