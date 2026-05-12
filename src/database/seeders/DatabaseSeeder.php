@@ -17,6 +17,7 @@ class DatabaseSeeder extends Seeder
     {
         // User::factory(10)->create();
         $this->call([
+            ModuleSeeder::class,
             WeatherApiSeeder::class,
             WeatherModelSeeder::class,
             SiteSeeder::class,

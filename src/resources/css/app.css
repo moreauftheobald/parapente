@@ -1,1 +1,6 @@
 @import "tailwindcss";
+
+/* Évite le flash des éléments Alpine (x-show / x-transition) avant l'init JS */
+[x-cloak] {
+    display: none !important;
+}

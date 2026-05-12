@@ -1,18 +1,25 @@
 <?php
 
+use App\Http\Controllers\Admin\ArticleController as AdminArticleController;
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\BaliseController as AdminBaliseController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DataSyncController as AdminSyncController;
 use App\Http\Controllers\Admin\LogController as AdminLogController;
+use App\Http\Controllers\Admin\ModuleController as AdminModuleController;
 use App\Http\Controllers\Admin\SiteController as AdminSiteController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Admin\WeatherApiController as AdminApiController;
 use App\Http\Controllers\Admin\WeatherModelController as AdminModelController;
+use App\Http\Controllers\HomeController;
 use App\Http\Controllers\MapController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', [MapController::class, 'index'])->name('map');
+// Accueil — page d'atterrissage par défaut (articles / changelog + shell global)
+Route::get('/', [HomeController::class, 'index'])->name('home');
+
+// Carte météo (module 1)
+Route::get('/carte', [MapController::class, 'index'])->name('map');
 
 // ───────────────────────────────────────────────────────────────
 // BackOffice (/admin)
@@ -67,6 +74,20 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/sync',          [AdminSyncController::class, 'index'])->name('sync.index');
         Route::post('/sync/sites',   [AdminSyncController::class, 'importSites'])->name('sync.sites');
         Route::post('/sync/balises', [AdminSyncController::class, 'discoverBalises'])->name('sync.balises');
+
+        // ── Articles / changelog (page d'accueil) ────────────────
+        Route::get('/articles',                   [AdminArticleController::class, 'index'])->name('articles.index');
+        Route::get('/articles/create',            [AdminArticleController::class, 'create'])->name('articles.create');
+        Route::post('/articles',                  [AdminArticleController::class, 'store'])->name('articles.store');
+        Route::post('/articles/upload-image',     [AdminArticleController::class, 'uploadImage'])->name('articles.upload');
+        Route::get('/articles/{article}/edit',    [AdminArticleController::class, 'edit'])->name('articles.edit');
+        Route::patch('/articles/{article}',       [AdminArticleController::class, 'update'])->name('articles.update');
+        Route::delete('/articles/{article}',      [AdminArticleController::class, 'destroy'])->name('articles.destroy');
+        Route::post('/articles/{article}/toggle', [AdminArticleController::class, 'toggle'])->name('articles.toggle');
+
+        // ── Modules du menu principal ────────────────────────────
+        Route::get('/modules',           [AdminModuleController::class, 'index'])->name('modules.index');
+        Route::patch('/modules/{module}', [AdminModuleController::class, 'update'])->name('modules.update');
 
         // ── Logs / monitoring ─────────────────────────────────────
         Route::get('/logs', [AdminLogController::class, 'index'])->name('logs.index');

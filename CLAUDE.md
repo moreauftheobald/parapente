@@ -7,6 +7,20 @@ construite en Laravel. Le projet est modulaire : chaque grande fonctionnalité e
 
 ---
 
+## Changelog (IMPORTANT)
+
+Un fichier **`CHANGELOG.md`** est maintenu à la racine du dépôt. Il retrace les
+**évolutions majeures** du code (nouvelles fonctionnalités, changements
+d'architecture, modifications de base de données, ruptures de compatibilité) —
+**en français**, la plus récente en haut.
+
+- Après **tout changement majeur**, proposer à l'utilisateur de mettre à jour
+  `CHANGELOG.md` (lui demander avant de l'éditer).
+- Ne pas y consigner chaque commit : seulement ce qui mérite d'être retenu.
+- Format des dates : `AAAA-MM-JJ`.
+
+---
+
 ## Stack technique
 
 | Composant       | Technologie                         |
@@ -35,40 +49,43 @@ src/                        ← Racine Laravel
 │   │   ├── Controllers/
 │   │   │   ├── Api/
 │   │   │   │   └── SiteController.php   ← API JSON sites/scores/chart
-│   │   │   └── MapController.php        ← Vue carte
+│   │   │   ├── Admin/                   ← BackOffice (sites, balises, modèles,
+│   │   │   │   │                            APIs, users, sync, logs,
+│   │   │   │   │                            ArticleController, ModuleController…)
+│   │   │   ├── HomeController.php        ← Page d'accueil (articles)
+│   │   │   └── MapController.php         ← Vue carte
 │   │   └── Livewire/
 │   ├── Models/
-│   │   ├── Site.php
-│   │   ├── SiteCondition.php
-│   │   ├── WeatherModel.php
-│   │   ├── Forecast.php
-│   │   ├── SiteScore.php
-│   │   ├── Balise.php
-│   │   └── BaliseReading.php
+│   │   ├── Site.php, SiteCondition.php, WeatherModel.php, Forecast.php,
+│   │   ├── SiteScore.php, Balise.php, BaliseReading.php
+│   │   ├── Module.php                    ← Modules du menu (table `modules`)
+│   │   └── Article.php                   ← Articles / changelog accueil
+│   ├── Support/
+│   │   └── Navigation.php                ← Liste des modules visibles (navbar)
 │   ├── Services/
-│   │   └── Weather/
-│   │       ├── Apis/
-│   │       │   ├── OpenMeteoApi.php     ← Unique source météo (self-hosted)
-│   │       │   ├── WeatherApiInterface.php
-│   │       │   └── WeatherApiRegistry.php
-│   │       ├── ForecastFetcher.php      ← Orchestrateur (site, modèle)
-│   │       └── ScoringService.php       ← Voting logic + scores
+│   │   └── Weather/ …                    ← OpenMeteoApi, ForecastFetcher, ScoringService
 │   └── Jobs/
-│       ├── FetchForecastsJob.php        ← Orchestre par site
-│       └── FetchSiteForecastsJob.php    ← Fetch + score 1 site
+│       ├── FetchForecastsJob.php         ← Orchestre par site
+│       └── FetchSiteForecastsJob.php     ← Fetch + score 1 site
 ├── database/
-│   ├── migrations/                      ← 8 migrations (voir ci-dessous)
+│   ├── migrations/
 │   └── seeders/
-│       ├── WeatherModelSeeder.php       ← 10 modèles Open-Meteo
-│       ├── SiteSeeder.php               ← Volmerange EST
-│       └── GrandEstSitesSeeder.php      ← 13 sites Grand Est
+│       ├── ModuleSeeder.php              ← Modules du menu
+│       ├── WeatherModelSeeder.php, SiteSeeder.php, GrandEstSitesSeeder.php
 ├── resources/views/
-│   ├── layouts/app.blade.php
-│   └── map/
-│       └── index.blade.php              ← Vue principale carte (541 lignes)
+│   ├── components/
+│   │   └── app-shell.blade.php           ← Shell global <x-app-shell> (commun à tous les écrans)
+│   ├── partials/
+│   │   └── app-shell-navbar.blade.php    ← Barre de menu supérieure
+│   ├── layouts/
+│   │   ├── app.blade.php                 ← (legacy) layout de la vue carte
+│   │   └── admin.blade.php               ← BackOffice (utilise <x-app-shell>)
+│   ├── home.blade.php                    ← Page d'accueil (/)
+│   ├── admin/                            ← Vues BackOffice (articles/, modules/, sites/, …)
+│   └── map/index.blade.php               ← Vue carte (/carte)
 └── routes/
     ├── web.php
-    └── api.php                          ← 3 endpoints REST
+    └── api.php                           ← 3 endpoints REST
 ```
 
 ---
@@ -83,10 +100,13 @@ src/                        ← Racine Laravel
 | `sites`           | Sites de vol (nom, coords, altitude, niveau, région)    |
 | `site_conditions` | Conditions idéales par site (vent dir/vitesse, nuages)  |
 | `weather_models`  | 10 modèles météo avec poids short/medium                |
+| `weather_apis`    | Sources API météo (Open-Meteo…)                         |
 | `forecasts`       | Prévisions brutes Open-Meteo (nullable)                 |
 | `site_scores`     | Scores calculés par site/heure (green/orange/red)       |
 | `balises`         | Balises PiouPiou/FFVL                                   |
 | `balise_readings` | Lectures temps réel balises                             |
+| `modules`         | Modules du menu (key, label, icône, route, `is_active`, `access_level` guest\|user\|admin, `requires_registration`, `sort_order`) |
+| `articles`        | Articles / changelog accueil (titre, body HTML, `author_id`, `is_published`, `published_at`) |
 
 ### Colonnes clés `site_conditions`
 ```
@@ -130,6 +150,53 @@ GET /api/sites/{id}/chart   → Données horaires pour popup graphique
 - Début : lever du soleil − 30min → **floor** à l'heure (ex: 06:40 → 6h)
 - Fin   : coucher du soleil + 30min → **ceil** à l'heure (ex: 18:50 → 19h)
 - Calculé via `date_sunrise` / `date_sunset` PHP natif, timezone Europe/Paris
+
+---
+
+## Interface globale — shell `<x-app-shell>`
+
+Structure commune à (presque) tous les écrans, en **Tailwind + composants Blade** :
+
+- `resources/views/components/app-shell.blade.php` — composant `<x-app-shell>` :
+  `<head>`, **barre de menu supérieure**, panneau latéral **gauche « détail »**
+  (slot `detail`), zone centrale (`$slot`), panneau latéral **droit
+  « aide / légende / actions »** (slot `help`).
+- `resources/views/partials/app-shell-navbar.blade.php` — la navbar, incluse via
+  `@include` (partage le scope Alpine `leftOpen` / `rightOpen`). Liens des modules
+  filtrés par `App\Support\Navigation::modules()` (lecture de la table `modules`),
+  + formulaire de connexion en menu déroulant à droite.
+
+Props utiles de `<x-app-shell>` : `title`, `page-title`, `detail-title`,
+`help-title`, `:left-default` / `:right-default` (panneau ouvert d'emblée, desktop only).
+
+Exemple d'utilisation :
+```blade
+<x-app-shell title="Accueil" page-title="Accueil" help-title="Aide">
+    <x-slot:detail> … </x-slot:detail>   {{-- panneau gauche, optionnel --}}
+    <x-slot:help>   … </x-slot:help>      {{-- panneau droit, optionnel --}}
+    … contenu principal …
+</x-app-shell>
+```
+
+Notes :
+- Un slot latéral **vide** (ex. `<x-slot:detail>` rendu vide par un `@auth`) ne
+  fait pas apparaître le panneau ni son bouton (`<x-app-shell>` teste le contenu réel).
+- Ne **pas imbriquer** de composant anonyme dans un slot de `<x-app-shell>`
+  (provoque « Undefined variable $component ») — utiliser `@include`.
+- Les pages utilisant `<x-app-shell>` peuvent `@push('styles')` / `@push('scripts')`
+  (le shell expose `@stack('styles')` dans le `<head>` et `@stack('scripts')` avant `</body>`).
+- **Page d'accueil** (`/`, `HomeController`) : affiche les articles publiés
+  (`Article::published()`), du plus récent au plus ancien.
+- **BackOffice** (`layouts/admin.blade.php`) : repose sur `<x-app-shell>` ; la
+  navigation des sections admin est dans le panneau gauche, ouvert par défaut.
+  Une page admin peut alimenter le panneau droit via `@section('help')`.
+- **Modules** : éditables dans `/admin/modules` (actif, niveau de droit
+  `guest|user|admin`, compte obligatoire). Visibilité menu = `Module::isVisibleFor()`.
+  Un module sans `route_name` est affiché grisé (« non implémenté »).
+- **Articles** : éditeur WYSIWYG **TinyMCE** (CDN), upload d'images via
+  `POST /admin/articles/upload-image` → disque `public` (⇒ `php artisan storage:link`).
+- La **vue carte** (`/carte`) garde encore son ancien layout `layouts/app.blade.php`
+  (migration vers `<x-app-shell>` à faire).
 
 ---
 
@@ -316,7 +383,12 @@ docker logs parapente_worker -f
 6. **Horizon météo limité à 5 jours** — au-delà c'est de la divination.
 7. **Le scheduler** (`php artisan schedule:run`) est à configurer dans `routes/console.php`
    pour le fetch automatique toutes les heures (PENDING).
-8. **Authentification** non encore implémentée — Laravel Breeze prévu (admin/user).
+8. **Authentification front** non encore définie (l'admin a son login `AuthController`,
+   rôle admin) — Laravel Breeze prévu côté front (admin/user).
+9. **`CHANGELOG.md`** à la racine — proposer de le mettre à jour après chaque
+   changement majeur (voir la section *Changelog* en haut de ce fichier).
+10. **Shell global `<x-app-shell>`** — ne pas imbriquer de composant anonyme dans
+    ses slots (utiliser `@include`) ; un slot vide n'affiche pas le panneau.
 
 ---
 
