@@ -135,8 +135,10 @@ cloud_cover_low_max                 ← Couverture nuageuse basse max
 status                  ← green / orange / red / unknown
 confidence_pct          ← Pourcentage de confiance (0-100)
 wind_dir_consensus      ← Direction vent consensus (FROM direction, météo standard)
-wind_speed_consensus    ← Vitesse vent consensus
+wind_speed_consensus    ← Vitesse vent moyen consensus
+wind_gust_consensus     ← Rafales consensus (= consensus de wind_speed_max)
 precip_consensus        ← Précipitations consensus
+cloud_base_consensus    ← Plafond de vol estimé consensus (m ASL, règle d'Espy)
 models_count            ← Nombre de modèles ayant des données
 models_converging       ← Nombre de modèles convergents
 detail                  ← JSON détail du scoring
@@ -290,8 +292,21 @@ URL configurable via `OPEN_METEO_BASE_URL` dans `.env` :
 - Voting logic complète
 - Moyenne circulaire pour direction vent (évite le problème 359°/1°)
 - Moyenne inverse carré pour isoler les outliers
-- Règles éliminatoires : précip > 0 → rouge ; ≥1 modèle avec pluie → orange
+- Statut horaire (`site_scores.status`) — règles éliminatoires :
+  - rouge : précip consensus > `precip_max` ; rafale consensus > 35 km/h ;
+    direction ou vitesse moyenne hors plage du site
+  - orange : ≥1 modèle annonce de la pluie ; rafale consensus 25-35 km/h
+  - (la rafale = consensus de `wind_speed_max`, idem voting logic que le reste)
 - `upsert()` en masse
+
+> **Qualité d'une journée** — calculée à la lecture dans `SiteController::computeDayQuality`
+> (pas en base) : viabilité 0-100 = Σ(poids horaire × valeur du statut ×
+> facteur de continuité) / Σ(poids horaire) sur la fenêtre solaire. Le poids
+> horaire est une cloche centrée ~13h30 (créneaux du milieu de journée >
+> très tôt/tard) ; le facteur de continuité pénalise les créneaux volables
+> isolés (1 h → 40 %, ≥3 h consécutives → 100 %). Statut du jour dérivé :
+> ≥35 vert, ≥12 orange, sinon rouge. Exposé dans `/api/sites/{id}/scores`
+> (`day_quality`) et utilisé côté carte pour la couleur des marqueurs.
 
 ### Convention direction vent (IMPORTANT)
 `wind_dir_consensus` dans `site_scores` = direction **FROM** (convention météo standard).
@@ -315,6 +330,29 @@ Base de données équipements avec comparaison et notation communautaire.
 
 ### Balises PiouPiou/FFVL
 Intégration API temps réel pour validation des prévisions.
+
+---
+
+## À faire plus tard (backlog)
+
+- **Seuils de rafales par site** : pouvoir surcharger les valeurs limites de
+  rafales (orange/rouge) sur chaque fiche de site (`site_conditions`). Si la
+  fiche du site n'a pas de valeur → on prend les valeurs générales ; sinon →
+  celles du site.
+- **Écran « paramètres généraux » dans l'admin** : modifier les réglages
+  globaux (forme de la cloche horaire de viabilité — pic / sigma / seuils
+  vert/orange ; seuils génériques de rafales ; etc.) plutôt que de les avoir
+  en constantes dans le code.
+- **Onglet « détail du scoring »** dans le volet droit des sites : tableau
+  heure par heure des paramètres ayant servi au scoring (consensus & valeurs
+  par modèle, convergences, règle déclenchée, etc.).
+- **« Pseudo-wiki » technique** : page (publique ou admin) documentant en
+  détail le fonctionnement de l'appli — sources de données, modèles météo,
+  mode de calcul du scoring, voting logic, plafond/Espy, fenêtre solaire,
+  rétroaction/validation par balises, etc.
+- **Fonction « I am here »** sur la carte : poser un marqueur (position
+  saisie ou géoloc) et filtrer les sites situés à moins de X minutes de route
+  de ce point (calcul d'isochrone / temps de trajet).
 
 ---
 

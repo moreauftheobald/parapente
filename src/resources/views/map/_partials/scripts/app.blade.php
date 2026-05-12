@@ -3,7 +3,7 @@
 // en dernier (utilise toutes les fonctions/constantes définies avant).
 function mapApp(){return{
     map:null,tl:null,markers:{},
-    sites:[],allScores:{},sunWindows:{},
+    sites:[],allScores:{},sunWindows:{},dayQuality:{},
     days:[],selectedDayIdx:0,
     site:{},
     currentBasemap:'topo',basemapList:BASEMAP_LIST,
@@ -100,21 +100,27 @@ function mapApp(){return{
         this.buildDays();this.renderMarkers();
     },
     async loadSiteScores(id){
-        try{const r=await fetch(`/api/sites/${id}/scores`);const d=await r.json();this.allScores[id]=d.scores||[];this.sunWindows[id]=d.sun_windows||{};}
-        catch(e){this.allScores[id]=[];}
+        try{const r=await fetch(`/api/sites/${id}/scores`);const d=await r.json();this.allScores[id]=d.scores||[];this.sunWindows[id]=d.sun_windows||{};this.dayQuality[id]=d.day_quality||{};}
+        catch(e){this.allScores[id]=[];this.dayQuality[id]={};}
     },
 
     buildDays(){
         const m={};
         Object.values(this.allScores).flat().forEach(s=>{if(!m[s.day])m[s.day]=[];m[s.day].push(s);});
+        const rank={green:3,orange:2,red:1,unknown:0};
         this.days=Object.keys(m).slice(0,5).map(day=>{
-            const sl=m[day];
+            // meilleur statut "jour" parmi tous les sites (viabilité, pas heure-par-heure)
+            let best='unknown';
+            for(const site of this.sites){
+                const st=this.dayQuality[site.id]?.[day]?.status;
+                if(st && (rank[st]??0) > (rank[best]??0)) best=st;
+            }
             const gs=[...new Set(Object.values(this.allScores).flat().filter(s=>s.day===day&&s.status==='green').map(s=>s.hour))].length;
             const[d,mo]=day.split('/');
             const dt=new Date(new Date().getFullYear(),parseInt(mo)-1,parseInt(d));
             const now=new Date(),tom=new Date(now);tom.setDate(now.getDate()+1);
             const label=dt.toDateString()===now.toDateString()?'Aujourd\'hui':dt.toDateString()===tom.toDateString()?'Demain':DF[dt.getDay()]+' '+d+'/'+mo;
-            return{label,raw:day,bestStatus:sl.some(s=>s.status==='green')?'green':sl.some(s=>s.status==='orange')?'orange':'red',greenSlots:gs};
+            return{label,raw:day,bestStatus:best,greenSlots:gs};
         });
     },
     selectDay(idx){
@@ -137,11 +143,8 @@ function mapApp(){return{
     renderMarkers(){
         const day=this.days[this.selectedDayIdx]?.raw;
         this.sites.forEach(site=>{
-            const scores=(this.allScores[site.id]||[]).filter(s=>s.day===day);
-            let st='unknown';
-            if(scores.some(s=>s.status==='green'))st='green';
-            else if(scores.some(s=>s.status==='orange'))st='orange';
-            else if(scores.length>0)st='red';
+            // Statut du jour = qualité de la journée (viabilité : continuité + créneaux midi)
+            const st=this.dayQuality[site.id]?.[day]?.status ?? 'unknown';
 
             // Filtre d'affichage par statut météo
             if(!this._statusVisible(st)){

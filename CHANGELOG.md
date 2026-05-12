@@ -11,6 +11,76 @@ Conventions :
 
 ---
 
+## 2026-05-12 — Refonte de l'écran carte météo
+
+### Ajouté
+- **Volet gauche en onglets** « Paramètres » / « Légende », repliable en barre
+  étroite (☰). *Paramètres* : calque balises, affichage des sites par statut
+  (favorables / incertains / défavorables), sélecteur de fond de carte
+  (dropdown). *Légende* : pictogrammes des sites (halo de statut) et des
+  balises (couleur = force du vent, fond = fraîcheur du relevé).
+- **Volet droit « site »** : titre sur une ligne (nom · niveau · orientation
+  favorable · ☀ lever → coucher) + 3 onglets — « Synthèse · {jour} » (graphe
+  nuages + vent min/moy/max + flèches de direction, certitude de la prévision,
+  bargraph du plafond de vol min/consensus/max), « Modèles météo · {jour} » et
+  « Modèles · 5 jours » (6 graphes multi-modèles + consensus).
+- **Volet droit « balise »** : titre sur une ligne (nom · réseau · maj il y a …)
+  + onglet « Relevés météo » — dernier relevé synthétique (direction, vitesse,
+  rafales/min, temp/hum), rose des vents heure par heure, graphe vitesse du jour.
+- **Estimation du plafond de vol** (base des cumulus), heure par heure, en
+  altitude absolue (règle d'Espy : `elevation_modèle + 125 × (T₂ₘ_max_jour −
+  Td₂ₘ)`), avec consensus multi-modèles (même voting logic) — affiché en
+  bargraph (onglet Synthèse) et en courbes par modèle (onglets Modèles).
+- Sélecteur de jour flottant dans le coin haut-droite de la carte ; barre de
+  menu globale (`partials.app-shell-navbar`) sur l'écran carte ; clic sur un
+  marqueur → ouverture du volet droit (qui occupe la moitié de l'écran).
+
+### Modifié
+- **Scoring horaire** : prise en compte des **rafales** (consensus de
+  `wind_speed_max`) — > 35 km/h → rouge (éliminatoire), 25-35 → orange. Avant,
+  seules la direction et la vitesse moyenne entraient dans le statut.
+- **Couleur des marqueurs / sélecteur de jour** : basée sur une **qualité de
+  journée** (viabilité = continuité des créneaux volables × poids des créneaux
+  de milieu de journée, calculée à la lecture) au lieu de « une heure verte →
+  marqueur vert ».
+- **Plafond** : passage de la formule de Henning (point de rosée dérivé de
+  l'humidité, valeur AGL) à Espy avec `dew_point_2m` du modèle,
+  `temperature_2m_max` comme température de déclenchement, et l'élévation du
+  point de grille comme référence → valeur en altitude absolue (ASL).
+- Suppression de l'ancienne barre d'outils de la carte (le sélecteur de jour
+  passe en flottant) ; partials obsolètes supprimés (`map/_partials/html/
+  {popup-chart,balise-popup,panel}.blade.php`, `styles/popup`, `html/
+  {toolbar,legend}`).
+
+### Corrigé
+- **Convention de cap de vent des balises** : OpenWindMap (PiouPiou) renvoie
+  `wind_heading` en convention TO (direction *vers laquelle* souffle le vent) ;
+  `PiouPiouProvider` la normalise désormais en convention FROM (météo standard,
+  contrat de `BaliseProviderInterface`), et `baliseIconUrl` transmet la valeur
+  telle quelle à SpotAir. Corrige l'incohérence rose des vents ↔ icône carte.
+- Unité du plafond dans les tooltips des graphes (« m » au lieu de « km/h »).
+
+### Base de données
+- `site_scores.cloud_base_consensus` (plafond de vol consensus, m ASL,
+  nullable).
+
+### API / Météo
+- `OpenMeteoApi` requête en plus `dew_point_2m` (hourly) et `temperature_2m_max`
+  (daily).
+- `/api/sites/{id}/scores` expose `day_quality` (viabilité + statut par jour) ;
+  `/api/sites/{id}/chart` expose `cloud_base`, `cloud_base_min/max` par heure ;
+  `/api/sites/{id}/multimodel` expose `cloud_base` par modèle + dans le consensus.
+
+### Déploiement
+- `php artisan migrate --force` (colonne `cloud_base_consensus`).
+- Re-fetch + re-scoring des sites actifs (formule plafond, normalisation cap
+  balises, seuil rafales) : `Site::active()->get()->each(fn($s) =>
+  FetchSiteForecastsJob::dispatchSync($s->id))`.
+- `php artisan optimize:clear` (vues Blade).
+- Le scheduler relance le fetch horaire automatiquement ensuite.
+
+---
+
 ## 2026-05-12 — Interface globale, articles & modules
 
 ### Ajouté

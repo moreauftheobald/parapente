@@ -19,6 +19,11 @@ class ScoringService
     private const PRECIP_RAIN_THRESHOLD    = 0.1;   // mm/h — en dessous = "pas de pluie"
     private const EPSILON                  = 0.001; // évite division par zéro
 
+    // Seuils de rafale (km/h) sur le consensus de wind_speed_max :
+    //   < 25 → OK | 25-35 → orange (prudence) | > 35 → rouge (éliminatoire)
+    private const GUST_ORANGE_KMH          = 25;
+    private const GUST_RED_KMH             = 35;
+
     /**
      * Calcule et persiste les scores pour tous les créneaux d'un site.
      */
@@ -109,6 +114,7 @@ class ScoringService
             $conditions,
             $windDirConsensus,
             $windSpeedConsensus,
+            $windGustConsensus,
             $precipConsensus,
             $precipConvergence,
             $modelForecasts
@@ -183,12 +189,18 @@ class ScoringService
         $conditions,
         float $windDir,
         float $windSpeed,
+        float $windGust,
         float $precip,
         float $precipConvergence,
         Collection $modelForecasts
     ): string {
-        // Pluie consensus : toujours rouge
+        // ── Rouges (éliminatoires) ──────────────────────────────
+        // Pluie consensus
         if ($precip > $conditions->precip_max) {
+            return 'red';
+        }
+        // Rafales trop fortes
+        if ($windGust > self::GUST_RED_KMH) {
             return 'red';
         }
 
@@ -205,9 +217,14 @@ class ScoringService
             return 'red';
         }
 
-        // Vitesse hors plage : rouge
+        // Vitesse moyenne hors plage : rouge
         if (! $conditions->isWindSpeedFavorable($windSpeed)) {
             return 'red';
+        }
+
+        // Rafales modérées (25-35 km/h) : orange (prudence)
+        if ($windGust >= self::GUST_ORANGE_KMH) {
+            return 'orange';
         }
 
         // Tout est OK

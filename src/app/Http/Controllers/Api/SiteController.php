@@ -39,15 +39,19 @@ class SiteController extends Controller
         $grouped = $allScores->groupBy(fn ($s) => $s->forecast_at->format('d/m'));
         $scores = collect();
         $sunWindows = [];
+        $dayQuality = [];
         foreach ($grouped as $day => $dayScores) {
             $window = $this->getSunWindow((float) $site->latitude, (float) $site->longitude, $day);
             $sunWindows[$day] = $window;
+            $byHour = [];
             foreach ($dayScores as $score) {
                 $h = (int) $score->forecast_at->format('G');
                 if ($h >= $window['start_hour'] && $h <= $window['end_hour']) {
                     $scores->push($score);
+                    $byHour[$h] = $score->status;
                 }
             }
+            $dayQuality[$day] = $this->computeDayQuality($byHour, $window);
         }
         return response()->json([
             'site'        => ['id' => $site->id, 'name' => $site->name, 'altitude' => $site->altitude_m, 'level' => $site->level],
@@ -64,6 +68,7 @@ class SiteController extends Controller
                 'models_conv'  => $s->models_converging,
             ])->values(),
             'sun_windows' => $sunWindows,
+            'day_quality' => $dayQuality,
         ]);
     }
 
@@ -272,6 +277,81 @@ class SiteController extends Controller
     }
 
     // ── Helpers ──────────────────────────────────────────────
+
+    // Viabilité d'une journée : on pondère chaque heure de la fenêtre
+    // solaire par (poids horaire × valeur du statut × facteur de
+    // continuité). Réglages :
+    private const VIA_PEAK_HOUR        = 13.5; // heure de poids horaire maximal
+    private const VIA_SIGMA            = 4.0;  // largeur de la cloche horaire (h)
+    private const VIA_VAL_GREEN        = 1.0;
+    private const VIA_VAL_ORANGE       = 0.40;
+    private const VIA_RUN_BASE         = 0.40; // contribution d'un créneau volable isolé (1 h)
+    private const VIA_RUN_STEP         = 0.30; // gain par heure consécutive supplémentaire (plafonné à 1.0 → run ≥ 3 h)
+    private const VIA_GREEN_THRESHOLD  = 35;   // viabilité ≥ → jour "vert"
+    private const VIA_ORANGE_THRESHOLD = 12;   // viabilité ≥ → jour "orange"
+
+    /**
+     * Calcule la qualité d'une journée (viabilité 0-100 + statut dérivé)
+     * à partir des statuts horaires dans la fenêtre solaire.
+     *
+     * @param  array<int,string> $byHour  heure (0-23) => 'green'|'orange'|'red'
+     * @param  array{start_hour:int,end_hour:int} $window
+     * @return array{viability:int,status:string,green_hours:int}
+     */
+    private function computeDayQuality(array $byHour, array $window): array
+    {
+        $start = (int) $window['start_hour'];
+        $end   = (int) $window['end_hour'];
+        if ($end < $start) {
+            return ['viability' => 0, 'status' => 'unknown', 'green_hours' => 0];
+        }
+
+        $timeWeight = fn (int $h): float => exp(-(($h - self::VIA_PEAK_HOUR) ** 2) / (2 * self::VIA_SIGMA ** 2));
+        $statusVal  = fn (?string $s): float => match ($s) {
+            'green'  => self::VIA_VAL_GREEN,
+            'orange' => self::VIA_VAL_ORANGE,
+            default  => 0.0,
+        };
+
+        // Longueur du run de créneaux "volables" (green|orange) auquel appartient chaque heure.
+        $runLen = [];
+        for ($h = $start; $h <= $end; $h++) {
+            $flyable = in_array($byHour[$h] ?? null, ['green', 'orange'], true);
+            $runLen[$h] = $flyable ? (($runLen[$h - 1] ?? 0) + 1) : 0;
+        }
+        for ($h = $end - 1; $h >= $start; $h--) {
+            if ($runLen[$h] > 0 && ($runLen[$h + 1] ?? 0) > $runLen[$h]) {
+                $runLen[$h] = $runLen[$h + 1];
+            }
+        }
+        $runFactor = fn (int $len): float => $len <= 0 ? 0.0 : min(1.0, self::VIA_RUN_BASE + self::VIA_RUN_STEP * ($len - 1));
+
+        $num = 0.0;
+        $den = 0.0;
+        $greenHours = 0;
+        $hasData = false;
+        for ($h = $start; $h <= $end; $h++) {
+            $w = $timeWeight($h);
+            $den += $w;
+            $st = $byHour[$h] ?? null;
+            if ($st !== null) {
+                $hasData = true;
+            }
+            if ($st === 'green') {
+                $greenHours++;
+            }
+            $num += $w * $statusVal($st) * $runFactor($runLen[$h]);
+        }
+
+        $viability = $den > 0.0 ? (int) round(100 * $num / $den) : 0;
+        $status = ! $hasData
+            ? 'unknown'
+            : ($viability >= self::VIA_GREEN_THRESHOLD
+                ? 'green'
+                : ($viability >= self::VIA_ORANGE_THRESHOLD ? 'orange' : 'red'));
+
+        return ['viability' => $viability, 'status' => $status, 'green_hours' => $greenHours];
+    }
 
     /**
      * Couleurs des 10 modèles météo (palette HCL distincte).
