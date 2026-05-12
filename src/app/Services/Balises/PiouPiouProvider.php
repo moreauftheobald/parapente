@@ -18,8 +18,10 @@ use Illuminate\Support\Facades\Log;
  * - GET /v1/live-with-meta/all    : toutes stations + métadonnées
  *                                   (nom, description, photo, rating)
  *
- * Variables fournies : direction (FROM), vitesse min/avg/max sur 4 min
- * glissantes. Ni température ni humidité ni pression.
+ * Variables fournies : direction du vent (`wind_heading` — convention
+ * TO, c.-à-d. la direction VERS LAQUELLE souffle le vent ; convertie en
+ * convention FROM ci-dessous), vitesse min/avg/max sur 4 min glissantes.
+ * Ni température ni humidité ni pression.
  *
  * Rate limit imposé par la doc : ne pas appeler 'all' plus d'une fois
  * par minute. Le polling à 10 min reste largement sous le seuil.
@@ -28,6 +30,14 @@ class PiouPiouProvider implements BaliseProviderInterface
 {
     private const BASE_URL  = 'https://api.pioupiou.fr/v1';
     private const TIMEOUT_S = 30;
+
+    /**
+     * Convention de cap de vent du réseau.
+     * OpenWindMap renvoie `wind_heading` = direction VERS LAQUELLE souffle
+     * le vent (TO). Le contrat de BaliseProviderInterface impose la
+     * convention FROM (météo standard) → on ajoute 180° à l'ingestion.
+     */
+    private const WIND_HEADING_IS_TOWARD = true;
 
     /** Au-delà, on considère que la station n'a pas émis récemment et on ne la retient pas à la découverte */
     private const DISCOVERY_FRESHNESS_HOURS = 24;
@@ -130,7 +140,7 @@ class PiouPiouProvider implements BaliseProviderInterface
 
             $result[$extId] = [
                 'read_at'        => $readAt,
-                'wind_direction' => isset($m['wind_heading']) ? (int) round((float) $m['wind_heading']) : null,
+                'wind_direction' => $this->windDirectionFrom($m['wind_heading'] ?? null),
                 'wind_speed_avg' => isset($m['wind_speed_avg']) ? (float) $m['wind_speed_avg'] : null,
                 'wind_speed_min' => isset($m['wind_speed_min']) ? (float) $m['wind_speed_min'] : null,
                 'wind_speed_max' => isset($m['wind_speed_max']) ? (float) $m['wind_speed_max'] : null,
@@ -140,5 +150,22 @@ class PiouPiouProvider implements BaliseProviderInterface
         }
 
         return $result;
+    }
+
+    /**
+     * Normalise un cap de vent du réseau en convention FROM (0-359).
+     * Si le réseau exprime la direction VERS LAQUELLE souffle le vent
+     * (WIND_HEADING_IS_TOWARD), on ajoute 180°.
+     */
+    private function windDirectionFrom(mixed $heading): ?int
+    {
+        if ($heading === null || $heading === '') {
+            return null;
+        }
+        $d = ((int) round((float) $heading)) % 360;
+        if (self::WIND_HEADING_IS_TOWARD) {
+            $d += 180;
+        }
+        return (($d % 360) + 360) % 360;
     }
 }

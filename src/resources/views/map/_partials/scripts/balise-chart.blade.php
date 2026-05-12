@@ -28,10 +28,11 @@ function buildBaliseRoseSVG(data) {
     const readings = (data?.readings ?? []).filter(r => r.wind_direction != null);
     if (!readings.length) return;
 
-    const SIZE = 200;
+    const SIZE = 320;
+    svg.setAttribute('viewBox', `0 0 ${SIZE} ${SIZE}`);
     const cx = SIZE / 2, cy = SIZE / 2;
-    const R = 76;       // rayon de l'anneau extérieur (= vitesse max)
-    const RLAB = 92;    // rayon des labels cardinaux
+    const R = 122;      // rayon de l'anneau extérieur (= vitesse max)
+    const RLAB = 146;   // rayon des labels cardinaux
 
     // Échelle vitesse → rayon
     let vmax = 0;
@@ -88,16 +89,16 @@ function buildBaliseRoseSVG(data) {
         mk('line', {
             x1: pts[i - 1][0].toFixed(1), y1: pts[i - 1][1].toFixed(1),
             x2: pts[i][0].toFixed(1), y2: pts[i][1].toFixed(1),
-            stroke: baliseHourColor(i, N), 'stroke-width': 1.6, 'stroke-opacity': .8, 'stroke-linecap': 'round',
+            stroke: baliseHourColor(i, N), 'stroke-width': 2.2, 'stroke-opacity': .8, 'stroke-linecap': 'round',
         });
     }
     // Points
     readings.forEach((r, i) => {
-        mk('circle', { cx: pts[i][0].toFixed(1), cy: pts[i][1].toFixed(1), r: 2, fill: baliseHourColor(i, N) });
+        mk('circle', { cx: pts[i][0].toFixed(1), cy: pts[i][1].toFixed(1), r: 2.8, fill: baliseHourColor(i, N) });
     });
     // Dernier relevé : point plus gros, liseré blanc
     const last = pts[N - 1];
-    mk('circle', { cx: last[0].toFixed(1), cy: last[1].toFixed(1), r: 3.6, fill: baliseHourColor(N - 1, N), stroke: '#fff', 'stroke-width': 1 });
+    mk('circle', { cx: last[0].toFixed(1), cy: last[1].toFixed(1), r: 5, fill: baliseHourColor(N - 1, N), stroke: '#fff', 'stroke-width': 1.4 });
 
     // Calque de surbrillance (rayon piloté par le survol du graphe vitesse)
     mk('g', { id: 'rose-hl' });
@@ -126,8 +127,8 @@ function highlightBaliseRoseAt(reading) {
         g.appendChild(e);
         return e;
     };
-    add('line', { x1: cx, y1: cy, x2: px.toFixed(1), y2: py.toFixed(1), stroke: '#fff', 'stroke-width': 2.4, 'stroke-linecap': 'round' });
-    add('circle', { cx: px.toFixed(1), cy: py.toFixed(1), r: 4, fill: '#fff' });
+    add('line', { x1: cx, y1: cy, x2: px.toFixed(1), y2: py.toFixed(1), stroke: '#fff', 'stroke-width': 3, 'stroke-linecap': 'round' });
+    add('circle', { cx: px.toFixed(1), cy: py.toFixed(1), r: 5.5, fill: '#fff' });
 
     const compass = (typeof degToCompass === 'function') ? degToCompass(reading.wind_direction) : '';
     const label   = `${reading.time ?? ''} · ${Math.round(reading.wind_speed_avg ?? 0)} km/h · ${compass}`;
@@ -185,7 +186,7 @@ function buildBaliseChartSVG(data) {
     [0, Math.round(ymax / 2), ymax].forEach(v => {
         const y = yScale(v);
         mk('line', { x1: PAD_L, y1: y, x2: W - PAD_R, y2: y, stroke: '#1f2937', 'stroke-width': 1 });
-        txt(PAD_L - 4, y + 3, v, 9, '#9ca3af', 'end');
+        txt(PAD_L - 4, y + 3, v, 6.5, '#9ca3af', 'end');
     });
 
     // ── Grille X (heures rondes) ─────────────────────────────
@@ -196,7 +197,7 @@ function buildBaliseChartSVG(data) {
         if (h % stepH !== 0) continue;
         const x = xScale(h * 60);
         mk('line', { x1: x, y1: PAD_T, x2: x, y2: baseY, stroke: '#1a2433', 'stroke-width': 1 });
-        txt(x, baseY + 13, String(h).padStart(2, '0') + 'h', 9, '#9ca3af', 'middle');
+        txt(x, baseY + 13, String(h).padStart(2, '0') + 'h', 6.5, '#9ca3af', 'middle');
     }
     mk('line', { x1: PAD_L, y1: baseY, x2: W - PAD_R, y2: baseY, stroke: '#374151', 'stroke-width': 1 });
 

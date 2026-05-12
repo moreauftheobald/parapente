@@ -81,6 +81,16 @@
         .rp-summary { display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:14px 18px 4px; }
         .rp-range { font-size:13px; font-weight:500; color:#e5e7eb; }
 
+        /* Volet balise — bloc rose des vents en 3 colonnes :
+           dernier relevé · cadran · légende.
+           (mise en page en classe et non en style inline car Alpine x-show
+           écrase un `display` inline en repassant l'élément en block) */
+        .rp-balise-rose { display:flex; align-items:center; gap:18px; flex-wrap:nowrap; padding:12px 18px; }
+        .rp-balise-now  { flex:0 0 138px; }
+        .rp-balise-dial { flex:1 1 280px; min-width:0; }
+        .rp-balise-dial svg { display:block; width:100%; height:auto; overflow:visible; }
+        .rp-balise-leg  { flex:0 1 230px; min-width:0; font-size:12px; color:#9ca3af; line-height:1.6; }
+
         /* Sélecteur de jour flottant + contrôles de zoom Leaflet (haut-droite de la carte) */
         #day-selector { position:absolute; top:10px; right:10px; z-index:1000; }
         .leaflet-top.leaflet-right .leaflet-control-zoom { margin-top:60px; }

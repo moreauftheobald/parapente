@@ -2,14 +2,15 @@
 // URL doc : https://www.spotair.mobi/help/api.php#icon_balise
 //
 // Paramètres :
-//   d=  direction "où va le vent" (convention TO, pas FROM)
+//   d=  direction du vent en convention FROM (d'où vient le vent)
 //   v=  vitesse moyenne affichée (km/h, entier)
 //   t=  tendance {-2..+2} pré-calculée par le backend
 //   bg= statut : w=actif | l=relevé en retard | d=inactif
 //   c=  couleur : g=vert (5-20) | b=bleu (<5) | o=orange (>20)
 //
-// PiouPiou stocke en convention FROM (météo standard) ; SpotAir
-// attend la convention TO → on ajoute 180° à l'affichage.
+// reading.wind_direction est toujours en convention FROM (les providers
+// normalisent à l'ingestion — cf. PiouPiouProvider::windDirectionFrom),
+// on le transmet donc tel quel au paramètre d=.
 
 const SPOTAIR_BALISE_URL = 'https://www.spotair.mobi/icones/balises/balise.svg.php';
 
@@ -37,9 +38,7 @@ function baliseIconUrl(reading) {
     if (!reading) return `${SPOTAIR_BALISE_URL}?bg=d&c=g&v=0&d=0&t=0`;
 
     const v  = reading.wind_speed_avg !== null ? Math.round(reading.wind_speed_avg) : 0;
-    const d  = reading.wind_direction !== null
-        ? ((reading.wind_direction + 180) % 360)
-        : 0;
+    const d  = reading.wind_direction !== null ? (((reading.wind_direction % 360) + 360) % 360) : 0;
     const t  = reading.trend ?? 0;
     const c  = baliseIconColor(reading.wind_speed_avg);
     const bg = baliseIconBg(reading.read_at);

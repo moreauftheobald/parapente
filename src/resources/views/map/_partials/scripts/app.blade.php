@@ -25,6 +25,8 @@ function mapApp(){return{
     // Balises météo (PiouPiou — phase 1.1)
     balises:[], balisesVisible:true,
     _balisesLayer:null, _balisesMarkers:{}, _balisesTimer:null,
+    // Volet droit (balise) : relevés + historique du jour
+    baliseData:null, baliseLoading:false, _baliseObj:null,
 
     // Configuration des graphes exposée pour le template
     CHART_CONFIGS,
@@ -37,10 +39,14 @@ function mapApp(){return{
         this._balisesTimer = setInterval(() => this.loadBalises(), 5 * 60 * 1000);
         // Re-rendu des graphes du volet droit sur redimensionnement
         window.addEventListener('resize', () => {
-            if (!this.rightPanelOpen || this.selectedFeature?.type !== 'site') return;
-            if (this.rpTab === 'synthese' && this.chartData)       this.renderSynthese();
-            if (this.rpTab === 'models'   && this.multimodelData)  this.renderCharts();
-            if (this.rpTab === 'models5'  && this.multimodel5Data) this.renderCharts5();
+            if (!this.rightPanelOpen) return;
+            if (this.selectedFeature?.type === 'site') {
+                if (this.rpTab === 'synthese' && this.chartData)       this.renderSynthese();
+                if (this.rpTab === 'models'   && this.multimodelData)  this.renderCharts();
+                if (this.rpTab === 'models5'  && this.multimodel5Data) this.renderCharts5();
+            } else if (this.selectedFeature?.type === 'balise' && this.baliseData) {
+                this.renderBaliseCharts();
+            }
         });
     },
 
@@ -83,6 +89,7 @@ function mapApp(){return{
         this.selectedFeature=null;
         this.chartData=null; this.chartSite=null;
         this.multimodelData=null; this.multimodel5Data=null;
+        this.baliseData=null; this._baliseObj=null;
         Object.values(this.markers).forEach(m=>m.getElement()?.querySelector('.pg-site-marker')?.classList.remove('selected'));
         setTimeout(()=>this.map?.invalidateSize(),380);
     },
@@ -398,14 +405,52 @@ function mapApp(){return{
         else this.map.removeLayer(this._balisesLayer);
     },
 
-    // ── Clic sur une balise → volet droit (design détaillé à venir) ──
+    // ── Clic sur une balise → volet droit (relevés + historique du jour) ──
     clickBalise(id, markerEl){
         const b=this.balises.find(x=>x.id===id);
         if(!b) return;
         Object.values(this.markers).forEach(m=>m.getElement()?.querySelector('.pg-site-marker')?.classList.remove('selected'));
         this.site={};
+        this._baliseObj=b;
         this.selectedFeature={type:'balise', ...b};
         this.chartData=null; this.multimodelData=null; this.multimodel5Data=null;
+        this.baliseData=null;
         this.openRightPanel();
+        this.loadBaliseHistory(id);
+    },
+    async loadBaliseHistory(id){
+        this.baliseLoading=true;
+        try{
+            const res=await fetch(`/api/balises/${id}/history`);
+            this.baliseData=await res.json();
+        }catch(e){console.error('balise history failed',e);}
+        this.baliseLoading=false;
+        this.$nextTick(()=>this.renderBaliseCharts());
+    },
+    renderBaliseCharts(){
+        if(!this.baliseData) return;
+        buildBaliseRoseSVG(this.baliseData);
+        buildBaliseChartSVG(this.baliseData);
+    },
+    baliseFreshness(){
+        const iso=this.baliseData?.latest?.read_at ?? this._baliseObj?.reading?.read_at;
+        if(!iso) return 'aucune lecture';
+        const ageMin=Math.round((Date.now()-new Date(iso).getTime())/60000);
+        if(ageMin<1)  return "à l'instant";
+        if(ageMin<60) return `il y a ${ageMin} min`;
+        return `il y a ${Math.round(ageMin/60)} h`;
+    },
+    baliseTrendArrow(){
+        const t=this._baliseObj?.reading?.trend ?? 0;
+        return ['↓↓','↓','→','↑','↑↑'][t+2] ?? '→';
+    },
+    baliseTrendColor(){
+        const t=this._baliseObj?.reading?.trend ?? 0;
+        if(t>=1)  return '#fb923c';
+        if(t<=-1) return '#60a5fa';
+        return '#9ca3af';
+    },
+    get baliseReseauLabel(){
+        return (this.baliseData?.balise?.source ?? this.selectedFeature?.source ?? '').toUpperCase();
     },
 };}

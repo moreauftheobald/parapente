@@ -155,18 +155,127 @@
                     </div>
                 </template>
 
-                {{-- ═══════════ BALISE (design détaillé à venir) ═══════════ --}}
+                {{-- ═══════════ BALISE ═══════════ --}}
                 <template x-if="selectedFeature?.type === 'balise'">
                     <div class="rp-wrap">
+
+                        {{-- Titre sur une seule ligne : Nom · Réseau · maj … --}}
                         <div class="rp-head">
                             <div class="rp-headline">
-                                <span class="rp-kind">Balise météo</span>
                                 <span class="rp-name" x-text="selectedFeature?.name ?? ''"></span>
+                                <template x-if="baliseReseauLabel">
+                                    <span class="rp-meta"><span class="rp-dot">·</span><span x-text="baliseReseauLabel"></span></span>
+                                </template>
+                                <template x-if="baliseData?.balise?.altitude_m">
+                                    <span class="rp-meta"><span class="rp-dot">·</span><span class="mono" x-text="baliseData.balise.altitude_m + ' m'"></span></span>
+                                </template>
+                                <span class="rp-meta"><span class="rp-dot">·</span><span>maj <span x-text="baliseFreshness()"></span></span></span>
                             </div>
                             <button class="rp-close" @click="closeRightPanel()" title="Fermer">✕</button>
                         </div>
-                        <div class="rp-pane"><div class="rp-placeholder">Contenu détaillé à définir ultérieurement.</div></div>
+
+                        {{-- Onglets (un seul pour l'instant) --}}
+                        <div class="rp-tabs">
+                            <button class="rp-tab active">Relevés météo</button>
+                        </div>
+
+                        {{-- ── Onglet « Relevés météo » (ancienne popup balise) ── --}}
+                        <div class="rp-pane rp-pane-scroll">
+                            <div x-show="baliseLoading" class="rp-loader"><div class="rp-spinner"></div></div>
+
+                            <template x-if="!baliseLoading && baliseData">
+                                <div>
+                                    {{-- Pas de relevé du jour : message simple --}}
+                                    <template x-if="!baliseData.readings || !baliseData.readings.length">
+                                        <div style="padding:24px 18px;color:#9ca3af;font-size:13px;">Aucun relevé du jour pour cette balise.</div>
+                                    </template>
+
+                                    {{-- 3 colonnes : dernier relevé · rose des vents · légende --}}
+                                    <div x-show="baliseData.readings && baliseData.readings.length" class="rp-balise-rose">
+
+                                        {{-- Col 1 : dernier relevé (synthétique) --}}
+                                        <div class="rp-balise-now">
+                                            <template x-if="baliseData.latest">
+                                                <div style="display:flex;flex-direction:column;align-items:center;">
+                                                    <svg width="62" height="62" viewBox="-22 -22 44 44" style="overflow:visible;">
+                                                        <circle r="20" fill="none" stroke="#374151" stroke-width="1.4"/>
+                                                        <g x-show="baliseData.latest.wind_direction !== null"
+                                                           :transform="`rotate(${((baliseData.latest.wind_direction ?? 0) + 180) % 360})`">
+                                                            <polygon points="0,-15 7,7 0,2 -7,7" fill="#38bdf8"/>
+                                                        </g>
+                                                    </svg>
+                                                    <span style="font-family:'DM Mono',monospace;font-size:11px;color:#cbd5e1;margin-top:2px;"
+                                                          x-text="baliseData.latest.wind_direction !== null ? (Math.round(baliseData.latest.wind_direction) + '° ' + degToCompass(baliseData.latest.wind_direction)) : '—'"></span>
+                                                    <div style="margin-top:12px;display:flex;align-items:baseline;gap:5px;">
+                                                        <span style="font-size:26px;font-weight:600;color:#fff;font-family:'DM Mono',monospace;line-height:1;"
+                                                              x-text="baliseData.latest.wind_speed_avg !== null ? baliseData.latest.wind_speed_avg.toFixed(1) : '—'"></span>
+                                                        <span style="font-size:11px;color:#9ca3af;">km/h</span>
+                                                        <span x-text="baliseTrendArrow()" :style="`font-size:14px;color:${baliseTrendColor()};`"></span>
+                                                    </div>
+                                                    <div style="font-family:'DM Mono',monospace;font-size:11px;color:#9ca3af;margin-top:2px;">
+                                                        rafales <span x-text="baliseData.latest.wind_speed_max !== null ? Math.round(baliseData.latest.wind_speed_max) : '—'"></span>
+                                                        · min <span x-text="baliseData.latest.wind_speed_min !== null ? Math.round(baliseData.latest.wind_speed_min) : '—'"></span>
+                                                    </div>
+                                                    <div style="font-family:'DM Mono',monospace;font-size:11px;color:#cbd5e1;margin-top:10px;line-height:1.6;text-align:center;">
+                                                        <template x-if="baliseData.latest.temperature !== null">
+                                                            <div><span style="color:#9ca3af;">temp.</span> <span x-text="baliseData.latest.temperature.toFixed(1) + '°C'"></span></div>
+                                                        </template>
+                                                        <template x-if="baliseData.latest.humidity !== null">
+                                                            <div><span style="color:#9ca3af;">hum.</span> <span x-text="baliseData.latest.humidity + '%'"></span></div>
+                                                        </template>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                            <template x-if="!baliseData.latest">
+                                                <div style="color:#6b7280;font-size:12px;text-align:center;">pas de relevé récent</div>
+                                            </template>
+                                        </div>
+
+                                        {{-- Col 2 : rose des vents heure par heure --}}
+                                        <div class="rp-balise-dial">
+                                            <svg id="balise-rose-svg" viewBox="0 0 320 320" style="display:block;overflow:visible;"></svg>
+                                        </div>
+
+                                        {{-- Col 3 : légende --}}
+                                        <div class="rp-balise-leg">
+                                            <div style="color:#e5e7eb;font-size:13px;margin-bottom:4px;">Direction du vent — heure par heure</div>
+                                            <div>Angle = direction d'où vient le vent</div>
+                                            <div>Rayon = vitesse moyenne (km/h)</div>
+                                            <div style="margin-top:8px;display:flex;align-items:center;gap:6px;">
+                                                <span>matin</span>
+                                                <span style="display:inline-block;width:60px;height:8px;border-radius:4px;background:linear-gradient(90deg,#38bdf8,#f59e0b);"></span>
+                                                <span>soir</span>
+                                            </div>
+                                            <div style="margin-top:3px;">● blanc = dernier relevé</div>
+                                            <div style="margin-top:8px;">
+                                                <span style="color:#f97316;">▮</span> rafales&nbsp;&nbsp;<span style="color:#22c55e;">▬</span> moyen&nbsp;&nbsp;<span style="color:#3b82f6;">▬</span> min
+                                            </div>
+                                            <div style="margin-top:3px;color:#6b7280;">Survolez le graphe ↓ pour pointer une heure</div>
+                                        </div>
+                                    </div>
+
+                                    {{-- Graphe vitesse du jour --}}
+                                    <div x-show="baliseData.readings && baliseData.readings.length" style="padding:4px 18px 8px;">
+                                        <div style="font-size:13px;color:#e5e7eb;margin-bottom:4px;"
+                                             x-text="baliseData.fallback ? 'Vitesse — dernières 24 h' : 'Vitesse — relevés du jour'"></div>
+                                        <svg id="balise-chart-svg" width="640" height="200" viewBox="0 0 440 140"
+                                             style="display:block;width:100%;height:auto;overflow:visible;"></svg>
+                                    </div>
+
+                                    {{-- Pied --}}
+                                    <div style="padding:10px 18px;border-top:1px solid rgba(55,65,81,.4);font-size:12px;color:#9ca3af;">
+                                        <span x-text="(baliseData.readings?.length ?? 0) + (baliseData.fallback ? ' relevé(s) sur 24 h' : ' relevé(s) aujourd\'hui')"></span>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <template x-if="!baliseLoading && !baliseData">
+                                <div class="rp-placeholder">Données indisponibles pour cette balise.</div>
+                            </template>
+                        </div>
+
                     </div>
                 </template>
+
 
             </div>
