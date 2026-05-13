@@ -60,7 +60,21 @@
 
                         <div class="lp-section">
                             <div class="lp-title">Filtres</div>
-                            <div class="lp-note">D'autres options de filtrage arriveront ici.</div>
+                            <template x-if="authUser">
+                                <button class="lp-toggle" :class="onlyMyScorings ? 'is-on' : ''"
+                                        @click="toggleOnlyMyScorings()"
+                                        title="Afficher seulement les sites sur lesquels j'ai un scoring perso (actif ou non).">
+                                    <span class="dot dot-mine"></span>
+                                    <span class="lp-lbl">Mes sites uniquement</span>
+                                    <span class="lp-switch"></span>
+                                </button>
+                            </template>
+                            <template x-if="!authUser">
+                                <div class="lp-note">
+                                    <a href="{{ route('login') }}" style="color:#60a5fa;text-decoration:underline;">Connecte-toi</a>
+                                    pour activer le filtre « Mes sites ».
+                                </div>
+                            </template>
                         </div>
 
                     </div>
@@ -90,6 +104,33 @@
                             </div>
                             <div class="lp-note">Le bouclier indique le niveau recommandé du site et ses orientations de vent favorables ; le halo coloré reflète la météo du jour sélectionné.</div>
                         </div>
+
+                        <template x-if="authUser">
+                            <div class="lp-section">
+                                <div class="lp-title">Badges scoring perso</div>
+                                <div class="lp-legend-icons">
+                                    <div class="lp-li">
+                                        <span class="lp-icon-ex" style="position:relative;">
+                                            <span class="pg-site-marker pg-status-unknown">
+                                                <img src="https://www.spotair.mobi/icones/spots/spot.svg.php?p=1&amp;t=1" alt="">
+                                                <span class="pg-user-badge pg-user-badge-active"></span>
+                                            </span>
+                                        </span>
+                                        <span>Scoring perso actif sur ce site</span>
+                                    </div>
+                                    <div class="lp-li">
+                                        <span class="lp-icon-ex" style="position:relative;">
+                                            <span class="pg-site-marker pg-status-unknown">
+                                                <img src="https://www.spotair.mobi/icones/spots/spot.svg.php?p=1&amp;t=1" alt="">
+                                                <span class="pg-user-badge pg-user-badge-inactive"></span>
+                                            </span>
+                                        </span>
+                                        <span>Scoring perso enregistré (inactif)</span>
+                                    </div>
+                                </div>
+                                <div class="lp-note">Quand un scoring perso est actif, le halo et le détail du scoring reflètent <strong>tes</strong> conditions au lieu des conditions standard du site.</div>
+                            </div>
+                        </template>
 
                         <div class="lp-section">
                             <div class="lp-title">Balises météo — vent</div>

@@ -11,8 +11,16 @@ body { font-family:'DM Sans',sans-serif; }
    contraster avec les fonds de carte (notamment topo, où il y a
    déjà beaucoup de vert "nature"). Vert pomme/citron volontairement
    lumineux pour ressortir du décor. */
-.pg-site-marker { width:38px; height:38px; border-radius:50%; display:grid; place-items:center; cursor:pointer; transition:transform .15s, filter .15s; }
+.pg-site-marker { position:relative; width:38px; height:38px; border-radius:50%; display:grid; place-items:center; cursor:pointer; transition:transform .15s, filter .15s; }
 .pg-site-marker img { width:30px; height:30px; pointer-events:none; }
+
+/* Badge user_scoring (coin bas-droite du marker). Échappe au filter glow
+   du parent grâce à isolation:isolate côté wrapper — au pire le badge
+   s'enflamme visuellement avec le halo, mais reste lisible grâce au
+   contraste de ses propres background + border. */
+.pg-user-badge { position:absolute; right:-2px; bottom:-2px; width:13px; height:13px; border-radius:50%; box-sizing:border-box; pointer-events:none; }
+.pg-user-badge-active   { background:#38bdf8; border:2px solid #0f172a; box-shadow:0 0 6px rgba(56,189,248,.7), 0 0 2px rgba(0,0,0,.8); }
+.pg-user-badge-inactive { background:transparent; border:2px solid #9ca3af; box-shadow:0 0 0 1px rgba(0,0,0,.8); }
 .pg-site-marker.pg-status-green   { filter:drop-shadow(0 0 6px #3BFF00) drop-shadow(0 0 14px #3BFF00) drop-shadow(0 0 22px rgba(59,255,0,.85)) drop-shadow(0 2px 3px rgba(0,0,0,.7)); }
 .pg-site-marker.pg-status-orange  { filter:drop-shadow(0 0 6px #fb923c) drop-shadow(0 0 14px #fb923c) drop-shadow(0 0 22px rgba(251,146,60,.85))  drop-shadow(0 2px 3px rgba(0,0,0,.7)); }
 .pg-site-marker.pg-status-red     { filter:drop-shadow(0 0 6px #f87171) drop-shadow(0 0 14px #f87171) drop-shadow(0 0 22px rgba(248,113,113,.85)) drop-shadow(0 2px 3px rgba(0,0,0,.7)); }

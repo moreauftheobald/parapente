@@ -103,10 +103,11 @@ class SiteController extends Controller
                 $perso  = $userRescored[$rkey] ?? null;
                 // Si l'user a un scoring perso, on remplace `status` et les
                 // `detail.*.color`. On conserve TOUJOURS la version globale
-                // dans `detail.*.color_global` pour alimenter l'onglet de
-                // comparaison (cellules split diagonale du lot 3).
+                // dans `detail.*.color_global` + `status_global` pour
+                // alimenter l'onglet de comparaison (cellules split
+                // diagonale, ligne "Statut global" incluse).
                 $detail = $this->trimScoreDetail($s->detail, $perso['colors'] ?? null);
-                return [
+                $row = [
                     'forecast_at'  => $s->forecast_at->format('Y-m-d H:i'),
                     'day'          => $s->forecast_at->format('d/m'),
                     'hour'         => $s->forecast_at->format('H:i'),
@@ -121,6 +122,10 @@ class SiteController extends Controller
                     'models_conv'  => $s->models_converging,
                     'detail'       => $detail,
                 ];
+                if ($perso !== null) {
+                    $row['status_global'] = $s->status;
+                }
+                return $row;
             })->values(),
             'sun_windows' => $sunWindows,
             'day_quality' => $dayQuality,

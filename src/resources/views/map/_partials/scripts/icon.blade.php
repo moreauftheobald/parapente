@@ -49,9 +49,26 @@ function siteIconUrl(site, type = 1) {
     return `${SPOTAIR_SPOT_URL}?${params.join('&')}`;
 }
 
+// Badge user_scoring : pastille en bas-droite du marker quand
+// l'utilisateur a un scoring perso sur ce site.
+//   'active'   → pastille bleue pleine ("scoring actif")
+//   'inactive' → pastille creuse grise ("scoring enregistré mais dormant")
+//   null/autre → rien
+function userScoringBadgeHtml(state) {
+    if (state === 'active') {
+        return `<span class="pg-user-badge pg-user-badge-active" title="Scoring perso actif"></span>`;
+    }
+    if (state === 'inactive') {
+        return `<span class="pg-user-badge pg-user-badge-inactive" title="Scoring perso enregistré (inactif)"></span>`;
+    }
+    return '';
+}
+
 // HTML du marqueur : un wrapper coloré (halo statut météo) qui
-// contient l'icône SpotAir.
+// contient l'icône SpotAir, plus un badge optionnel pour le
+// scoring perso de l'utilisateur authentifié.
 function siteIconHtml(site, status, type = 1) {
     const url = siteIconUrl(site, type);
-    return `<div class="pg-site-marker pg-status-${status}"><img src="${url}" alt=""></div>`;
+    const badge = userScoringBadgeHtml(site?.user_scoring);
+    return `<div class="pg-site-marker pg-status-${status}"><img src="${url}" alt="">${badge}</div>`;
 }

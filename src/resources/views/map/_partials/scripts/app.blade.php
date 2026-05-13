@@ -4,6 +4,9 @@
 function mapApp(){return{
     map:null,tl:null,markers:{},
     sites:[],allScores:{},sunWindows:{},dayQuality:{},
+    // Scoring perso : 'user' | 'global' par site_id (renvoyé par /api/sites/{id}/scores).
+    // Vide pour les invités, ou pour les sites sans scoring perso actif.
+    scoringSource:{},
     days:[],selectedDayIdx:0,
     site:{},
     currentBasemap:'topo',basemapList:BASEMAP_LIST,
@@ -13,6 +16,10 @@ function mapApp(){return{
     leftCollapsed:false, lpTab:'params', rightPanelOpen:false, selectedFeature:null,
     // Filtres d'affichage des sites par statut météo
     showGreen:true, showOrange:true, showRed:true,
+    // Filtre « Mes sites » : ne montrer que les sites avec scoring perso (actif ou inactif).
+    // Disponible uniquement quand l'utilisateur est connecté.
+    onlyMyScorings:false,
+    authUser: AUTH_USER,
 
     // ── Volet droit (site) : onglets + données ──
     rpTab:'synthese',                              // synthese | voting | models | models5
@@ -21,6 +28,9 @@ function mapApp(){return{
     multimodel5Data:null, multimodel5Loading:false,       // onglet « Modèles 5 jours »
     chartCollapsed:{}, chartCollapsed5:{},                // état replié de chaque section graphe
     tooltip:{visible:false, x:0, y:0, hour:'', consensus:null, rows:[]},  // tooltip flottant des graphes
+    // Tooltip dédié aux cellules de l'onglet « Détail scoring » — utile
+    // notamment pour les cellules split (2 valeurs à afficher).
+    votingTip:{visible:false, x:0, y:0, lines:[]},
 
     // Balises météo (PiouPiou — phase 1.1)
     balises:[], balisesVisible:true,
@@ -95,14 +105,44 @@ function mapApp(){return{
     },
 
     async loadSites(){
-        const r=await fetch('/api/sites');this.sites=await r.json();
+        const r=await fetch('/api/sites',{credentials:'same-origin'});
+        this.sites=await r.json();
         await Promise.all(this.sites.map(s=>this.loadSiteScores(s.id)));
         this.buildDays();this.renderMarkers();
     },
     async loadSiteScores(id){
-        try{const r=await fetch(`/api/sites/${id}/scores`);const d=await r.json();this.allScores[id]=d.scores||[];this.sunWindows[id]=d.sun_windows||{};this.dayQuality[id]=d.day_quality||{};}
-        catch(e){this.allScores[id]=[];this.dayQuality[id]={};}
+        try{
+            const r=await fetch(`/api/sites/${id}/scores`,{credentials:'same-origin'});
+            const d=await r.json();
+            this.allScores[id]=d.scores||[];
+            this.sunWindows[id]=d.sun_windows||{};
+            this.dayQuality[id]=d.day_quality||{};
+            // 'user' (scoring perso actif) ou 'global' (scoring standard).
+            this.scoringSource[id]=d.scoring_source||'global';
+        }
+        catch(e){this.allScores[id]=[];this.dayQuality[id]={};this.scoringSource[id]='global';}
     },
+
+    /** Retourne l'état du scoring perso de l'utilisateur sur un site :
+     *  'active' | 'inactive' | null. Utilisé pour les badges du marker
+     *  et le filtre « Mes sites ». Donnée fournie par /api/sites. */
+    userScoringFor(site){ return site?.user_scoring ?? null; },
+
+    /** Vrai quand l'API a appliqué le scoring perso pour ce site. */
+    isUserScoringFor(siteId){ return this.scoringSource[siteId] === 'user'; },
+
+    // ── Tooltip onglet « Détail scoring » (cellules + cellules split) ──
+    showVotingTip(ev, text){
+        if(!text) return;
+        const r = ev.target.getBoundingClientRect();
+        this.votingTip = {
+            visible: true,
+            x: r.left + r.width / 2,
+            y: r.top - 6,
+            lines: String(text).split('\n').filter(Boolean),
+        };
+    },
+    hideVotingTip(){ this.votingTip.visible = false; },
 
     buildDays(){
         const m={};
@@ -140,14 +180,27 @@ function mapApp(){return{
         if(st==='red') return this.showRed;
         return true; // statut inconnu : toujours affiché
     },
+    _siteVisible(site, status){
+        if(! this._statusVisible(status)) return false;
+        // Filtre « Mes sites » : ne garde que ceux avec un scoring perso
+        // (actif ou inactif). Désactivé si l'user n'est pas connecté.
+        if(this.onlyMyScorings && this.authUser){
+            if(this.userScoringFor(site) === null) return false;
+        }
+        return true;
+    },
+    toggleOnlyMyScorings(){
+        this.onlyMyScorings = ! this.onlyMyScorings;
+        this.renderMarkers();
+    },
     renderMarkers(){
         const day=this.days[this.selectedDayIdx]?.raw;
         this.sites.forEach(site=>{
             // Statut du jour = qualité de la journée (viabilité : continuité + créneaux midi)
             const st=this.dayQuality[site.id]?.[day]?.status ?? 'unknown';
 
-            // Filtre d'affichage par statut météo
-            if(!this._statusVisible(st)){
+            // Filtres : statut météo + « Mes sites »
+            if(! this._siteVisible(site, st)){
                 if(this.markers[site.id]){this.map.removeLayer(this.markers[site.id]);delete this.markers[site.id];}
                 return;
             }
@@ -312,33 +365,56 @@ function mapApp(){return{
     _votingCell(score, key){
         if(!score) return { color:'na', title:'Aucune donnée' };
         if(key === 'status'){
-            const c = ['green','orange','red'].includes(score.status) ? score.status : 'na';
-            return { color: c, title: this._votingStatusTitle(score) };
+            const c  = ['green','orange','red'].includes(score.status)        ? score.status        : 'na';
+            const cg = ['green','orange','red'].includes(score.status_global) ? score.status_global : null;
+            const cell = { color: c, title: this._votingStatusTitle(score, false) };
+            if(cg !== null){
+                cell.colorGlobal = cg;
+                cell.titleGlobal = this._votingStatusTitle(score, true);
+            }
+            return cell;
         }
         const d = score.detail?.[key];
         if(!d) return { color:'na', title:'Donnée indisponible' };
-        const c = ['green','orange','red'].includes(d.color) ? d.color : 'na';
-        return { color: c, title: this._votingParamTitle(key, score, d) };
+        const c   = ['green','orange','red'].includes(d.color)        ? d.color        : 'na';
+        const cg  = ['green','orange','red'].includes(d.color_global)  ? d.color_global : null;
+        // Cellule split diagonale dès que l'API fournit `color_global` —
+        // donc dès qu'un scoring perso est appliqué sur ce site. Même si
+        // perso et global concluent à la même couleur, on garde la
+        // diagonale visible (séparateur clair côté CSS) pour signaler
+        // d'un coup d'œil que c'est ton scoring qui s'applique.
+        const cell = { color: c, title: this._votingParamTitle(key, score, d, false) };
+        if(cg !== null){
+            cell.colorGlobal = cg;
+            cell.titleGlobal = this._votingParamTitle(key, score, d, true);
+        }
+        return cell;
     },
-    _votingStatusTitle(s){
-        const lbl = {green:'OK', orange:'Prudence', red:'Éliminatoire', unknown:'—'}[s.status] || s.status;
-        return `${s.hour} · ${lbl} · confiance ${s.confidence ?? '—'}%`;
+    _votingStatusTitle(s, forGlobal = false){
+        const st  = forGlobal ? s.status_global : s.status;
+        const lbl = {green:'OK', orange:'Prudence', red:'Éliminatoire', unknown:'—'}[st] || st;
+        const tag = forGlobal ? ' · global' : (s.status_global != null ? ' · perso' : '');
+        return `${s.hour} · ${lbl} · confiance ${s.confidence ?? '—'}%${tag}`;
     },
-    _votingParamTitle(key, s, d){
-        const hour = s.hour;
+    /** @param {boolean} forGlobal — vrai si on veut décrire la couleur globale (sinon la perso). */
+    _votingParamTitle(key, s, d, forGlobal){
+        const hour  = s.hour;
+        const color = forGlobal ? d.color_global : d.color;
+        const lbl   = {green:'OK', orange:'Prudence', red:'Éliminatoire'}[color] || '—';
+        const suffix = ` · ${forGlobal ? 'global' : 'perso'} : ${lbl}`;
         switch(key){
             case 'wind_dir':
-                return `${hour} · direction ${d.consensus != null ? Math.round(d.consensus) + '°' : '—'} (conv. ${d.convergence ?? '—'})`;
+                return `${hour} · direction ${d.consensus != null ? Math.round(d.consensus) + '°' : '—'}` + suffix;
             case 'wind_speed':
-                return `${hour} · vent moyen ${d.consensus != null ? Number(d.consensus).toFixed(1) + ' km/h' : '—'} (conv. ${d.convergence ?? '—'})`;
+                return `${hour} · vent moyen ${d.consensus != null ? Number(d.consensus).toFixed(1) + ' km/h' : '—'}` + suffix;
             case 'wind_gust':
-                return `${hour} · rafales ${d.consensus != null ? Number(d.consensus).toFixed(1) + ' km/h' : '—'}`;
+                return `${hour} · rafales ${d.consensus != null ? Number(d.consensus).toFixed(1) + ' km/h' : '—'}` + suffix;
             case 'precip':
-                return `${hour} · pluie ${d.consensus != null ? Number(d.consensus).toFixed(1) + ' mm/h' : '—'} (conv. ${d.convergence ?? '—'})`;
+                return `${hour} · pluie ${d.consensus != null ? Number(d.consensus).toFixed(1) + ' mm/h' : '—'}` + suffix;
             case 'cloud_base':
-                return `${hour} · plafond ${d.consensus != null ? d.consensus + ' m' : '—'}`;
+                return `${hour} · plafond ${d.consensus != null ? d.consensus + ' m' : '—'}` + suffix;
         }
-        return hour;
+        return hour + suffix;
     },
 
     // ── Conformité / libellés ────────────────────────────────────

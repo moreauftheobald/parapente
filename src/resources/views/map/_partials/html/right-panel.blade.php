@@ -29,6 +29,19 @@
                             <button class="rp-close" @click="closeRightPanel()" title="Fermer">✕</button>
                         </div>
 
+                        {{-- Bandeau « Scoring perso » : visible quand l'utilisateur a un
+                             scoring perso ACTIF sur ce site. On utilise x-show (et pas
+                             <template x-if>) car les templates Alpine imbriqués dans
+                             un autre <template x-if> peuvent avoir des soucis de
+                             réactivité sur des propriétés ajoutées au runtime. --}}
+                        <div class="rp-user-banner" x-show="authUser && selectedFeature?.user_scoring === 'active'" x-cloak
+                             title="Le scoring affiché ici utilise tes conditions personnelles. Tu peux le modifier depuis ton profil.">
+                            <span class="rp-user-banner-ico">★</span>
+                            <span>Scoring perso · <span class="rp-user-banner-name" x-text="authUser?.display_name ?? authUser?.name ?? ''"></span></span>
+                            <a href="{{ route('user.scorings') }}" class="rp-user-banner-link">Gérer mes scorings ↗</a>
+                        </div>
+
+
                         {{-- Onglets --}}
                         <div class="rp-tabs">
                             <button class="rp-tab" :class="rpTab === 'synthese' ? 'active' : ''" @click="setRpTab('synthese')"
@@ -112,7 +125,23 @@
                                                                 <td class="rp-voting-td-param" x-text="row.label"></td>
                                                                 <template x-for="(cell, idx) in row.cells" :key="idx">
                                                                     <td class="rp-voting-cell">
-                                                                        <span class="rp-voting-dot" :class="'rp-voting-' + (cell.color || 'na')" :title="cell.title"></span>
+                                                                        {{-- Cas standard : pastille unie. Cas split (perso ≠ global) :
+                                                                             carré découpé en diagonale, triangle haut-gauche = global,
+                                                                             triangle bas-droite = perso. Tooltip = double titre. --}}
+                                                                        <template x-if="!cell.colorGlobal">
+                                                                            <span class="rp-voting-dot" :class="'rp-voting-' + (cell.color || 'na')"
+                                                                                  @mouseenter="showVotingTip($event, cell.title)"
+                                                                                  @mouseleave="hideVotingTip()"></span>
+                                                                        </template>
+                                                                        <template x-if="cell.colorGlobal">
+                                                                            <span class="rp-voting-dot rp-voting-split"
+                                                                                  :style="`background:
+                                                                                    linear-gradient(135deg, var(--rp-v-${cell.colorGlobal}) 0%, var(--rp-v-${cell.colorGlobal}) 46%,
+                                                                                    var(--rp-v-sep) 46%, var(--rp-v-sep) 54%,
+                                                                                    var(--rp-v-${cell.color}) 54%, var(--rp-v-${cell.color}) 100%)`"
+                                                                                  @mouseenter="showVotingTip($event, cell.titleGlobal + '\n' + cell.title)"
+                                                                                  @mouseleave="hideVotingTip()"></span>
+                                                                        </template>
                                                                     </td>
                                                                 </template>
                                                             </tr>
@@ -127,6 +156,11 @@
                                         <span><span class="rp-voting-dot rp-voting-orange"></span>Prudence</span>
                                         <span><span class="rp-voting-dot rp-voting-red"></span>Éliminatoire</span>
                                         <span><span class="rp-voting-dot rp-voting-na"></span>N/A</span>
+                                        <span x-show="authUser && selectedFeature?.user_scoring === 'active'" x-cloak>
+                                            <span class="rp-voting-dot rp-voting-split"
+                                                  style="background:linear-gradient(135deg,#f59e0b 0%,#f59e0b 46%,#fff 46%,#fff 54%,#22c55e 54%,#22c55e 100%);"></span>
+                                            Global / perso (haut-gauche = standard, bas-droite = perso)
+                                        </span>
                                     </div>
                                 </div>
                             </template>
@@ -207,6 +241,14 @@
 
                     </div>
                 </template>
+
+                {{-- Tooltip flottant des cellules du « Détail scoring » (cellules normales + cellules split) --}}
+                <div class="rp-voting-tip" x-show="votingTip.visible" x-cloak
+                     :style="`left:${votingTip.x}px; top:${votingTip.y}px;`">
+                    <template x-for="(line, i) in votingTip.lines" :key="i">
+                        <div x-text="line"></div>
+                    </template>
+                </div>
 
                 {{-- ═══════════ BALISE ═══════════ --}}
                 <template x-if="selectedFeature?.type === 'balise'">

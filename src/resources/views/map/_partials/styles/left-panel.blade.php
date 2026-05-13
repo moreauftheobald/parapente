@@ -22,6 +22,7 @@
         .dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
         .dot-green { background:#22c55e; } .dot-orange { background:#f59e0b; }
         .dot-red { background:#ef4444; }   .dot-grey { background:#6b7280; }
+        .dot-mine { background:#38bdf8; box-shadow:0 0 4px rgba(56,189,248,.6); }
 
         .lp-toggle { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; background:#1f2937; border:1px solid rgba(75,85,99,.5); color:#9ca3af; font-size:13px; cursor:pointer; text-align:left; transition:background .15s, border-color .15s, color .15s; }
         .lp-toggle:hover { border-color:rgba(156,163,175,.6); }
@@ -61,6 +62,12 @@
         .rp-close:hover { background:rgba(55,65,81,.7); color:#fff; }
 
         /* Onglets */
+        .rp-user-banner { display:flex; align-items:center; gap:8px; padding:8px 14px; background:linear-gradient(90deg, rgba(56,189,248,.18), rgba(56,189,248,.04)); border-bottom:1px solid rgba(56,189,248,.25); font-size:12px; color:#bae6fd; flex-shrink:0; }
+        .rp-user-banner-ico { color:#38bdf8; font-size:13px; line-height:1; }
+        .rp-user-banner-name { color:#fff; font-weight:600; }
+        .rp-user-banner-link { margin-left:auto; color:#7dd3fc; text-decoration:none; font-size:11px; transition:color .15s; }
+        .rp-user-banner-link:hover { color:#fff; text-decoration:underline; }
+
         .rp-tabs { display:flex; flex-shrink:0; overflow-x:auto; border-bottom:1px solid rgba(55,65,81,.5); padding:0 8px; gap:2px; }
         .rp-tab { padding:11px 14px; background:transparent; border:none; border-bottom:2px solid transparent; color:#6b7280; font-size:13px; font-weight:500; cursor:pointer; white-space:nowrap; transition:color .15s, border-color .15s; }
         .rp-tab:hover:not(.active) { color:#9ca3af; }
@@ -97,12 +104,28 @@
         .rp-voting-cell     { border-bottom:1px solid rgba(55,65,81,.25); }
         .rp-voting-table tbody tr:last-child td { border-bottom:none; }
         .rp-voting-status td { background:rgba(17,24,39,.5); font-weight:600; color:#e5e7eb; }
-        .rp-voting-dot { display:inline-block; width:14px; height:14px; border-radius:3px; vertical-align:middle; }
+        /* Variables des couleurs voting — réutilisées par les cellules split
+           diagonales (cf. linear-gradient inline dans le template).
+           --rp-v-sep : couleur de la barre diagonale ; volontairement
+           contrastée (blanche) pour rester visible même quand les deux
+           triangles ont la même couleur (perso applique = même résultat
+           que global). C'est le signal visuel « ton scoring est en jeu ». */
+        .rp-voting { --rp-v-green:#22c55e; --rp-v-orange:#f59e0b; --rp-v-red:#ef4444; --rp-v-na:rgba(75,85,99,.5); --rp-v-sep:#ffffff; }
+        .rp-voting-dot { display:inline-block; width:14px; height:14px; border-radius:3px; vertical-align:middle; cursor:default; }
         .rp-voting-green  { background:#22c55e; }
         .rp-voting-orange { background:#f59e0b; }
         .rp-voting-red    { background:#ef4444; }
         .rp-voting-na     { background:rgba(75,85,99,.5); }
+        /* Cellule split diagonale : background construit en gradient inline.
+           Petit liseré pour distinguer la diagonale même quand les couleurs
+           sont proches. */
+        .rp-voting-split { box-shadow:inset 0 0 0 1px rgba(15,23,42,.6); }
         .rp-voting-legend { display:flex; flex-wrap:wrap; gap:14px; padding:10px 16px; border-top:1px solid rgba(55,65,81,.4); font-size:11px; color:#9ca3af; }
+
+        /* Tooltip flottant pour les cellules de l'onglet « Détail scoring ».
+           Position en pixels absolus (calculée depuis le viewport). */
+        .rp-voting-tip { position:fixed; transform:translate(-50%, -100%); z-index:60; background:#0f172a; border:1px solid #334155; color:#e5e7eb; font-size:11px; line-height:1.5; padding:6px 10px; border-radius:6px; box-shadow:0 8px 20px rgba(0,0,0,.5); pointer-events:none; white-space:nowrap; font-family:'DM Sans',sans-serif; }
+        .rp-voting-tip > div + div { margin-top:2px; padding-top:2px; border-top:1px dashed rgba(148,163,184,.25); }
         .rp-voting-legend span { display:inline-flex; align-items:center; gap:6px; }
 
         /* Volet balise — bloc rose des vents en 3 colonnes :

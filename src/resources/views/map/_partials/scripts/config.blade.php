@@ -39,3 +39,21 @@ const COMPASS_TICKS = [
 
 // 8 directions cardinales (utilisé par degToCompass dans les tooltips)
 const COMPASS_8 = ['N','NE','E','SE','S','SO','O','NO'];
+
+// Utilisateur authentifié (null si invité). Sert au bandeau « Scoring
+// perso ` pseudo ` du volet droit + au filtre « Mes sites ». Le scoring
+// perso lui-même est appliqué côté serveur sur /api/sites + /api/sites/_id_/scores
+// quand le cookie de session est présent.
+//
+// Encodage via une sortie brute Blade (bang-bang-bang) plutôt que par la
+// directive json dédiée — son regex de parsing ne tolère pas les
+// arguments multi-lignes avec tableau imbriquant des appels de fonction.
+// Important : on évite TOUTE syntaxe Blade dans ce commentaire (pas de
+// accolades doubles, pas de dièse-paren-paren-paren) car Blade compile
+// aussi à l'intérieur des commentaires JS.
+const AUTH_USER = {!! json_encode(auth()->check() ? [
+    'id'           => auth()->id(),
+    'name'         => auth()->user()->name,
+    'pseudo'       => auth()->user()->pseudo,
+    'display_name' => auth()->user()->displayName(),
+] : null, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) !!};
