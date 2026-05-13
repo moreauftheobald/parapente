@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\User\AccountDeleteRequest;
 use App\Http\Requests\User\PasswordUpdateRequest;
 use App\Http\Requests\User\ProfileUpdateRequest;
+use App\Models\UserSiteCondition;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -23,8 +24,14 @@ class ProfileController extends Controller
 {
     public function show(Request $request): View
     {
+        $userId = $request->user()->id;
+
         return view('user.profile', [
-            'user' => $request->user(),
+            'user'                  => $request->user(),
+            'scoringActiveCount'    => UserSiteCondition::forUser($userId)->active()->count(),
+            'scoringStoredCount'    => UserSiteCondition::forUser($userId)->count(),
+            'scoringMaxActive'      => UserSiteCondition::MAX_ACTIVE,
+            'scoringMaxStored'      => UserSiteCondition::MAX_STORED,
         ]);
     }
 

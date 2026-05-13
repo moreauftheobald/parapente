@@ -103,6 +103,10 @@
                    class="flex items-center gap-3 px-4 py-2 text-gray-300 hover:bg-gray-800 hover:text-white transition">
                     <i class="fa-solid fa-id-badge w-4 text-center"></i>Mon profil
                 </a>
+                <a href="{{ route('user.scorings') }}"
+                   class="flex items-center gap-3 px-4 py-2 text-gray-300 hover:bg-gray-800 hover:text-white transition">
+                    <i class="fa-solid fa-sliders w-4 text-center"></i>Mes scorings perso
+                </a>
 
                 @if ($authUser->isAdmin())
                     <a href="{{ route('admin.dashboard') }}"

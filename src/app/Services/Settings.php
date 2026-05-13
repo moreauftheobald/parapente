@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Setting;
+use App\Services\Weather\UserScoringService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -203,5 +204,18 @@ class Settings
     public function flush(): void
     {
         Cache::forget(self::CACHE_KEY);
+
+        // Les seuils globaux (precip / gust / viability) entrent dans le
+        // calcul du scoring perso. À chaque écriture, on purge donc tous
+        // les caches user-scoring. Résolution paresseuse pour éviter la
+        // dépendance circulaire à la construction (UserScoringService →
+        // ScoringService → Settings).
+        try {
+            app(UserScoringService::class)->invalidateAll();
+        } catch (\Throwable) {
+            // Si le service ne peut pas être résolu (ex: tests qui se
+            // passent du conteneur complet), on laisse passer — la prochaine
+            // expiration TTL absorbera de toute façon.
+        }
     }
 }

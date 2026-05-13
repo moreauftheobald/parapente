@@ -21,13 +21,21 @@ return new class extends Migration
 {
     public function up(): void
     {
-        DB::statement("ALTER TABLE sites MODIFY region VARCHAR(255) NULL");
+        // ALTER ... MODIFY est spécifique à MariaDB/MySQL. Sous SQLite
+        // (tests en mémoire), on ne peut pas modifier le type d'une
+        // colonne sans recréer la table — heureusement le `create_sites`
+        // d'origine déclarait déjà `region` non-null avec une valeur par
+        // défaut, et nos seeders/factory de tests fournissent toujours
+        // une région. Skip silencieux sur SQLite.
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE sites MODIFY region VARCHAR(255) NULL");
+        }
     }
 
     public function down(): void
     {
-        // Rétablit NOT NULL (les rows à NULL doivent avoir été remplies
-        // au préalable, sinon le ALTER échouera).
-        DB::statement("ALTER TABLE sites MODIFY region VARCHAR(255) NOT NULL");
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE sites MODIFY region VARCHAR(255) NOT NULL");
+        }
     }
 };

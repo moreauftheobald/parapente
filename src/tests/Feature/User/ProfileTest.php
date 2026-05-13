@@ -85,9 +85,7 @@ class ProfileTest extends TestCase
             'current_password'      => 'wrong',
             'password'              => 'new-secret-2',
             'password_confirmation' => 'new-secret-2',
-        ])->assertSessionHasErrors([
-            'current_password' => null,
-        ], 'updatePassword');
+        ])->assertSessionHasErrors(['current_password'], null, 'updatePassword');
     }
 
     public function test_user_can_delete_account(): void
@@ -108,7 +106,7 @@ class ProfileTest extends TestCase
 
         $this->actingAs($user)
             ->delete('/profil', ['password' => 'wrong'])
-            ->assertSessionHasErrors(['password' => null], 'deleteAccount');
+            ->assertSessionHasErrors(['password'], null, 'deleteAccount');
 
         $this->assertNotNull(User::find($user->id));
     }

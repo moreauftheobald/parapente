@@ -21,11 +21,16 @@ return new class extends Migration
 {
     public function up(): void
     {
-        DB::statement("ALTER TABLE sites MODIFY altitude_m SMALLINT UNSIGNED NULL");
+        // Skip sous SQLite (tests) : ALTER MODIFY non supporté.
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE sites MODIFY altitude_m SMALLINT UNSIGNED NULL");
+        }
     }
 
     public function down(): void
     {
-        DB::statement("ALTER TABLE sites MODIFY altitude_m SMALLINT UNSIGNED NOT NULL");
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE sites MODIFY altitude_m SMALLINT UNSIGNED NOT NULL");
+        }
     }
 };

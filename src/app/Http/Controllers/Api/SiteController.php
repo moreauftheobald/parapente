@@ -8,43 +8,73 @@ use App\Http\Controllers\Controller;
 use App\Models\Forecast;
 use App\Models\Site;
 use App\Models\SiteScore;
+use App\Models\UserSiteCondition;
 use App\Models\WeatherModel;
 use App\Services\Settings;
+use App\Services\Weather\UserScoringService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class SiteController extends Controller
 {
-    public function __construct(private Settings $settings)
-    {
+    public function __construct(
+        private Settings $settings,
+        private UserScoringService $userScoring,
+    ) {
     }
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $sites = Site::active()->with('conditions')->get()->map(fn (Site $site) => [
-            'id'           => $site->id,
-            'name'         => $site->name,
-            'lat'          => (float) $site->latitude,
-            'lng'          => (float) $site->longitude,
-            'altitude'     => $site->altitude_m,
-            'level'        => $site->level,
-            'region'       => $site->region,
-            // Plage favorable d'orientation du décollage (depuis site_conditions)
-            // utilisée par siteIconUrl() pour calculer le bitmask SpotAir.
-            'wind_dir_min' => $site->conditions?->wind_dir_min,
-            'wind_dir_max' => $site->conditions?->wind_dir_max,
-        ]);
+        $userId       = $request->user()?->id;
+        $userScorings = $userId !== null
+            ? UserSiteCondition::forUser($userId)
+                ->get(['site_id', 'is_active'])
+                ->keyBy('site_id')
+            : collect();
+
+        $sites = Site::active()->with('conditions')->get()->map(function (Site $site) use ($userScorings) {
+            $usc = $userScorings->get($site->id);
+
+            return [
+                'id'           => $site->id,
+                'name'         => $site->name,
+                'lat'          => (float) $site->latitude,
+                'lng'          => (float) $site->longitude,
+                'altitude'     => $site->altitude_m,
+                'level'        => $site->level,
+                'region'       => $site->region,
+                // Plage favorable d'orientation du décollage (depuis site_conditions)
+                // utilisée par siteIconUrl() pour calculer le bitmask SpotAir.
+                'wind_dir_min' => $site->conditions?->wind_dir_min,
+                'wind_dir_max' => $site->conditions?->wind_dir_max,
+                // Présence et état du scoring perso de l'utilisateur sur ce site.
+                // null = pas de scoring perso enregistré ; 'active' / 'inactive'
+                // = badge à afficher sur le marqueur (cf. FF_personnal_scoring).
+                'user_scoring' => $usc === null
+                    ? null
+                    : ((bool) $usc->is_active ? 'active' : 'inactive'),
+            ];
+        });
         return response()->json($sites);
     }
 
-    public function scores(int $id): JsonResponse
+    public function scores(int $id, Request $request): JsonResponse
     {
-        $site = Site::active()->findOrFail($id);
+        $site      = Site::active()->findOrFail($id);
         $allScores = SiteScore::where('site_id', $id)->upcoming()->orderBy('forecast_at')->get();
-        $grouped = $allScores->groupBy(fn ($s) => $s->forecast_at->format('d/m'));
-        $scores = collect();
+
+        // Re-scoring perso : map forecast_at(Y-m-d H:i:s) => ['status', 'colors']
+        // ou null si l'user n'a pas de scoring perso actif sur ce site.
+        $userId       = $request->user()?->id;
+        $userRescored = $userId !== null
+            ? $this->userScoring->rescoreForUserSite($userId, $site->id)
+            : null;
+
+        $grouped    = $allScores->groupBy(fn ($s) => $s->forecast_at->format('d/m'));
+        $scores     = collect();
         $sunWindows = [];
         $dayQuality = [];
+
         foreach ($grouped as $day => $dayScores) {
             $window = $this->getSunWindow((float) $site->latitude, (float) $site->longitude, $day);
             $sunWindows[$day] = $window;
@@ -53,32 +83,45 @@ class SiteController extends Controller
                 $h = (int) $score->forecast_at->format('G');
                 if ($h >= $window['start_hour'] && $h <= $window['end_hour']) {
                     $scores->push($score);
-                    $byHour[$h] = $score->status;
+                    // La viabilité du jour utilise le scoring **effectif**
+                    // (perso si applicable, global sinon) — c'est la
+                    // couleur du marqueur côté carte.
+                    $rkey = $score->forecast_at->format('Y-m-d H:i:s');
+                    $byHour[$h] = $userRescored[$rkey]['status'] ?? $score->status;
                 }
             }
             $dayQuality[$day] = $this->computeDayQuality($byHour, $window);
         }
+
+        $scoringSource = $userRescored !== null ? 'user' : 'global';
+
         return response()->json([
-            'site'        => ['id' => $site->id, 'name' => $site->name, 'altitude' => $site->altitude_m, 'level' => $site->level],
-            'scores'      => $scores->map(fn ($s) => [
-                'forecast_at'  => $s->forecast_at->format('Y-m-d H:i'),
-                'day'          => $s->forecast_at->format('d/m'),
-                'hour'         => $s->forecast_at->format('H:i'),
-                'status'       => $s->status,
-                'confidence'   => $s->confidence_pct,
-                'wind_dir'     => $s->wind_dir_consensus,
-                'wind_speed'   => $s->wind_speed_consensus,
-                'wind_gust'    => $s->wind_gust_consensus,
-                'precip'       => $s->precip_consensus,
-                'cloud_base'   => $s->cloud_base_consensus,
-                'models_count' => $s->models_count,
-                'models_conv'  => $s->models_converging,
-                // `detail` allégé : pour l'onglet « Détail du scoring », on
-                // n'expose que consensus + convergence + color de chaque
-                // paramètre (les `values` brutes restent en base mais ne
-                // sont pas transférées au client pour limiter le payload).
-                'detail'       => $this->trimScoreDetail($s->detail),
-            ])->values(),
+            'site'           => ['id' => $site->id, 'name' => $site->name, 'altitude' => $site->altitude_m, 'level' => $site->level],
+            'scoring_source' => $scoringSource,
+            'scores'         => $scores->map(function ($s) use ($userRescored) {
+                $rkey   = $s->forecast_at->format('Y-m-d H:i:s');
+                $perso  = $userRescored[$rkey] ?? null;
+                // Si l'user a un scoring perso, on remplace `status` et les
+                // `detail.*.color`. On conserve TOUJOURS la version globale
+                // dans `detail.*.color_global` pour alimenter l'onglet de
+                // comparaison (cellules split diagonale du lot 3).
+                $detail = $this->trimScoreDetail($s->detail, $perso['colors'] ?? null);
+                return [
+                    'forecast_at'  => $s->forecast_at->format('Y-m-d H:i'),
+                    'day'          => $s->forecast_at->format('d/m'),
+                    'hour'         => $s->forecast_at->format('H:i'),
+                    'status'       => $perso['status']    ?? $s->status,
+                    'confidence'   => $s->confidence_pct,
+                    'wind_dir'     => $s->wind_dir_consensus,
+                    'wind_speed'   => $s->wind_speed_consensus,
+                    'wind_gust'    => $s->wind_gust_consensus,
+                    'precip'       => $s->precip_consensus,
+                    'cloud_base'   => $s->cloud_base_consensus,
+                    'models_count' => $s->models_count,
+                    'models_conv'  => $s->models_converging,
+                    'detail'       => $detail,
+                ];
+            })->values(),
             'sun_windows' => $sunWindows,
             'day_quality' => $dayQuality,
         ]);
@@ -389,8 +432,15 @@ class SiteController extends Controller
      * Allège le JSON `detail` d'un SiteScore : on conserve consensus,
      * convergence (si présente) et color de chaque paramètre, on retire les
      * arrays `values` (utiles seulement au backfill côté serveur).
+     *
+     * Si `$userColors` est passé (couleurs recalculées depuis un scoring
+     * perso actif), `color` reçoit la version perso, et la version globale
+     * est conservée dans `color_global` — sert à l'onglet comparaison
+     * (cellule split diagonale, cf. FF_personnal_scoring.md).
+     *
+     * @param array<string,string>|null $userColors
      */
-    private function trimScoreDetail(?array $detail): ?array
+    private function trimScoreDetail(?array $detail, ?array $userColors = null): ?array
     {
         if (! is_array($detail)) {
             return null;
@@ -399,8 +449,16 @@ class SiteController extends Controller
         foreach ($detail as $param => $info) {
             if (! is_array($info)) continue;
             $entry = ['consensus' => $info['consensus'] ?? null];
-            if (array_key_exists('convergence', $info)) $entry['convergence'] = $info['convergence'];
-            if (array_key_exists('color', $info))       $entry['color']       = $info['color'];
+            if (array_key_exists('convergence', $info)) {
+                $entry['convergence'] = $info['convergence'];
+            }
+            $globalColor = $info['color'] ?? null;
+            if ($userColors !== null && array_key_exists($param, $userColors)) {
+                $entry['color']        = $userColors[$param];
+                $entry['color_global'] = $globalColor;
+            } elseif ($globalColor !== null) {
+                $entry['color'] = $globalColor;
+            }
             $out[$param] = $entry;
         }
         return $out;

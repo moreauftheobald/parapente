@@ -17,6 +17,7 @@ use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\MapController;
 use App\Http\Controllers\User\ProfileController;
+use App\Http\Controllers\User\ScoringPageController;
 use Illuminate\Support\Facades\Route;
 
 // Accueil — page d'atterrissage par défaut (articles / changelog + shell global)
@@ -43,6 +44,9 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profil',               [ProfileController::class, 'update'])->name('user.profile.update');
     Route::patch('/profil/mot-de-passe',  [ProfileController::class, 'updatePassword'])->name('user.password.update');
     Route::delete('/profil',              [ProfileController::class, 'destroy'])->name('user.profile.destroy');
+
+    // Page d'écran complet : gestion des scorings perso
+    Route::get('/profil/scorings',        [ScoringPageController::class, 'index'])->name('user.scorings');
 });
 
 // ───────────────────────────────────────────────────────────────

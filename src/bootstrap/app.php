@@ -17,9 +17,23 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin' => \App\Http\Middleware\EnsureAdmin::class,
         ]);
 
-        // L'auth middleware redirige les invités vers la route nommée
-        // 'login' par défaut ; la nôtre s'appelle 'admin.login'.
-        $middleware->redirectGuestsTo(fn () => route('admin.login'));
+        // Les routes /api reposent sur le même cookie de session que le
+        // front Blade (pas de Sanctum). On ajoute donc les middlewares
+        // session + cookies + CSRF au groupe `api` pour que `auth:web`,
+        // `auth()->user()` et le token CSRF méta fonctionnent depuis le
+        // JS de la SPA Alpine. Les GET publics (/api/sites, /api/balises)
+        // restent fonctionnels — CSRF n'agit que sur POST/PATCH/DELETE.
+        $middleware->api(prepend: [
+            \Illuminate\Cookie\Middleware\EncryptCookies::class,
+            \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+            \Illuminate\Session\Middleware\StartSession::class,
+            \Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class,
+        ]);
+
+        // Redirection des invités sur le login front. Les routes /admin
+        // restent atteignables directement via /admin/login ; EnsureAdmin
+        // se charge d'éconduire les non-admins une fois authentifiés.
+        $middleware->redirectGuestsTo(fn () => route('login'));
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

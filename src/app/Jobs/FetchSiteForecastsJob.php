@@ -7,6 +7,7 @@ namespace App\Jobs;
 use App\Models\Site;
 use App\Models\WeatherModel;
 use App\Services\Weather\ScoringService;
+use App\Services\Weather\UserScoringService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -30,7 +31,7 @@ class FetchSiteForecastsJob implements ShouldQueue
         private readonly int $siteId
     ) {}
 
-    public function handle(ScoringService $scoring): void
+    public function handle(ScoringService $scoring, UserScoringService $userScoring): void
     {
         $site = Site::with('conditions')->find($this->siteId);
         if (! $site) {
@@ -48,6 +49,10 @@ class FetchSiteForecastsJob implements ShouldQueue
 
         // Scoring unique en fin de salve (évite N rescoring redondants)
         $scoring->computeScoresForSite($site);
+
+        // Les consensus du site ont changé : on purge les caches user-scoring
+        // calés dessus. Sera reconstruit à la prochaine consultation.
+        $userScoring->invalidateSite($site->id);
 
         Log::info("FetchSiteForecastsJob: terminé [{$site->slug}].");
     }

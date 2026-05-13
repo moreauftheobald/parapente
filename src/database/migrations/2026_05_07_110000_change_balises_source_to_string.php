@@ -23,13 +23,20 @@ return new class extends Migration
 {
     public function up(): void
     {
-        DB::statement("ALTER TABLE balises MODIFY source VARCHAR(20) NOT NULL");
+        // Skip sous SQLite (tests) : pas de support du ALTER ... MODIFY,
+        // et pas non plus d'ENUM natif — la colonne créée par
+        // `create_balises_table` reste compatible (VARCHAR ou TEXT).
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE balises MODIFY source VARCHAR(20) NOT NULL");
+        }
     }
 
     public function down(): void
     {
-        DB::statement(
-            "ALTER TABLE balises MODIFY source ENUM('pioupiou','ffvl','windguru','netatmo','autre') NOT NULL"
-        );
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement(
+                "ALTER TABLE balises MODIFY source ENUM('pioupiou','ffvl','windguru','netatmo','autre') NOT NULL"
+            );
+        }
     }
 };

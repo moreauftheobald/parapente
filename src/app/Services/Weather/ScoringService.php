@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Weather;
 
+use App\Contracts\FlyingConditions;
 use App\Models\Site;
 use App\Models\SiteScore;
 use App\Models\WeatherModel;
@@ -24,20 +25,18 @@ class ScoringService
     {
     }
 
-    /** Seuil rafale orange applicable à un site (override site ou défaut global). */
-    private function gustOrangeFor($conditions): float
+    /** Seuil rafale orange applicable à un set de conditions (override ou défaut global). */
+    private function gustOrangeFor(FlyingConditions $conditions): float
     {
-        return $conditions->wind_gust_orange_kmh !== null
-            ? (float) $conditions->wind_gust_orange_kmh
-            : (float) $this->settings->get('scoring.gust_orange_kmh');
+        return $conditions->getWindGustOrangeKmh()
+            ?? (float) $this->settings->get('scoring.gust_orange_kmh');
     }
 
-    /** Seuil rafale rouge applicable à un site (override site ou défaut global). */
-    private function gustRedFor($conditions): float
+    /** Seuil rafale rouge applicable à un set de conditions (override ou défaut global). */
+    private function gustRedFor(FlyingConditions $conditions): float
     {
-        return $conditions->wind_gust_red_kmh !== null
-            ? (float) $conditions->wind_gust_red_kmh
-            : (float) $this->settings->get('scoring.gust_red_kmh');
+        return $conditions->getWindGustRedKmh()
+            ?? (float) $this->settings->get('scoring.gust_red_kmh');
     }
 
     /**
@@ -215,7 +214,7 @@ class ScoringService
     // ── Règles éliminatoires ────────────────────────────────────
 
     private function applyEliminatoryRules(
-        $conditions,
+        FlyingConditions $conditions,
         float $windDir,
         float $windSpeed,
         float $windGust,
@@ -252,6 +251,37 @@ class ScoringService
         return 'green';
     }
 
+    // ── Re-scoring à partir d'un SiteScore déjà calculé ─────────
+
+    /**
+     * Recalcule statut + couleurs d'un `SiteScore` existant en appliquant
+     * un autre set de `FlyingConditions` (typiquement celles d'un user).
+     *
+     * Le consensus multi-modèles (déjà persisté en colonnes du
+     * `site_scores`) est réutilisé tel quel — on ne refait pas la moyenne
+     * pondérée, on ne touche pas aux `forecasts`. Seules les règles
+     * dépendantes des conditions sont rejouées.
+     *
+     * Retourne : `['status' => string, 'colors' => array{wind_dir,wind_speed,wind_gust,precip,cloud_base}]`.
+     * La confiance (`confidence_pct`) ne dépend pas des conditions, on la
+     * laisse intacte au niveau appelant.
+     */
+    public function rescore(FlyingConditions $conditions, SiteScore $score): array
+    {
+        $windDir   = (float) $score->wind_dir_consensus;
+        $windSpeed = (float) $score->wind_speed_consensus;
+        $windGust  = (float) $score->wind_gust_consensus;
+        $precip    = (float) $score->precip_consensus;
+        $cloudBase = $score->cloud_base_consensus !== null
+            ? (float) $score->cloud_base_consensus
+            : null;
+
+        return [
+            'status' => $this->applyEliminatoryRules($conditions, $windDir, $windSpeed, $windGust, $precip),
+            'colors' => $this->computeParamColors($conditions, $windDir, $windSpeed, $windGust, $precip, $cloudBase),
+        ];
+    }
+
     // ── Couleurs par paramètre (onglet « Détail du scoring ») ──
 
     /**
@@ -262,7 +292,7 @@ class ScoringService
      * @return array{wind_dir:string,wind_speed:string,wind_gust:string,precip:string,cloud_base:string}
      */
     public function computeParamColors(
-        $conditions,
+        FlyingConditions $conditions,
         float $windDir,
         float $windSpeed,
         float $windGust,
@@ -296,7 +326,7 @@ class ScoringService
         // Plafond : informatif (pas éliminatoire). Vert si > cloud_base_min_m,
         // orange dans une marge de 100 m, rouge en-dessous. Unknown si pas
         // de seuil défini sur le site ou pas de consensus (ciel dégagé).
-        $minCeil = $conditions->cloud_base_min_m ?? null;
+        $minCeil = $conditions->getCloudBaseMinM();
         if ($cloudBase === null || $minCeil === null) {
             $cloudColor = 'unknown';
         } elseif ($cloudBase < $minCeil) {

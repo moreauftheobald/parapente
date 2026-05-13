@@ -1,11 +1,16 @@
 <x-app-shell title="Mon profil" page-title="Mon profil" detail-title="Sections" :left-default="true">
 
-    {{-- Panneau gauche : navigation interne (ancres) --}}
+    {{-- Panneau gauche : navigation interne (ancres) + lien externe --}}
     <x-slot:detail>
         <nav class="flex flex-col gap-1 text-sm">
             <a href="#identity"    class="px-3 py-2 rounded-md text-gray-300 hover:bg-gray-800 hover:text-white transition"><i class="fa-solid fa-id-badge w-5 text-center opacity-70"></i> Identité</a>
             <a href="#password"    class="px-3 py-2 rounded-md text-gray-300 hover:bg-gray-800 hover:text-white transition"><i class="fa-solid fa-key w-5 text-center opacity-70"></i> Mot de passe</a>
             <a href="#scorings"    class="px-3 py-2 rounded-md text-gray-300 hover:bg-gray-800 hover:text-white transition"><i class="fa-solid fa-sliders w-5 text-center opacity-70"></i> Scorings perso</a>
+            <a href="{{ route('user.scorings') }}"
+               class="px-3 py-2 rounded-md text-sky-300 hover:bg-sky-500/10 transition flex items-center justify-between">
+                <span><i class="fa-solid fa-sliders w-5 text-center opacity-70"></i> Gérer mes scorings</span>
+                <i class="fa-solid fa-arrow-right text-[10px] opacity-60"></i>
+            </a>
             @if (! $user->isAdmin())
                 <a href="#danger"  class="px-3 py-2 rounded-md text-red-300/80 hover:bg-red-500/10 hover:text-red-300 transition mt-4"><i class="fa-solid fa-triangle-exclamation w-5 text-center opacity-70"></i> Supprimer mon compte</a>
             @endif
@@ -120,18 +125,41 @@
             </form>
         </section>
 
-        {{-- ─── Scorings perso (placeholder lot 2) ────────────────── --}}
+        {{-- ─── Scorings perso (résumé + lien vers la page dédiée) ─── --}}
         <section id="scorings" class="{{ $cardCls }}">
-            <h2 class="text-lg font-semibold text-white mb-1">Mes scorings perso</h2>
-            <p class="text-sm text-gray-500 mb-5">Définis tes propres conditions de vol favorables pour chaque site.</p>
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <h2 class="text-lg font-semibold text-white">Mes scorings perso</h2>
+                    <p class="text-sm text-gray-500">Définis tes propres conditions de vol favorables pour chaque site.</p>
+                </div>
+                <a href="{{ route('user.scorings') }}"
+                   class="px-4 py-2 rounded-md bg-sky-500 hover:bg-sky-400 text-white text-sm font-medium transition flex items-center gap-2">
+                    <i class="fa-solid fa-sliders text-xs"></i> Gérer mes scorings
+                </a>
+            </div>
 
-            <div class="flex items-center gap-3 px-4 py-6 bg-gray-950/50 border border-dashed border-gray-700 rounded-lg text-gray-400 text-sm">
-                <i class="fa-solid fa-helmet-safety text-2xl text-gray-600"></i>
-                <div>
-                    <p class="text-gray-300">Bientôt disponible.</p>
-                    <p class="text-xs text-gray-500 mt-1">Tu pourras créer jusqu'à 10 scorings actifs en parallèle (cf. <code class="text-gray-400">FF_personnal_scoring.md</code>).</p>
+            <div class="mt-5 grid grid-cols-2 gap-3">
+                <div class="bg-gray-950/50 border border-gray-800 rounded-lg px-4 py-3">
+                    <p class="text-[11px] uppercase tracking-wider text-gray-500">Actifs</p>
+                    <p class="mt-1 font-mono text-2xl">
+                        <span class="{{ $scoringActiveCount >= $scoringMaxActive ? 'text-amber-300' : 'text-emerald-300' }}">{{ $scoringActiveCount }}</span>
+                        <span class="text-gray-600 text-base"> / {{ $scoringMaxActive }}</span>
+                    </p>
+                </div>
+                <div class="bg-gray-950/50 border border-gray-800 rounded-lg px-4 py-3">
+                    <p class="text-[11px] uppercase tracking-wider text-gray-500">Stockés</p>
+                    <p class="mt-1 font-mono text-2xl">
+                        <span class="text-gray-300">{{ $scoringStoredCount }}</span>
+                        <span class="text-gray-600 text-base"> / {{ $scoringMaxStored }}</span>
+                    </p>
                 </div>
             </div>
+
+            @if ($scoringStoredCount === 0)
+                <p class="mt-4 text-xs text-gray-500">
+                    Aucun scoring perso pour l'instant. <a href="{{ route('user.scorings') }}" class="text-sky-400 hover:text-sky-300 transition">Crée ton premier scoring →</a>
+                </p>
+            @endif
         </section>
 
         {{-- ─── Suppression compte ────────────────────────────────── --}}
