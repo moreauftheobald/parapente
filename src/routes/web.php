@@ -12,8 +12,11 @@ use App\Http\Controllers\Admin\SiteController as AdminSiteController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Admin\WeatherApiController as AdminApiController;
 use App\Http\Controllers\Admin\WeatherModelController as AdminModelController;
+use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\MapController;
+use App\Http\Controllers\User\ProfileController;
 use Illuminate\Support\Facades\Route;
 
 // Accueil — page d'atterrissage par défaut (articles / changelog + shell global)
@@ -21,6 +24,26 @@ Route::get('/', [HomeController::class, 'index'])->name('home');
 
 // Carte météo (module 1)
 Route::get('/carte', [MapController::class, 'index'])->name('map');
+
+// ───────────────────────────────────────────────────────────────
+// Auth front (compte « user »)
+// ───────────────────────────────────────────────────────────────
+Route::middleware('guest')->group(function () {
+    Route::get('/inscription',  [RegisterController::class, 'showForm'])->name('register');
+    Route::post('/inscription', [RegisterController::class, 'store'])->middleware('throttle:5,1');
+
+    Route::get('/connexion',    [LoginController::class, 'showForm'])->name('login');
+    Route::post('/connexion',   [LoginController::class, 'store'])->middleware('throttle:5,1');
+});
+
+Route::middleware('auth')->group(function () {
+    Route::post('/deconnexion',           [LoginController::class, 'destroy'])->name('logout');
+
+    Route::get('/profil',                 [ProfileController::class, 'show'])->name('user.profile');
+    Route::patch('/profil',               [ProfileController::class, 'update'])->name('user.profile.update');
+    Route::patch('/profil/mot-de-passe',  [ProfileController::class, 'updatePassword'])->name('user.password.update');
+    Route::delete('/profil',              [ProfileController::class, 'destroy'])->name('user.profile.destroy');
+});
 
 // ───────────────────────────────────────────────────────────────
 // BackOffice (/admin)

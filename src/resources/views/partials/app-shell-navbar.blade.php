@@ -87,20 +87,31 @@
 
     {{-- Authentification --}}
     @auth
+        @php($authUser = auth()->user())
         <div class="relative" x-data="{ open: false }">
             <button type="button" @click="open = !open"
                     class="flex items-center gap-2 px-2 sm:px-3 h-9 rounded-md text-sm text-gray-300 hover:bg-gray-800 transition">
                 <i class="fa-solid fa-circle-user text-base"></i>
-                <span class="hidden sm:inline max-w-[10rem] truncate">{{ auth()->user()->name }}</span>
+                <span class="hidden sm:inline max-w-[10rem] truncate">{{ $authUser->displayName() }}</span>
                 <i class="fa-solid fa-chevron-down text-[10px] opacity-60"></i>
             </button>
             <div x-show="open" x-cloak @click.outside="open = false" x-transition.origin.top.right
-                 class="absolute right-0 mt-2 w-52 bg-gray-900 border border-gray-800 rounded-lg shadow-xl py-1 z-50 text-sm">
-                <div class="px-4 py-2 text-gray-500 border-b border-gray-800 truncate">{{ auth()->user()->email }}</div>
-                <span class="flex items-center gap-3 px-4 py-2 text-gray-400 cursor-default" title="Bientôt">
+                 class="absolute right-0 mt-2 w-56 bg-gray-900 border border-gray-800 rounded-lg shadow-xl py-1 z-50 text-sm">
+                <div class="px-4 py-2 text-gray-500 border-b border-gray-800 truncate">{{ $authUser->email }}</div>
+
+                <a href="{{ route('user.profile') }}"
+                   class="flex items-center gap-3 px-4 py-2 text-gray-300 hover:bg-gray-800 hover:text-white transition">
                     <i class="fa-solid fa-id-badge w-4 text-center"></i>Mon profil
-                </span>
-                <form method="POST" action="{{ route('admin.logout') }}">
+                </a>
+
+                @if ($authUser->isAdmin())
+                    <a href="{{ route('admin.dashboard') }}"
+                       class="flex items-center gap-3 px-4 py-2 text-gray-300 hover:bg-gray-800 hover:text-white transition">
+                        <i class="fa-solid fa-gauge-high w-4 text-center"></i>Administration
+                    </a>
+                @endif
+
+                <form method="POST" action="{{ route('logout') }}" class="border-t border-gray-800 mt-1 pt-1">
                     @csrf
                     <button type="submit" class="w-full flex items-center gap-3 px-4 py-2 text-gray-300 hover:bg-gray-800 hover:text-red-400 transition text-left">
                         <i class="fa-solid fa-right-from-bracket w-4 text-center"></i>Déconnexion
@@ -117,9 +128,7 @@
             </button>
             <div x-show="open" x-cloak @click.outside="open = false" x-transition.origin.top.right
                  class="absolute right-0 mt-2 w-72 bg-gray-900 border border-gray-800 rounded-lg shadow-xl p-4 z-50">
-                {{-- Stub : le fonctionnement de l'auth front sera défini plus tard.
-                     On poste pour l'instant vers la route de login existante. --}}
-                <form method="POST" action="{{ route('admin.login') }}" class="space-y-3">
+                <form method="POST" action="{{ route('login') }}" class="space-y-3">
                     @csrf
                     <div>
                         <label for="nav-email" class="block text-xs text-gray-400 mb-1">Email</label>
@@ -132,7 +141,7 @@
                                class="w-full bg-gray-950 border border-gray-700 rounded-md px-3 py-1.5 text-sm text-gray-100 focus:border-sky-500 outline-none">
                     </div>
                     <label class="flex items-center gap-2 text-xs text-gray-400 select-none">
-                        <input type="checkbox" name="remember" class="rounded border-gray-700 bg-gray-950 text-sky-500"> Se souvenir de moi
+                        <input type="checkbox" name="remember" value="1" class="rounded border-gray-700 bg-gray-950 text-sky-500"> Se souvenir de moi
                     </label>
                     @error('email')
                         <p class="text-xs text-red-400">{{ $message }}</p>
@@ -142,6 +151,10 @@
                         Se connecter
                     </button>
                 </form>
+                <p class="text-center text-xs text-gray-500 mt-3 pt-3 border-t border-gray-800">
+                    Pas encore inscrit ?
+                    <a href="{{ route('register') }}" class="text-sky-400 hover:text-sky-300 transition">Créer un compte</a>
+                </p>
             </div>
         </div>
     @endauth
