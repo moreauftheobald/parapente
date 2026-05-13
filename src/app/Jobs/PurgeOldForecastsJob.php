@@ -25,6 +25,10 @@ use Illuminate\Support\Facades\Log;
  * - forecast_archive_balises : conservé 30 jours pour le système de fiabilité
  *                              (fenêtres glissantes 7j primaire + 30j référence).
  *
+ * - balise_readings_hourly : agrégat horaire des lectures balises, conservé
+ *                            7 jours (fenêtre J-6 → J pour la comparaison
+ *                            modèles ↔ balises).
+ *
  * Ce job est dispatché par le scheduler une fois par jour
  * (cf. routes/console.php).
  */
@@ -49,10 +53,17 @@ class PurgeOldForecastsJob implements ShouldQueue
      */
     private const ARCHIVE_RETENTION_DAYS = 30;
 
+    /**
+     * Rétention de l'agrégat horaire des lectures balises (utilisé pour
+     * la comparaison modèles ↔ balises sur la fenêtre J-6 → J).
+     */
+    private const HOURLY_RETENTION_DAYS = 7;
+
     public function handle(): void
     {
         $forecastCutoff = Carbon::now()->subDays(self::FORECASTS_RETENTION_DAYS)->startOfDay();
         $archiveCutoff  = Carbon::now()->subDays(self::ARCHIVE_RETENTION_DAYS)->startOfDay();
+        $hourlyCutoff   = Carbon::now()->subDays(self::HOURLY_RETENTION_DAYS)->startOfDay();
 
         $deletedForecasts = Forecast::where('forecast_at', '<', $forecastCutoff)->delete();
         $deletedScores    = SiteScore::where('forecast_at', '<', $forecastCutoff)->delete();
@@ -67,12 +78,21 @@ class PurgeOldForecastsJob implements ShouldQueue
                 ->delete();
         }
 
+        $deletedHourly = 0;
+        if (DB::getSchemaBuilder()->hasTable('balise_readings_hourly')) {
+            $deletedHourly = DB::table('balise_readings_hourly')
+                ->where('hour_at', '<', $hourlyCutoff)
+                ->delete();
+        }
+
         Log::info('PurgeOldForecastsJob completed', [
-            'forecasts_deleted'        => $deletedForecasts,
-            'site_scores_deleted'      => $deletedScores,
-            'archive_balises_deleted'  => $deletedArchive,
-            'forecast_cutoff'          => $forecastCutoff->toDateTimeString(),
-            'archive_cutoff'           => $archiveCutoff->toDateTimeString(),
+            'forecasts_deleted'         => $deletedForecasts,
+            'site_scores_deleted'       => $deletedScores,
+            'archive_balises_deleted'   => $deletedArchive,
+            'balise_hourly_deleted'     => $deletedHourly,
+            'forecast_cutoff'           => $forecastCutoff->toDateTimeString(),
+            'archive_cutoff'            => $archiveCutoff->toDateTimeString(),
+            'hourly_cutoff'             => $hourlyCutoff->toDateTimeString(),
         ]);
     }
 }

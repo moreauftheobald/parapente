@@ -2,6 +2,7 @@
 
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use App\Jobs\AggregateBaliseReadingsHourlyJob;
 use App\Jobs\FetchBaliseForecastsJob;
 use App\Jobs\FetchForecastsJob;
 use App\Jobs\FetchMetarReadingsJob;
@@ -49,5 +50,14 @@ Schedule::job(FetchMetarReadingsJob::class)
 Schedule::job(FetchBaliseForecastsJob::class)
     ->hourly()
     ->name('fetch-balise-forecasts')
+    ->withoutOverlapping();
+
+// Agrégation horaire des lectures balises (dir / vit. moy / rafale / temp)
+//   - Fenêtre glissante 3h pour capter les lectures tardives
+//   - Upsert dans balise_readings_hourly (unique balise_id, hour_at)
+//   - Décalé à :05 pour laisser PiouPiou/METAR terminer leur tour à :00
+Schedule::job(AggregateBaliseReadingsHourlyJob::class)
+    ->hourlyAt(5)
+    ->name('aggregate-balise-readings-hourly')
     ->withoutOverlapping();
 
