@@ -21,6 +21,23 @@ d'architecture, modifications de base de données, ruptures de compatibilité) �
 
 ---
 
+## Notes de fonctionnalités futures — `FF_*.md` (IMPORTANT)
+
+Lorsqu'une fonctionnalité future est évoquée et discutée (cadrage, choix
+d'architecture, estimation) sans être encore implémentée, on consigne la
+discussion dans un fichier **`FF_<nom>.md`** à la racine du dépôt (FF =
+*Futur Feature*). En français, structuré, suffisamment complet pour qu'on
+puisse reprendre le sujet plus tard sans devoir tout réfléchir à nouveau.
+
+Le fichier doit contenir au minimum : le concept, le modèle de données
+retenu, les choix d'architecture (avec les alternatives écartées et leur
+justification), les bornes / garde-fous, une estimation grossière, un
+ordre de découpage suggéré, et les risques identifiés.
+
+Exemple : `FF_personnal_scoring.md` — scoring personnalisé par utilisateur.
+
+---
+
 ## Convention de branches Git
 
 - **Branches conservées en permanence** :
