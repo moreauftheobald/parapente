@@ -81,6 +81,30 @@
         .rp-summary { display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:14px 18px 4px; }
         .rp-range { font-size:13px; font-weight:500; color:#e5e7eb; }
 
+        /* Onglet « Détail du scoring » : un tableau par jour, paramètres en
+           lignes, heures en colonnes, cellule = pastille colorée. */
+        .rp-voting { padding:14px 16px 18px; }
+        .rp-voting-day { margin-bottom:18px; }
+        .rp-voting-day:last-of-type { margin-bottom:8px; }
+        .rp-voting-daylabel { display:flex; align-items:baseline; gap:8px; font-size:13px; font-weight:600; color:#e5e7eb; margin-bottom:6px; padding:0 2px; }
+        .rp-voting-dayhint  { font-size:11px; color:#6b7280; font-weight:400; font-family:'DM Mono',monospace; }
+        .rp-voting-tablewrap { overflow-x:auto; background:rgba(13,27,38,.4); border:1px solid rgba(55,65,81,.4); border-radius:10px; }
+        .rp-voting-table { border-collapse:separate; border-spacing:0; width:100%; font-size:11px; }
+        .rp-voting-table th, .rp-voting-table td { padding:5px 4px; text-align:center; white-space:nowrap; }
+        .rp-voting-th-param { text-align:left !important; padding-left:12px !important; color:#9ca3af; font-weight:500; font-size:11px; border-bottom:1px solid rgba(55,65,81,.5); background:rgba(17,24,39,.6); }
+        .rp-voting-th-hour  { font-family:'DM Mono',monospace; color:#9ca3af; font-weight:500; border-bottom:1px solid rgba(55,65,81,.5); background:rgba(17,24,39,.6); }
+        .rp-voting-td-param { text-align:left !important; padding-left:12px !important; color:#cbd5e1; font-weight:500; border-bottom:1px solid rgba(55,65,81,.25); }
+        .rp-voting-cell     { border-bottom:1px solid rgba(55,65,81,.25); }
+        .rp-voting-table tbody tr:last-child td { border-bottom:none; }
+        .rp-voting-status td { background:rgba(17,24,39,.5); font-weight:600; color:#e5e7eb; }
+        .rp-voting-dot { display:inline-block; width:14px; height:14px; border-radius:3px; vertical-align:middle; }
+        .rp-voting-green  { background:#22c55e; }
+        .rp-voting-orange { background:#f59e0b; }
+        .rp-voting-red    { background:#ef4444; }
+        .rp-voting-na     { background:rgba(75,85,99,.5); }
+        .rp-voting-legend { display:flex; flex-wrap:wrap; gap:14px; padding:10px 16px; border-top:1px solid rgba(55,65,81,.4); font-size:11px; color:#9ca3af; }
+        .rp-voting-legend span { display:inline-flex; align-items:center; gap:6px; }
+
         /* Volet balise — bloc rose des vents en 3 colonnes :
            dernier relevé · cadran · légende.
            (mise en page en classe et non en style inline car Alpine x-show

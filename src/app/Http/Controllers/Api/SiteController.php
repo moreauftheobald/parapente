@@ -63,9 +63,16 @@ class SiteController extends Controller
                 'confidence'   => $s->confidence_pct,
                 'wind_dir'     => $s->wind_dir_consensus,
                 'wind_speed'   => $s->wind_speed_consensus,
+                'wind_gust'    => $s->wind_gust_consensus,
                 'precip'       => $s->precip_consensus,
+                'cloud_base'   => $s->cloud_base_consensus,
                 'models_count' => $s->models_count,
                 'models_conv'  => $s->models_converging,
+                // `detail` allégé : pour l'onglet « Détail du scoring », on
+                // n'expose que consensus + convergence + color de chaque
+                // paramètre (les `values` brutes restent en base mais ne
+                // sont pas transférées au client pour limiter le payload).
+                'detail'       => $this->trimScoreDetail($s->detail),
             ])->values(),
             'sun_windows' => $sunWindows,
             'day_quality' => $dayQuality,
@@ -369,6 +376,27 @@ class SiteController extends Controller
         'gem_seamless'               => '#10b981',
         'gfs_seamless'               => '#f97316',
     ];
+
+    /**
+     * Allège le JSON `detail` d'un SiteScore : on conserve consensus,
+     * convergence (si présente) et color de chaque paramètre, on retire les
+     * arrays `values` (utiles seulement au backfill côté serveur).
+     */
+    private function trimScoreDetail(?array $detail): ?array
+    {
+        if (! is_array($detail)) {
+            return null;
+        }
+        $out = [];
+        foreach ($detail as $param => $info) {
+            if (! is_array($info)) continue;
+            $entry = ['consensus' => $info['consensus'] ?? null];
+            if (array_key_exists('convergence', $info)) $entry['convergence'] = $info['convergence'];
+            if (array_key_exists('color', $info))       $entry['color']       = $info['color'];
+            $out[$param] = $entry;
+        }
+        return $out;
+    }
 
     private function getSunWindow(float $lat, float $lng, string $day): array
     {

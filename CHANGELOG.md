@@ -11,6 +11,39 @@ Conventions :
 
 ---
 
+## 2026-05-13 — Onglet « Détail du scoring » (voting logic)
+
+### Ajouté
+- **Nouvel onglet « Détail scoring · 5 jours »** dans le volet droit des
+  sites, intercalé entre « Synthèse » et « Modèles météo · {jour} ». Affiche
+  cinq tableaux empilés (J → J+4), un par jour. En lignes : les cinq
+  paramètres de la voting logic — *Direction*, *Vitesse*, *Rafales*,
+  *Précipitations*, *Plafond* — plus une ligne *Statut global* en bas. En
+  colonnes : les heures de la fenêtre solaire. Chaque cellule est une
+  pastille colorée (vert *OK* / orange *Prudence* / rouge *Éliminatoire* /
+  gris *N/A*) avec tooltip natif (consensus + convergence).
+- **`ScoringService::computeParamColors()`** (méthode publique) : isole la
+  coloration par paramètre, alignée sur `applyEliminatoryRules()`. Direction
+  et vitesse moyenne en binaire vert/rouge (dans la plage / hors plage),
+  rafales selon les seuils 25/35 km/h, précipitations vert/orange/rouge
+  selon consensus et présence d'au moins un modèle annonçant de la pluie,
+  plafond *informatif* à partir de `site_conditions.cloud_base_min_m` (rouge
+  en-dessous, orange dans une marge de 100 m, vert au-dessus).
+- **Commande artisan `scores:recompute-detail-colors`** : backfill des
+  `site_scores` déjà en base (lit les consensus et `precip.values` persistés
+  dans `detail`, applique `computeParamColors`, met à jour `detail.*.color`).
+  Options `--site=` et `--chunk=`, idempotente, sans refetch météo.
+
+### Modifié
+- **`site_scores.detail`** : chaque sous-bloc (`wind_dir`, `wind_speed`,
+  `wind_gust`, `precip`, `cloud_base`) reçoit un champ `color` ∈ {green,
+  orange, red, unknown}.
+- **`GET /api/sites/{id}/scores`** expose désormais un champ `detail`
+  allégé par créneau (consensus + convergence + color, sans les `values`
+  brutes pour limiter le payload), ainsi que `wind_gust` et `cloud_base`.
+
+---
+
 ## 2026-05-12 — Refonte de l'écran carte météo
 
 ### Ajouté

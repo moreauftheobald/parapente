@@ -157,8 +157,15 @@ Coo Ouest, Algrange, Fumay, Coo Sud, Revin Fallières, Klusserath, Markstein.
 ```
 GET /api/sites              → Liste tous les sites actifs (métadonnées)
 GET /api/sites/{id}/scores  → Scores filtrés fenêtre solaire + sun_windows
+                              + day_quality + detail allégé par créneau
+                              (consensus/convergence/color des 5 paramètres
+                              de la voting logic ; sans les `values` brutes)
 GET /api/sites/{id}/chart   → Données horaires pour popup graphique
                               (vent min/moy/max, nuages H/M/B, direction)
+GET /api/sites/{id}/multimodel?day=YYYY-MM-DD&period=24h|daylight
+                            → Détail multi-modèles d'une journée (vent,
+                              direction, précip, humidité, température,
+                              plafond) + consensus par heure
 ```
 
 ### Fenêtre de vol solaire (appliquée dans `SiteController`)
@@ -297,7 +304,19 @@ URL configurable via `OPEN_METEO_BASE_URL` dans `.env` :
     direction ou vitesse moyenne hors plage du site
   - orange : ≥1 modèle annonce de la pluie ; rafale consensus 25-35 km/h
   - (la rafale = consensus de `wind_speed_max`, idem voting logic que le reste)
+- **Coloration par paramètre** (`computeParamColors()`, méthode publique) :
+  isole la couleur green/orange/red de chacun des 5 paramètres (direction,
+  vitesse moy., rafales, précip, plafond) — alignée sur les règles
+  éliminatoires. Stockée dans `site_scores.detail.<param>.color` à chaque
+  scoring. Sert à l'onglet « Détail scoring · 5 jours » du volet droit.
+  Plafond : informatif à partir de `site_conditions.cloud_base_min_m` (rouge
+  en-dessous, orange dans une marge de 100 m, vert au-dessus, sinon `unknown`).
 - `upsert()` en masse
+- **Backfill** : `php artisan scores:recompute-detail-colors [--site=<id>]
+  [--chunk=500]` recalcule `detail.*.color` sur les scores existants sans
+  refetch météo. Idempotent. Lance-la après un déploiement qui change la
+  logique de couleurs (sinon les couleurs s'actualiseront au prochain fetch
+  horaire).
 
 > **Qualité d'une journée** — calculée à la lecture dans `SiteController::computeDayQuality`
 > (pas en base) : viabilité 0-100 = Σ(poids horaire × valeur du statut ×
@@ -343,9 +362,6 @@ Intégration API temps réel pour validation des prévisions.
   globaux (forme de la cloche horaire de viabilité — pic / sigma / seuils
   vert/orange ; seuils génériques de rafales ; etc.) plutôt que de les avoir
   en constantes dans le code.
-- **Onglet « détail du scoring »** dans le volet droit des sites : tableau
-  heure par heure des paramètres ayant servi au scoring (consensus & valeurs
-  par modèle, convergences, règle déclenchée, etc.).
 - **« Pseudo-wiki » technique** : page (publique ou admin) documentant en
   détail le fonctionnement de l'appli — sources de données, modèles météo,
   mode de calcul du scoring, voting logic, plafond/Espy, fenêtre solaire,

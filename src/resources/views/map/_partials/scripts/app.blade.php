@@ -15,7 +15,7 @@ function mapApp(){return{
     showGreen:true, showOrange:true, showRed:true,
 
     // ── Volet droit (site) : onglets + données ──
-    rpTab:'synthese',                              // synthese | models | models5
+    rpTab:'synthese',                              // synthese | voting | models | models5
     chartData:null, chartLoading:false, chartSite:null,   // onglet « Synthèse » (= ancienne popup)
     multimodelData:null,  multimodelLoading:false,        // onglet « Modèles du jour »
     multimodel5Data:null, multimodel5Loading:false,       // onglet « Modèles 5 jours »
@@ -238,6 +238,10 @@ function mapApp(){return{
         this.rpTab=tab;
         if(tab==='synthese'){
             if(this.chartData) this.$nextTick(()=>this.renderSynthese());
+        }else if(tab==='voting'){
+            // L'onglet « Détail du scoring » est purement déclaratif :
+            // il lit allScores[site.id] (déjà chargé via /api/sites/{id}/scores)
+            // qui contient désormais le sous-champ `detail` avec les couleurs.
         }else if(tab==='models'){
             if(!this.multimodelData && !this.multimodelLoading) await this.loadMultimodel();
             else if(this.multimodelData) this.$nextTick(()=>this.renderCharts());
@@ -245,6 +249,96 @@ function mapApp(){return{
             if(!this.multimodel5Data && !this.multimodel5Loading) await this.loadFiveDays();
             else if(this.multimodel5Data) this.$nextTick(()=>this.renderCharts5());
         }
+    },
+
+    // ── Onglet « Détail du scoring (voting logic) · 5 jours » ────
+    // Construit la structure d'affichage : 5 tableaux (1 par jour),
+    // chaque tableau = 5 paramètres + 1 ligne statut en bas, colonnes =
+    // heures de la fenêtre solaire. Les couleurs viennent de
+    // score.detail.<param>.color, calculées par ScoringService.
+    get votingHasData(){
+        const id = this.site?.id;
+        if(!id) return false;
+        return (this.allScores[id]?.length ?? 0) > 0;
+    },
+    get votingDays(){
+        const id = this.site?.id;
+        if(!id) return [];
+        const scores = this.allScores[id] || [];
+        const windows = this.sunWindows[id] || {};
+        const slice = this.days.slice(0, 5);
+        const PARAM_ROWS = [
+            {key:'wind_dir',   label:'Direction'},
+            {key:'wind_speed', label:'Vitesse'},
+            {key:'wind_gust',  label:'Rafales'},
+            {key:'precip',     label:'Précipitations'},
+            {key:'cloud_base', label:'Plafond'},
+        ];
+        return slice.map(d => {
+            const dayScores = scores.filter(s => s.day === d.raw);
+            const win = windows[d.raw];
+            // Reconstruit la liste d'heures attendue (fenêtre solaire) ;
+            // fallback : heures réellement présentes dans dayScores.
+            let hours;
+            if(win && win.start_hour != null && win.end_hour != null){
+                hours = [];
+                for(let h = win.start_hour; h <= win.end_hour; h++) hours.push(h);
+            }else{
+                hours = [...new Set(dayScores.map(s => parseInt(s.hour, 10)))].sort((a,b)=>a-b);
+            }
+            // Indexe les scores du jour par heure
+            const byHour = {};
+            dayScores.forEach(s => { byHour[parseInt(s.hour, 10)] = s; });
+
+            const rows = PARAM_ROWS.map(p => ({
+                key: p.key,
+                label: p.label,
+                cells: hours.map(h => this._votingCell(byHour[h], p.key)),
+            }));
+            // Ligne statut global en bas
+            rows.push({
+                key: 'status',
+                label: 'Statut global',
+                cells: hours.map(h => this._votingCell(byHour[h], 'status')),
+            });
+
+            const hint = win
+                ? `${String(win.start_hour).padStart(2,'0')}h → ${String(win.end_hour).padStart(2,'0')}h`
+                : '';
+
+            return { raw:d.raw, label:d.label, hint, hours, rows };
+        });
+    },
+    _votingCell(score, key){
+        if(!score) return { color:'na', title:'Aucune donnée' };
+        if(key === 'status'){
+            const c = ['green','orange','red'].includes(score.status) ? score.status : 'na';
+            return { color: c, title: this._votingStatusTitle(score) };
+        }
+        const d = score.detail?.[key];
+        if(!d) return { color:'na', title:'Donnée indisponible' };
+        const c = ['green','orange','red'].includes(d.color) ? d.color : 'na';
+        return { color: c, title: this._votingParamTitle(key, score, d) };
+    },
+    _votingStatusTitle(s){
+        const lbl = {green:'OK', orange:'Prudence', red:'Éliminatoire', unknown:'—'}[s.status] || s.status;
+        return `${s.hour} · ${lbl} · confiance ${s.confidence ?? '—'}%`;
+    },
+    _votingParamTitle(key, s, d){
+        const hour = s.hour;
+        switch(key){
+            case 'wind_dir':
+                return `${hour} · direction ${d.consensus != null ? Math.round(d.consensus) + '°' : '—'} (conv. ${d.convergence ?? '—'})`;
+            case 'wind_speed':
+                return `${hour} · vent moyen ${d.consensus != null ? Number(d.consensus).toFixed(1) + ' km/h' : '—'} (conv. ${d.convergence ?? '—'})`;
+            case 'wind_gust':
+                return `${hour} · rafales ${d.consensus != null ? Number(d.consensus).toFixed(1) + ' km/h' : '—'}`;
+            case 'precip':
+                return `${hour} · pluie ${d.consensus != null ? Number(d.consensus).toFixed(1) + ' mm/h' : '—'} (conv. ${d.convergence ?? '—'})`;
+            case 'cloud_base':
+                return `${hour} · plafond ${d.consensus != null ? d.consensus + ' m' : '—'}`;
+        }
+        return hour;
     },
 
     // ── Conformité / libellés ────────────────────────────────────

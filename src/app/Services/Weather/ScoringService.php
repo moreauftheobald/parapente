@@ -137,30 +137,46 @@ class ScoringService
         $modelsCount      = count($windDirs);
         $modelsConverging = (int) round($modelsCount * min($windDirConvergence, $windSpeedConvergence));
 
-        // ── 6. Détail JSON ───────────────────────────────────────
+        // ── 6. Couleurs par paramètre (voting logic détaillée) ──
+        $colors = $this->computeParamColors(
+            $conditions,
+            $windDirConsensus,
+            $windSpeedConsensus,
+            $windGustConsensus,
+            $precipConsensus,
+            array_column($precips, 'value'),
+            $cloudBaseConsensus
+        );
+
+        // ── 7. Détail JSON ───────────────────────────────────────
         $detail = [
             'wind_dir' => [
                 'consensus'   => $windDirConsensus,
                 'convergence' => round($windDirConvergence, 2),
                 'values'      => array_column($windDirs, 'value'),
+                'color'       => $colors['wind_dir'],
             ],
             'wind_speed' => [
                 'consensus'   => $windSpeedConsensus,
                 'convergence' => round($windSpeedConvergence, 2),
                 'values'      => array_column($windSpeeds, 'value'),
+                'color'       => $colors['wind_speed'],
             ],
             'wind_gust' => [
                 'consensus' => $windGustConsensus,
                 'values'    => array_column($windGusts, 'value'),
+                'color'     => $colors['wind_gust'],
             ],
             'precip' => [
                 'consensus'   => $precipConsensus,
                 'convergence' => round($precipConvergence, 2),
                 'values'      => array_column($precips, 'value'),
+                'color'       => $colors['precip'],
             ],
             'cloud_base' => [
                 'consensus' => $cloudBaseConsensus !== null ? (int) round($cloudBaseConsensus) : null,
                 'values'    => array_column($cloudBases, 'value'),
+                'color'     => $colors['cloud_base'],
             ],
         ];
 
@@ -229,6 +245,78 @@ class ScoringService
 
         // Tout est OK
         return 'green';
+    }
+
+    // ── Couleurs par paramètre (onglet « Détail du scoring ») ──
+
+    /**
+     * Calcule la couleur green|orange|red de chaque paramètre de la voting
+     * logic, en isolant le critère (contrairement au statut global qui est
+     * agrégé). Logique alignée sur applyEliminatoryRules().
+     *
+     * @param  array<float> $precipValues  valeurs brutes de précipitation
+     *         de chaque modèle, utilisées pour détecter si ≥1 modèle
+     *         prévoit de la pluie (→ precip orange).
+     * @return array{wind_dir:string,wind_speed:string,wind_gust:string,precip:string,cloud_base:string}
+     */
+    public function computeParamColors(
+        $conditions,
+        float $windDir,
+        float $windSpeed,
+        float $windGust,
+        float $precip,
+        array $precipValues,
+        ?float $cloudBase
+    ): array {
+        // Direction : binaire (dans l'axe / hors axe)
+        $dirColor = $conditions->isWindDirectionFavorable((int) $windDir) ? 'green' : 'red';
+
+        // Vitesse moyenne : binaire (dans la plage / hors plage)
+        $speedColor = $conditions->isWindSpeedFavorable($windSpeed) ? 'green' : 'red';
+
+        // Rafales : green / orange / red selon les seuils
+        $gustColor = match (true) {
+            $windGust > self::GUST_RED_KMH    => 'red',
+            $windGust >= self::GUST_ORANGE_KMH => 'orange',
+            default                            => 'green',
+        };
+
+        // Précipitations : rouge si consensus > limite ; orange si ≥1 modèle
+        // prédit de la pluie ; vert sinon.
+        if ($precip > $conditions->precip_max) {
+            $precipColor = 'red';
+        } else {
+            $anyRain = false;
+            foreach ($precipValues as $v) {
+                if ((float) $v > self::PRECIP_RAIN_THRESHOLD) {
+                    $anyRain = true;
+                    break;
+                }
+            }
+            $precipColor = $anyRain ? 'orange' : 'green';
+        }
+
+        // Plafond : informatif (pas éliminatoire). Vert si > cloud_base_min_m,
+        // orange dans une marge de 100 m, rouge en-dessous. Unknown si pas
+        // de seuil défini sur le site ou pas de consensus (ciel dégagé).
+        $minCeil = $conditions->cloud_base_min_m ?? null;
+        if ($cloudBase === null || $minCeil === null) {
+            $cloudColor = 'unknown';
+        } elseif ($cloudBase < $minCeil) {
+            $cloudColor = 'red';
+        } elseif ($cloudBase < $minCeil + 100) {
+            $cloudColor = 'orange';
+        } else {
+            $cloudColor = 'green';
+        }
+
+        return [
+            'wind_dir'   => $dirColor,
+            'wind_speed' => $speedColor,
+            'wind_gust'  => $gustColor,
+            'precip'     => $precipColor,
+            'cloud_base' => $cloudColor,
+        ];
     }
 
     // ── Extraction des valeurs pondérées ────────────────────────

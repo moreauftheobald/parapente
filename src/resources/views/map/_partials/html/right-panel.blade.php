@@ -33,6 +33,7 @@
                         <div class="rp-tabs">
                             <button class="rp-tab" :class="rpTab === 'synthese' ? 'active' : ''" @click="setRpTab('synthese')"
                                     x-text="'Synthèse · ' + (days[selectedDayIdx]?.label ?? '')"></button>
+                            <button class="rp-tab" :class="rpTab === 'voting' ? 'active' : ''" @click="setRpTab('voting')">Détail scoring · 5 jours</button>
                             <button class="rp-tab" :class="rpTab === 'models' ? 'active' : ''" @click="setRpTab('models')"
                                     x-text="'Modèles météo · ' + (days[selectedDayIdx]?.label ?? '')"></button>
                             <button class="rp-tab" :class="rpTab === 'models5' ? 'active' : ''" @click="setRpTab('models5')">Modèles · 5 jours</button>
@@ -77,6 +78,58 @@
                                     <div class="rp-placeholder">Aucune donnée disponible pour ce jour.</div>
                                 </template>
                             </div>
+                        </div>
+
+                        {{-- ── Onglet « Détail du scoring (voting logic) · 5 jours » ── --}}
+                        {{-- Tableau par jour : 5 paramètres + ligne statut global,    --}}
+                        {{-- une colonne par heure de la fenêtre solaire, case colorée --}}
+                        {{-- selon le résultat de la voting logic.                     --}}
+                        <div class="rp-pane rp-pane-scroll" x-show="rpTab === 'voting'">
+                            <template x-if="!votingHasData">
+                                <div class="rp-placeholder">Aucune donnée de scoring disponible.</div>
+                            </template>
+                            <template x-if="votingHasData">
+                                <div class="rp-voting">
+                                    <template x-for="day in votingDays" :key="day.raw">
+                                        <div class="rp-voting-day">
+                                            <div class="rp-voting-daylabel">
+                                                <span x-text="day.label"></span>
+                                                <span class="rp-voting-dayhint" x-text="day.hint"></span>
+                                            </div>
+                                            <div class="rp-voting-tablewrap">
+                                                <table class="rp-voting-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th class="rp-voting-th-param">Paramètre</th>
+                                                            <template x-for="h in day.hours" :key="h">
+                                                                <th class="rp-voting-th-hour" x-text="h + 'h'"></th>
+                                                            </template>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <template x-for="row in day.rows" :key="row.key">
+                                                            <tr :class="row.key === 'status' ? 'rp-voting-status' : ''">
+                                                                <td class="rp-voting-td-param" x-text="row.label"></td>
+                                                                <template x-for="(cell, idx) in row.cells" :key="idx">
+                                                                    <td class="rp-voting-cell">
+                                                                        <span class="rp-voting-dot" :class="'rp-voting-' + (cell.color || 'na')" :title="cell.title"></span>
+                                                                    </td>
+                                                                </template>
+                                                            </tr>
+                                                        </template>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <div class="rp-voting-legend">
+                                        <span><span class="rp-voting-dot rp-voting-green"></span>OK</span>
+                                        <span><span class="rp-voting-dot rp-voting-orange"></span>Prudence</span>
+                                        <span><span class="rp-voting-dot rp-voting-red"></span>Éliminatoire</span>
+                                        <span><span class="rp-voting-dot rp-voting-na"></span>N/A</span>
+                                    </div>
+                                </div>
+                            </template>
                         </div>
 
                         {{-- ── Onglet « Modèles météo du jour » ── --}}
