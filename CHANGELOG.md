@@ -11,6 +11,120 @@ Conventions :
 
 ---
 
+## 2026-05-13 — Scoring personnel par utilisateur (FF_personnal_scoring)
+
+Implémentation complète du scoring perso en trois lots (auth front, backend
++ cache + UI gestion, intégration carte). Cf. `FF_personnal_scoring.md`
+pour le cadrage. Bloquant : authentification front livrée dans la foulée.
+
+### Ajouté
+- **Authentification front** (compte « user ») : pages publiques
+  `/inscription` (`register`), `/connexion` (`login`), déconnexion
+  `/deconnexion`. Form requests dédiés (8 caractères min, lettres +
+  chiffres, throttle 5/min). Profil utilisateur `/profil` avec sections
+  Identité (nom, pseudo unique, email, bio), changement de mot de passe
+  (error bag `updatePassword`), suppression de compte (error bag
+  `deleteAccount`). Approche maison sans Laravel Breeze, cohérente avec
+  l'admin existant.
+- **Écran complet `/profil/scorings`** (`user.scorings`) : gestion des
+  scorings perso sous forme de grille de cartes responsive (1/2/3
+  colonnes), une carte par scoring avec rose des vents SVG (arc favorable
+  colorisé), jauge de plage de vent avec marker idéal, détails rafales /
+  plafond / couverture nuages, badge actif/inactif visible, horodatage
+  d'activation. Filtres dans le volet gauche (statut, recherche par nom
+  de site, tri récent / nom / ancien). Compteur X/10 actifs · Y/50 stockés.
+  Modal de création/édition avec validation cohérence min ≤ idéal ≤ max
+  et orange < red.
+- **Section résumée scorings perso** sur `/profil` (2 tuiles compteur +
+  bouton « Gérer mes scorings »).
+- **API REST `/api/users/me/scorings/*`** (auth:web via cookie de
+  session) : `GET` (liste avec site joint), `POST` (création, contraint
+  aux sites `active = true`, cap soft à 50 stockés), `PATCH`, `DELETE`,
+  `POST {id}/activate` (rotation LRU dans une transaction si ≥10 actifs),
+  `POST {id}/deactivate`.
+- **Carte météo user-aware** :
+  - Badge sur le marker (bleu plein = scoring perso actif, contour gris =
+    enregistré mais inactif).
+  - Filtre « Mes sites uniquement » dans le volet gauche (auth seulement),
+    bandeau « Scoring perso · {pseudo} » dans le volet droit sur un site
+    couvert par un scoring perso actif.
+  - Onglet « Détail scoring » : cellules **split diagonales** (triangle
+    haut-gauche = standard, bas-droite = perso) sur les 5 paramètres ET
+    la ligne « Statut global ». Diagonale blanche élargie à 8 % pour
+    rester visible même quand les deux moitiés concluent à la même
+    couleur — signal qu'un scoring perso est en jeu. Tooltip JS dédié
+    avec les deux libellés.
+  - Couleur du halo (statut du jour) recalculée avec les conditions
+    perso (réutilise les consensus déjà persistés sur `site_scores`,
+    pas de fetch supplémentaire).
+
+### Modifié
+- **`/api/sites`** devient user-aware : nouveau champ `user_scoring`
+  (`'active' | 'inactive' | null`) par site.
+- **`/api/sites/{id}/scores`** : nouveau champ `scoring_source`
+  (`'user' | 'global'`) ; quand l'user a un scoring actif sur le site,
+  `status` et `detail.*.color` reflètent le scoring perso ; on conserve
+  systématiquement `status_global` + `detail.*.color_global` à côté pour
+  alimenter la comparaison côté carte.
+- **`ScoringService`** : extraction d'une interface
+  `App\Contracts\FlyingConditions` partagée par `SiteCondition` et
+  `UserSiteCondition` via un trait `Concerns\HasFlyingConditions` (zéro
+  duplication). Nouvelle méthode publique `rescore(FlyingConditions,
+  SiteScore)` qui rejoue les règles éliminatoires + couleurs sans
+  recalculer le consensus.
+- **`FetchSiteForecastsJob`** : à la fin de chaque salve de fetch + scoring,
+  invalide les caches `user_scoring:*` du site
+  (`UserScoringService::invalidateSite`).
+- **`Settings::flush()`** : invalide en plus tous les caches
+  `user_scoring:*` (résolution paresseuse via `app()` pour éviter la
+  dépendance circulaire).
+- **`bootstrap/app.php`** : ajout de `EncryptCookies`, `StartSession` et
+  `PreventRequestForgery` au groupe middleware `api` pour permettre l'auth
+  via cookie de session côté API (pas de Sanctum). Redirection des
+  invités passée de `admin.login` à `login`.
+- **Navbar** : entrée « Mon profil » + « Mes scorings perso » dans le menu
+  utilisateur (dropdown en haut à droite). Le formulaire de connexion en
+  popover poste désormais vers `login` (front), plus vers `admin.login`.
+
+### Base de données
+- **Migration `users`** : ajout de `pseudo` (string unique nullable) et
+  `bio` (text nullable).
+- **Nouvelle table `user_site_conditions`** : miroir de `site_conditions`
+  (`wind_dir_min/max`, `wind_speed_min/max/ideal`, override rafales
+  orange/red, `cloud_base_min_m`, `cloud_cover_low_max`, `notes`) +
+  `user_id` / `site_id` (cascadeOnDelete) + `is_active` (bool) +
+  `activated_at` (datetime nullable). `UNIQUE(user_id, site_id)`, index
+  composite `(user_id, is_active, activated_at)` pour la requête LRU.
+- **Migrations patchées pour SQLite** : `change_balises_source_to_string`
+  et les deux `make_*_nullable_in_sites` deviennent no-op sous SQLite (le
+  `ALTER TABLE ... MODIFY` n'y est pas supporté). Permet aux tests
+  features de tourner.
+
+### Architecture
+- **Nouveau service `App\Services\Weather\UserScoringService`** : calcule
+  les scores perso à la volée à partir des consensus déjà persistés sur
+  `site_scores` (pas de duplication en base), cache Redis 1 h avec clé
+  `user_scoring:{user_id}:site:{site_id}`. Activation transactionnelle
+  avec rotation LRU des 10 actifs max (constante
+  `UserSiteCondition::MAX_ACTIVE`). Cap soft à 50 stockés
+  (`MAX_STORED`).
+
+### Tests
+- 26 nouveaux tests features et unitaires : authentification (register,
+  login, profil), API user scorings (CRUD, autorisations, cohérences,
+  LRU), service user scoring (rescore, cache, invalidations), API sites
+  user-aware (`user_scoring`, `scoring_source`, `color_global`,
+  `status_global`), page `/profil/scorings`. Suite complète à 54/54.
+- **`tests/TestCase`** : `withoutVite()` global (les vues Blade
+  rendraient une 500 sans `public/build/manifest.json`).
+
+### Déploiement
+- `php artisan migrate` pour appliquer les deux nouvelles migrations.
+- `php artisan optimize:clear` après déploiement (les vues map / profil
+  sont recompilées).
+
+---
+
 ## 2026-05-13 — Écran admin « Paramètres généraux » + seuils paramétrables
 
 ### Ajouté
