@@ -11,7 +11,57 @@ Conventions :
 
 ---
 
-## 2026-05-13 — Scoring personnel par utilisateur (FF_personnal_scoring)
+## 2026-05-13 — Comparaison modèles ↔ balises, phase 1 (infra collecte)
+
+Premier jalon de la comparaison entre les prévisions des modèles météo
+et les observations réelles des balises. Phase 1 : infrastructure de
+collecte uniquement, prépare le calcul de fiabilité dynamique des
+modèles (cf. `FF_model_reliability.md` pour le cadrage complet).
+
+Pas d'impact utilisateur final à ce stade : on accumule de la donnée
+pendant ≥ 7 jours avant d'attaquer la phase 2 (calcul de fiabilité par
+modèle / horizon, écran admin de surveillance).
+
+### Ajouté
+- **`FF_model_reliability.md`** à la racine : cadrage de la feature
+  complète (4 phases, ~8 j d'effort). Capture le concept (pondération
+  dynamique du consensus multi-modèles via auto-apprentissage léger
+  sur fenêtre 7 j glissants), le modèle de données proposé (table
+  `model_reliability`), les métriques d'erreur (% direction circulaire,
+  vitesse avec plancher dynamique `max(obs, 5 km/h)`), la formule de
+  `weight_factor` (ratio médian clampé `[0.25, 2.0]`), les écrans admin
+  (settings en onglets + tableau pivot de surveillance), le mapping
+  balise→site par IDW (phase 4), les alternatives écartées et les
+  risques.
+- **`AggregateBaliseReadingsHourlyJob`** : agrège `balise_readings` en
+  buckets horaires alignés sur l'heure pile, pour permettre une
+  comparaison directe avec `forecast_archive_balises`. Direction en
+  moyenne circulaire via `SUM(SIN)` / `SUM(COS)` en SQL puis `atan2`
+  en PHP. Fenêtre glissante 3 h pour capter les lectures tardives,
+  idempotent via upsert. Scheduler : `hourlyAt(5)`, décalé pour passer
+  après les polls PiouPiou / METAR à `:00`.
+- **Modèle Eloquent `BaliseReadingHourly`** + relation `balise()`.
+
+### Base de données
+- **Nouvelle table `balise_readings_hourly`** : agrégat horaire des
+  lectures balises. Colonnes `balise_id` (FK cascade), `hour_at`
+  (datetime, heure pile), `wind_direction` (smallint nullable),
+  `wind_speed_avg` / `wind_speed_max` / `temperature` (decimal
+  nullable), `readings_count` (smallint). `UNIQUE(balise_id, hour_at)`
+  + index `hour_at` pour la purge. Rétention 7 jours, alignée sur la
+  fenêtre J-6 → J de la comparaison à venir.
+
+### Modifié
+- **`PurgeOldForecastsJob`** : nouvelle constante
+  `HOURLY_RETENTION_DAYS = 7`, purge les lignes
+  `balise_readings_hourly` plus anciennes. Laisse intacts les 30 j de
+  `forecast_archive_balises` (utilisés par la voting logic existante).
+- **`routes/console.php`** : entrée scheduler
+  `aggregate-balise-readings-hourly`, cron à `:05` toutes les heures,
+  `withoutOverlapping()`.
+
+---
+
 
 Implémentation complète du scoring perso en trois lots (auth front, backend
 + cache + UI gestion, intégration carte). Cf. `FF_personnal_scoring.md`
