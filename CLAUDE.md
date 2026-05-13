@@ -119,16 +119,20 @@ src/                        ← Racine Laravel
 | `balise_readings` | Lectures temps réel balises                             |
 | `modules`         | Modules du menu (key, label, icône, route, `is_active`, `access_level` guest\|user\|admin, `requires_registration`, `sort_order`) |
 | `articles`        | Articles / changelog accueil (titre, body HTML, `author_id`, `is_published`, `published_at`) |
+| `settings`        | Paramètres globaux (clé unique, valeur JSON, label, description) — seuils de scoring éditables via `/admin/settings` |
 
 ### Colonnes clés `site_conditions`
 ```
 wind_dir_min, wind_dir_max          ← Axe favorable (ex: 75-105 pour Volmerange EST)
 wind_speed_min, wind_speed_max      ← Plage de vent acceptable (km/h)
 wind_speed_ideal                    ← Vent idéal
-precip_max                          ← Précipitations max tolérées
+wind_gust_orange_kmh                ← Override rafale orange par site (nullable, sinon valeur globale)
+wind_gust_red_kmh                   ← Override rafale rouge par site (nullable, sinon valeur globale)
 cloud_base_min_m                    ← Plafond nuageux minimum (m)
 cloud_cover_low_max                 ← Couverture nuageuse basse max
 ```
+> Les seuils de précipitations sont **globaux** (table `settings`,
+> clés `scoring.precip_orange_mmh` / `scoring.precip_red_mmh`).
 
 ### Colonnes clés `site_scores`
 ```
@@ -295,15 +299,21 @@ URL configurable via `OPEN_METEO_BASE_URL` dans `.env` :
   (même voting logic que le reste).
 - Format datetime `Y-m-d H:i:s` pour MariaDB (pas ISO avec `T`)
 
-**`ScoringService`** :
+**`ScoringService`** (dépend de `App\Services\Settings` pour lire les
+seuils — injection automatique par DI Laravel) :
 - Voting logic complète
 - Moyenne circulaire pour direction vent (évite le problème 359°/1°)
 - Moyenne inverse carré pour isoler les outliers
 - Statut horaire (`site_scores.status`) — règles éliminatoires :
-  - rouge : précip consensus > `precip_max` ; rafale consensus > 35 km/h ;
+  - rouge : précip consensus > `scoring.precip_red_mmh` ;
+    rafale consensus > `scoring.gust_red_kmh` (override par site possible
+    via `site_conditions.wind_gust_red_kmh`) ;
     direction ou vitesse moyenne hors plage du site
-  - orange : ≥1 modèle annonce de la pluie ; rafale consensus 25-35 km/h
+  - orange : précip consensus > `scoring.precip_orange_mmh` ;
+    rafale consensus > `scoring.gust_orange_kmh` (override par site possible
+    via `site_conditions.wind_gust_orange_kmh`)
   - (la rafale = consensus de `wind_speed_max`, idem voting logic que le reste)
+  - Tous les seuils sont éditables depuis `/admin/settings`.
 - **Coloration par paramètre** (`computeParamColors()`, méthode publique) :
   isole la couleur green/orange/red de chacun des 5 paramètres (direction,
   vitesse moy., rafales, précip, plafond) — alignée sur les règles
@@ -326,6 +336,19 @@ URL configurable via `OPEN_METEO_BASE_URL` dans `.env` :
 > isolés (1 h → 40 %, ≥3 h consécutives → 100 %). Statut du jour dérivé :
 > ≥35 vert, ≥12 orange, sinon rouge. Exposé dans `/api/sites/{id}/scores`
 > (`day_quality`) et utilisé côté carte pour la couleur des marqueurs.
+> Tous les paramètres (pic / σ / valeurs green/orange / run base/step /
+> seuils) sont éditables depuis `/admin/settings` (clés `viability.*`).
+
+### Paramètres globaux — `App\Services\Settings`
+
+Tous les seuils du scoring (précipitations, rafales, viabilité du jour)
+sont stockés dans la table `settings` et accessibles via le service
+`App\Services\Settings` (injection DI). API : `get($key, $default)`,
+`all()`, `set($key, $value)`, `setMany([...])`, `flush()`. Cache Redis 1 h
+invalidé à chaque écriture. Catalogue des défauts dans `Settings::DEFAULTS`
+(sert aussi de référence pour le seeder et l'écran admin). Édition par
+l'admin : `/admin/settings` (lien « Paramètres » dans la sidebar admin).
+Seeder : `php artisan db:seed --class=SettingsSeeder --force` (idempotent).
 
 ### Convention direction vent (IMPORTANT)
 `wind_dir_consensus` dans `site_scores` = direction **FROM** (convention météo standard).
@@ -354,14 +377,6 @@ Intégration API temps réel pour validation des prévisions.
 
 ## À faire plus tard (backlog)
 
-- **Seuils de rafales par site** : pouvoir surcharger les valeurs limites de
-  rafales (orange/rouge) sur chaque fiche de site (`site_conditions`). Si la
-  fiche du site n'a pas de valeur → on prend les valeurs générales ; sinon →
-  celles du site.
-- **Écran « paramètres généraux » dans l'admin** : modifier les réglages
-  globaux (forme de la cloche horaire de viabilité — pic / sigma / seuils
-  vert/orange ; seuils génériques de rafales ; etc.) plutôt que de les avoir
-  en constantes dans le code.
 - **« Pseudo-wiki » technique** : page (publique ou admin) documentant en
   détail le fonctionnement de l'appli — sources de données, modèles météo,
   mode de calcul du scoring, voting logic, plafond/Espy, fenêtre solaire,

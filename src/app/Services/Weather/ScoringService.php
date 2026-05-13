@@ -7,6 +7,7 @@ namespace App\Services\Weather;
 use App\Models\Site;
 use App\Models\SiteScore;
 use App\Models\WeatherModel;
+use App\Services\Settings;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -16,13 +17,28 @@ class ScoringService
     // ne s'écarte pas de plus de N% de la valeur consensus
     private const WIND_DIR_TOLERANCE_DEG   = 30;    // ±30° pour la direction
     private const WIND_SPEED_TOLERANCE_PCT = 25;    // ±25% pour la vitesse
-    private const PRECIP_RAIN_THRESHOLD    = 0.1;   // mm/h — en dessous = "pas de pluie"
+    private const PRECIP_RAIN_THRESHOLD    = 0.1;   // mm/h — seuil "trace de pluie" (convergence)
     private const EPSILON                  = 0.001; // évite division par zéro
 
-    // Seuils de rafale (km/h) sur le consensus de wind_speed_max :
-    //   < 25 → OK | 25-35 → orange (prudence) | > 35 → rouge (éliminatoire)
-    private const GUST_ORANGE_KMH          = 25;
-    private const GUST_RED_KMH             = 35;
+    public function __construct(private Settings $settings)
+    {
+    }
+
+    /** Seuil rafale orange applicable à un site (override site ou défaut global). */
+    private function gustOrangeFor($conditions): float
+    {
+        return $conditions->wind_gust_orange_kmh !== null
+            ? (float) $conditions->wind_gust_orange_kmh
+            : (float) $this->settings->get('scoring.gust_orange_kmh');
+    }
+
+    /** Seuil rafale rouge applicable à un site (override site ou défaut global). */
+    private function gustRedFor($conditions): float
+    {
+        return $conditions->wind_gust_red_kmh !== null
+            ? (float) $conditions->wind_gust_red_kmh
+            : (float) $this->settings->get('scoring.gust_red_kmh');
+    }
 
     /**
      * Calcule et persiste les scores pour tous les créneaux d'un site.
@@ -115,9 +131,7 @@ class ScoringService
             $windDirConsensus,
             $windSpeedConsensus,
             $windGustConsensus,
-            $precipConsensus,
-            $precipConvergence,
-            $modelForecasts
+            $precipConsensus
         );
 
         // ── 4. Confiance globale ─────────────────────────────────
@@ -128,7 +142,7 @@ class ScoringService
            + $precipConvergence    * 0.30) * 100
         );
 
-        // Si orange (modèle dissident sur pluie), on plafonne la confiance
+        // Si orange, on plafonne la confiance (la situation est limite)
         if ($status === 'orange') {
             $confidencePct = min($confidencePct, 60);
         }
@@ -144,7 +158,6 @@ class ScoringService
             $windSpeedConsensus,
             $windGustConsensus,
             $precipConsensus,
-            array_column($precips, 'value'),
             $cloudBaseConsensus
         );
 
@@ -206,40 +219,32 @@ class ScoringService
         float $windDir,
         float $windSpeed,
         float $windGust,
-        float $precip,
-        float $precipConvergence,
-        Collection $modelForecasts
+        float $precip
     ): string {
+        $precipOrange = (float) $this->settings->get('scoring.precip_orange_mmh');
+        $precipRed    = (float) $this->settings->get('scoring.precip_red_mmh');
+        $gustOrange   = $this->gustOrangeFor($conditions);
+        $gustRed      = $this->gustRedFor($conditions);
+
         // ── Rouges (éliminatoires) ──────────────────────────────
-        // Pluie consensus
-        if ($precip > $conditions->precip_max) {
+        if ($precip > $precipRed) {
             return 'red';
         }
-        // Rafales trop fortes
-        if ($windGust > self::GUST_RED_KMH) {
+        if ($windGust > $gustRed) {
             return 'red';
         }
-
-        // Au moins un modèle prédit de la pluie : orange (prudence)
-        $anyRain = $modelForecasts->contains(
-            fn ($f) => (float) $f->precipitation > self::PRECIP_RAIN_THRESHOLD
-        );
-        if ($anyRain) {
-            return 'orange';
-        }
-
-        // Direction hors plage : rouge
         if (! $conditions->isWindDirectionFavorable((int) $windDir)) {
             return 'red';
         }
-
-        // Vitesse moyenne hors plage : rouge
         if (! $conditions->isWindSpeedFavorable($windSpeed)) {
             return 'red';
         }
 
-        // Rafales modérées (25-35 km/h) : orange (prudence)
-        if ($windGust >= self::GUST_ORANGE_KMH) {
+        // ── Oranges (prudence) ──────────────────────────────────
+        if ($precip > $precipOrange) {
+            return 'orange';
+        }
+        if ($windGust > $gustOrange) {
             return 'orange';
         }
 
@@ -254,9 +259,6 @@ class ScoringService
      * logic, en isolant le critère (contrairement au statut global qui est
      * agrégé). Logique alignée sur applyEliminatoryRules().
      *
-     * @param  array<float> $precipValues  valeurs brutes de précipitation
-     *         de chaque modèle, utilisées pour détecter si ≥1 modèle
-     *         prévoit de la pluie (→ precip orange).
      * @return array{wind_dir:string,wind_speed:string,wind_gust:string,precip:string,cloud_base:string}
      */
     public function computeParamColors(
@@ -265,7 +267,6 @@ class ScoringService
         float $windSpeed,
         float $windGust,
         float $precip,
-        array $precipValues,
         ?float $cloudBase
     ): array {
         // Direction : binaire (dans l'axe / hors axe)
@@ -274,27 +275,23 @@ class ScoringService
         // Vitesse moyenne : binaire (dans la plage / hors plage)
         $speedColor = $conditions->isWindSpeedFavorable($windSpeed) ? 'green' : 'red';
 
-        // Rafales : green / orange / red selon les seuils
-        $gustColor = match (true) {
-            $windGust > self::GUST_RED_KMH    => 'red',
-            $windGust >= self::GUST_ORANGE_KMH => 'orange',
-            default                            => 'green',
+        // Rafales : seuils globaux (settings) ou surcharges du site
+        $gustOrange = $this->gustOrangeFor($conditions);
+        $gustRed    = $this->gustRedFor($conditions);
+        $gustColor  = match (true) {
+            $windGust > $gustRed    => 'red',
+            $windGust > $gustOrange => 'orange',
+            default                 => 'green',
         };
 
-        // Précipitations : rouge si consensus > limite ; orange si ≥1 modèle
-        // prédit de la pluie ; vert sinon.
-        if ($precip > $conditions->precip_max) {
-            $precipColor = 'red';
-        } else {
-            $anyRain = false;
-            foreach ($precipValues as $v) {
-                if ((float) $v > self::PRECIP_RAIN_THRESHOLD) {
-                    $anyRain = true;
-                    break;
-                }
-            }
-            $precipColor = $anyRain ? 'orange' : 'green';
-        }
+        // Précipitations : seuils globaux sur le consensus seulement
+        $precipOrange = (float) $this->settings->get('scoring.precip_orange_mmh');
+        $precipRed    = (float) $this->settings->get('scoring.precip_red_mmh');
+        $precipColor  = match (true) {
+            $precip > $precipRed    => 'red',
+            $precip > $precipOrange => 'orange',
+            default                 => 'green',
+        };
 
         // Plafond : informatif (pas éliminatoire). Vert si > cloud_base_min_m,
         // orange dans une marge de 100 m, rouge en-dessous. Unknown si pas

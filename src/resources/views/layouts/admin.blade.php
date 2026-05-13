@@ -56,9 +56,9 @@
                 <a href="{{ route('admin.logs.index') }}" class="{{ $adminLink($adminSection === 'logs') }}">
                     <i class="fa-solid fa-scroll w-4 text-center"></i> Logs / monitoring
                 </a>
-                <span class="{{ $adminLink(false) }} opacity-50 cursor-default" title="à venir">
+                <a href="{{ route('admin.settings.index') }}" class="{{ $adminLink($adminSection === 'settings') }}">
                     <i class="fa-solid fa-gear w-4 text-center"></i> Paramètres
-                </span>
+                </a>
             </nav>
         @endauth
     </x-slot:detail>

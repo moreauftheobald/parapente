@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DataSyncController as AdminSyncController;
 use App\Http\Controllers\Admin\LogController as AdminLogController;
 use App\Http\Controllers\Admin\ModuleController as AdminModuleController;
+use App\Http\Controllers\Admin\SettingsController as AdminSettingsController;
 use App\Http\Controllers\Admin\SiteController as AdminSiteController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Admin\WeatherApiController as AdminApiController;
@@ -92,6 +93,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
         // ── Logs / monitoring ─────────────────────────────────────
         Route::get('/logs', [AdminLogController::class, 'index'])->name('logs.index');
 
-        // Sections futures (settings…) à brancher ici
+        // ── Paramètres généraux (seuils de scoring) ───────────────
+        Route::get('/settings',   [AdminSettingsController::class, 'index'])->name('settings.index');
+        Route::patch('/settings', [AdminSettingsController::class, 'update'])->name('settings.update');
     });
 });

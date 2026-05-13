@@ -227,15 +227,8 @@
                     </div>
                 </div>
 
-                {{-- Ligne 3 : précip + plafond + couverture --}}
-                <div>
-                    <label class="{{ $labelCls }}"><i class="fa-solid fa-cloud-rain text-sky-400 mr-1"></i> Précip max</label>
-                    <div class="flex">
-                        <input name="precip_max" type="number" step="0.1" min="0" max="50" required class="{{ $inputCls }} font-mono rounded-r-none"
-                               value="{{ old('precip_max', $cond?->precip_max ?? 0) }}">
-                        <span class="px-2 py-2 bg-gray-800 border border-l-0 border-gray-700 rounded-r-md text-xs text-gray-500">mm/h</span>
-                    </div>
-                </div>
+                {{-- Ligne 3 : rafales (surcharges optionnelles par site) + plafond + couverture --}}
+                {{-- Précipitations : seuils globaux (cf. /admin/settings), plus de précip_max par site --}}
                 <div>
                     <label class="{{ $labelCls }}"><i class="fa-solid fa-cloud text-gray-400 mr-1"></i> Plafond min</label>
                     <div class="flex">
@@ -251,6 +244,31 @@
                                value="{{ old('cloud_cover_low_max', $cond?->cloud_cover_low_max ?? 50) }}">
                         <span class="px-2 py-2 bg-gray-800 border border-l-0 border-gray-700 rounded-r-md text-xs text-gray-500">%</span>
                     </div>
+                </div>
+
+                {{-- Surcharge rafales (laisser vide pour utiliser les seuils globaux) --}}
+                <div>
+                    <label class="{{ $labelCls }}"><i class="fa-solid fa-tornado text-amber-400 mr-1"></i> Rafale orange <span class="text-gray-600">(override)</span></label>
+                    <div class="flex">
+                        <input name="wind_gust_orange_kmh" type="number" step="0.1" min="0" max="200" class="{{ $inputCls }} font-mono rounded-r-none"
+                               placeholder="globale"
+                               value="{{ old('wind_gust_orange_kmh', $cond?->wind_gust_orange_kmh) }}">
+                        <span class="px-2 py-2 bg-gray-800 border border-l-0 border-gray-700 rounded-r-md text-xs text-gray-500">km/h</span>
+                    </div>
+                </div>
+                <div>
+                    <label class="{{ $labelCls }}"><i class="fa-solid fa-tornado text-red-400 mr-1"></i> Rafale rouge <span class="text-gray-600">(override)</span></label>
+                    <div class="flex">
+                        <input name="wind_gust_red_kmh" type="number" step="0.1" min="0" max="200" class="{{ $inputCls }} font-mono rounded-r-none"
+                               placeholder="globale"
+                               value="{{ old('wind_gust_red_kmh', $cond?->wind_gust_red_kmh) }}">
+                        <span class="px-2 py-2 bg-gray-800 border border-l-0 border-gray-700 rounded-r-md text-xs text-gray-500">km/h</span>
+                    </div>
+                </div>
+                <div class="text-xs text-gray-500 self-end pb-2 md:col-span-3">
+                    <i class="fa-solid fa-circle-info"></i> Les seuils de pluie sont globaux ; les seuils de rafales aussi
+                    sauf surcharge ci-dessus (laisser vide pour utiliser la valeur globale).
+                    <a href="{{ route('admin.settings.index') }}" class="text-sky-400 hover:text-sky-300">Paramètres généraux</a>
                 </div>
             </div>
 

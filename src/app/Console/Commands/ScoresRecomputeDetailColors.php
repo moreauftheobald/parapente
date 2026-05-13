@@ -73,7 +73,6 @@ class ScoresRecomputeDetailColors extends Command
                 $windGust  = $detail['wind_gust']['consensus']  ?? null;
                 $precip    = $detail['precip']['consensus']     ?? null;
                 $cloudBase = $detail['cloud_base']['consensus'] ?? null;
-                $precipVals = $detail['precip']['values']       ?? [];
 
                 if ($windDir === null || $windSpeed === null || $windGust === null || $precip === null) {
                     $skipped++;
@@ -86,7 +85,6 @@ class ScoresRecomputeDetailColors extends Command
                     (float) $windSpeed,
                     (float) $windGust,
                     (float) $precip,
-                    is_array($precipVals) ? $precipVals : [],
                     $cloudBase !== null ? (float) $cloudBase : null,
                 );
 

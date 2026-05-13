@@ -11,6 +11,60 @@ Conventions :
 
 ---
 
+## 2026-05-13 — Écran admin « Paramètres généraux » + seuils paramétrables
+
+### Ajouté
+- **Page admin `/admin/settings`** (lien « Paramètres » dans la sidebar
+  admin, icône ⚙) qui regroupe les seuils globaux du scoring : trois
+  sections (Précipitations / Rafales / Viabilité d'une journée) avec une
+  description par champ. Enregistrement en un clic via `PATCH
+  /admin/settings`.
+- **Table `settings`** (clé unique + valeur JSON + label / description),
+  alimentée par `SettingsSeeder` à partir du catalogue `Settings::DEFAULTS`.
+- **Service `App\Services\Settings`** : accès cache (Redis, 1 h, invalidé
+  à chaque écriture) avec catalogue des défauts comme fallback. API :
+  `get($key, $default)`, `all()`, `set($key, $value)`, `setMany([...])`,
+  `flush()`. Lié en singleton dans `AppServiceProvider`.
+- **Override des rafales par site** : nouveaux champs `wind_gust_orange_kmh`
+  et `wind_gust_red_kmh` (nullable) sur `site_conditions`, exposés dans la
+  fiche d'édition du site (admin). Laisser vide pour utiliser la valeur
+  globale ; remplir pour surcharger.
+
+### Modifié
+- **Précipitations · règle de scoring** : la voting logic n'utilise plus
+  qu'un critère sur le **consensus** (vs. l'ancienne règle « ≥1 modèle
+  prévoit de la pluie »). Deux seuils globaux paramétrables : `scoring
+  .precip_orange_mmh` (au-delà → orange) et `scoring.precip_red_mmh`
+  (au-delà → rouge). Défauts : `0.0` et `0.1` mm/h.
+- **Rafales · règle de scoring** : `scoring.gust_orange_kmh` et
+  `scoring.gust_red_kmh` deviennent éditables (défauts 25 / 35 km/h),
+  surchargeables par site (cf. ci-dessus).
+- **Viabilité du jour** : les paramètres `viability.peak_hour`,
+  `viability.sigma`, `viability.val_green`, `viability.val_orange`,
+  `viability.run_base`, `viability.run_step`, `viability.green_threshold`,
+  `viability.orange_threshold` deviennent éditables (anciennement des
+  constantes dans `SiteController`).
+- **ScoringService** : nouvelle dépendance `Settings` (injectée par
+  DI). Constantes `GUST_ORANGE_KMH` / `GUST_RED_KMH` retirées.
+
+### Supprimé
+- **`site_conditions.precip_max`** (colonne + UI + helper
+  `isPrecipitationAcceptable`) : remplacée par les seuils globaux. La
+  migration de retour (down) recrée la colonne avec la valeur par défaut
+  `0.0` pour permettre un éventuel rollback.
+
+### Base de données
+- **`+ settings`** (`key` unique, `value` JSON, `label`, `description`).
+- **`site_conditions`** : `- precip_max`, `+ wind_gust_orange_kmh`,
+  `+ wind_gust_red_kmh` (nullable, decimal 5,1).
+
+### Déploiement
+- Après `php artisan migrate --force`, exécuter
+  `php artisan db:seed --class=SettingsSeeder --force` pour poser les
+  valeurs par défaut. Idempotent.
+
+---
+
 ## 2026-05-13 — Onglet « Détail du scoring » (voting logic)
 
 ### Ajouté

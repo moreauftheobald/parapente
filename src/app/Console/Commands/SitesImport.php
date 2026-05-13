@@ -104,7 +104,6 @@ class SitesImport extends Command
                     'wind_speed_min'       => 0,
                     'wind_speed_max'       => 25,
                     'wind_speed_ideal'     => 12,
-                    'precip_max'           => 0.0,
                     'cloud_base_min_m'     => 800,
                     'cloud_cover_low_max'  => 50,
                     'notes'                => $s['pge_link'] ? "Source : {$s['pge_link']}" : null,

@@ -172,15 +172,16 @@ class SiteController extends Controller
             'landing_lng' => ['nullable', 'numeric', 'between:-180,180'],
             'active'      => ['nullable', 'boolean'],
             // Conditions
-            'wind_dir_min'        => ['required', 'integer', 'between:0,360'],
-            'wind_dir_max'        => ['required', 'integer', 'between:0,360'],
-            'wind_speed_min'      => ['required', 'numeric', 'min:0',  'max:100'],
-            'wind_speed_max'      => ['required', 'numeric', 'min:0',  'max:100'],
-            'wind_speed_ideal'    => ['required', 'numeric', 'min:0',  'max:100'],
-            'precip_max'          => ['required', 'numeric', 'min:0',  'max:50'],
-            'cloud_base_min_m'    => ['required', 'integer', 'between:0,5000'],
-            'cloud_cover_low_max' => ['required', 'integer', 'between:0,100'],
-            'notes'               => ['nullable', 'string'],
+            'wind_dir_min'         => ['required', 'integer', 'between:0,360'],
+            'wind_dir_max'         => ['required', 'integer', 'between:0,360'],
+            'wind_speed_min'       => ['required', 'numeric', 'min:0', 'max:100'],
+            'wind_speed_max'       => ['required', 'numeric', 'min:0', 'max:100'],
+            'wind_speed_ideal'     => ['required', 'numeric', 'min:0', 'max:100'],
+            'wind_gust_orange_kmh' => ['nullable', 'numeric', 'min:0', 'max:200'],
+            'wind_gust_red_kmh'    => ['nullable', 'numeric', 'min:0', 'max:200'],
+            'cloud_base_min_m'     => ['required', 'integer', 'between:0,5000'],
+            'cloud_cover_low_max'  => ['required', 'integer', 'between:0,100'],
+            'notes'                => ['nullable', 'string'],
         ]);
 
         // Slug regénéré automatiquement depuis le nom (suffixe -pge-{id}
@@ -208,15 +209,16 @@ class SiteController extends Controller
             SiteCondition::updateOrCreate(
                 ['site_id' => $site->id],
                 [
-                    'wind_dir_min'        => $data['wind_dir_min'],
-                    'wind_dir_max'        => $data['wind_dir_max'],
-                    'wind_speed_min'      => $data['wind_speed_min'],
-                    'wind_speed_max'      => $data['wind_speed_max'],
-                    'wind_speed_ideal'    => $data['wind_speed_ideal'],
-                    'precip_max'          => $data['precip_max'],
-                    'cloud_base_min_m'    => $data['cloud_base_min_m'],
-                    'cloud_cover_low_max' => $data['cloud_cover_low_max'],
-                    'notes'               => $data['notes'] ?? null,
+                    'wind_dir_min'         => $data['wind_dir_min'],
+                    'wind_dir_max'         => $data['wind_dir_max'],
+                    'wind_speed_min'       => $data['wind_speed_min'],
+                    'wind_speed_max'       => $data['wind_speed_max'],
+                    'wind_speed_ideal'     => $data['wind_speed_ideal'],
+                    'wind_gust_orange_kmh' => $data['wind_gust_orange_kmh'] ?? null,
+                    'wind_gust_red_kmh'    => $data['wind_gust_red_kmh'] ?? null,
+                    'cloud_base_min_m'     => $data['cloud_base_min_m'],
+                    'cloud_cover_low_max'  => $data['cloud_cover_low_max'],
+                    'notes'                => $data['notes'] ?? null,
                 ]
             );
         });

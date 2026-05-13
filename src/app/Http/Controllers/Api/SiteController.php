@@ -9,11 +9,16 @@ use App\Models\Forecast;
 use App\Models\Site;
 use App\Models\SiteScore;
 use App\Models\WeatherModel;
+use App\Services\Settings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class SiteController extends Controller
 {
+    public function __construct(private Settings $settings)
+    {
+    }
+
     public function index(): JsonResponse
     {
         $sites = Site::active()->with('conditions')->get()->map(fn (Site $site) => [
@@ -284,18 +289,11 @@ class SiteController extends Controller
     }
 
     // ── Helpers ──────────────────────────────────────────────
-
+    //
     // Viabilité d'une journée : on pondère chaque heure de la fenêtre
     // solaire par (poids horaire × valeur du statut × facteur de
-    // continuité). Réglages :
-    private const VIA_PEAK_HOUR        = 13.5; // heure de poids horaire maximal
-    private const VIA_SIGMA            = 4.0;  // largeur de la cloche horaire (h)
-    private const VIA_VAL_GREEN        = 1.0;
-    private const VIA_VAL_ORANGE       = 0.40;
-    private const VIA_RUN_BASE         = 0.40; // contribution d'un créneau volable isolé (1 h)
-    private const VIA_RUN_STEP         = 0.30; // gain par heure consécutive supplémentaire (plafonné à 1.0 → run ≥ 3 h)
-    private const VIA_GREEN_THRESHOLD  = 35;   // viabilité ≥ → jour "vert"
-    private const VIA_ORANGE_THRESHOLD = 12;   // viabilité ≥ → jour "orange"
+    // continuité). Tous les seuils sont modifiables dans /admin/settings
+    // (clés `viability.*`).
 
     /**
      * Calcule la qualité d'une journée (viabilité 0-100 + statut dérivé)
@@ -313,10 +311,20 @@ class SiteController extends Controller
             return ['viability' => 0, 'status' => 'unknown', 'green_hours' => 0];
         }
 
-        $timeWeight = fn (int $h): float => exp(-(($h - self::VIA_PEAK_HOUR) ** 2) / (2 * self::VIA_SIGMA ** 2));
+        // Paramètres lus depuis la table `settings` (admin /admin/settings)
+        $peakHour    = (float) $this->settings->get('viability.peak_hour');
+        $sigma       = (float) $this->settings->get('viability.sigma');
+        $valGreen    = (float) $this->settings->get('viability.val_green');
+        $valOrange   = (float) $this->settings->get('viability.val_orange');
+        $runBase     = (float) $this->settings->get('viability.run_base');
+        $runStep     = (float) $this->settings->get('viability.run_step');
+        $thrGreen    = (int)   $this->settings->get('viability.green_threshold');
+        $thrOrange   = (int)   $this->settings->get('viability.orange_threshold');
+
+        $timeWeight = fn (int $h): float => exp(-(($h - $peakHour) ** 2) / (2 * $sigma ** 2));
         $statusVal  = fn (?string $s): float => match ($s) {
-            'green'  => self::VIA_VAL_GREEN,
-            'orange' => self::VIA_VAL_ORANGE,
+            'green'  => $valGreen,
+            'orange' => $valOrange,
             default  => 0.0,
         };
 
@@ -331,7 +339,7 @@ class SiteController extends Controller
                 $runLen[$h] = $runLen[$h + 1];
             }
         }
-        $runFactor = fn (int $len): float => $len <= 0 ? 0.0 : min(1.0, self::VIA_RUN_BASE + self::VIA_RUN_STEP * ($len - 1));
+        $runFactor = fn (int $len): float => $len <= 0 ? 0.0 : min(1.0, $runBase + $runStep * ($len - 1));
 
         $num = 0.0;
         $den = 0.0;
@@ -353,9 +361,9 @@ class SiteController extends Controller
         $viability = $den > 0.0 ? (int) round(100 * $num / $den) : 0;
         $status = ! $hasData
             ? 'unknown'
-            : ($viability >= self::VIA_GREEN_THRESHOLD
+            : ($viability >= $thrGreen
                 ? 'green'
-                : ($viability >= self::VIA_ORANGE_THRESHOLD ? 'orange' : 'red'));
+                : ($viability >= $thrOrange ? 'orange' : 'red'));
 
         return ['viability' => $viability, 'status' => $status, 'green_hours' => $greenHours];
     }

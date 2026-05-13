@@ -22,6 +22,7 @@ class DatabaseSeeder extends Seeder
             WeatherModelSeeder::class,
             SiteSeeder::class,
             GrandEstSitesSeeder::class,
+            SettingsSeeder::class,
         ]);
 
         User::factory()->create([

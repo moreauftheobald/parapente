@@ -16,21 +16,23 @@ class SiteCondition extends Model
         'wind_speed_min',
         'wind_speed_max',
         'wind_speed_ideal',
-        'precip_max',
+        'wind_gust_orange_kmh',
+        'wind_gust_red_kmh',
         'cloud_base_min_m',
         'cloud_cover_low_max',
         'notes',
     ];
 
     protected $casts = [
-        'wind_dir_min'        => 'integer',
-        'wind_dir_max'        => 'integer',
-        'wind_speed_min'      => 'integer',
-        'wind_speed_max'      => 'integer',
-        'wind_speed_ideal'    => 'integer',
-        'precip_max'          => 'decimal:1',
-        'cloud_base_min_m'    => 'integer',
-        'cloud_cover_low_max' => 'integer',
+        'wind_dir_min'         => 'integer',
+        'wind_dir_max'         => 'integer',
+        'wind_speed_min'       => 'integer',
+        'wind_speed_max'       => 'integer',
+        'wind_speed_ideal'     => 'integer',
+        'wind_gust_orange_kmh' => 'decimal:1',
+        'wind_gust_red_kmh'    => 'decimal:1',
+        'cloud_base_min_m'     => 'integer',
+        'cloud_cover_low_max'  => 'integer',
     ];
 
     // ── Relations ───────────────────────────────────────────────
@@ -66,11 +68,4 @@ class SiteCondition extends Model
             && $speed <= $this->wind_speed_max;
     }
 
-    /**
-     * Vérifie si les précipitations sont acceptables.
-     */
-    public function isPrecipitationAcceptable(float $precip): bool
-    {
-        return $precip <= $this->precip_max;
-    }
 }

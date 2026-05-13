@@ -42,8 +42,8 @@ class SiteSeeder extends Seeder
             'wind_speed_max' => 20,
             'wind_speed_ideal' => 10,
 
-            // Pas de précipitations tolérées
-            'precip_max' => 0.0,
+            // Seuils de pluie : désormais globaux (table settings).
+            // Rafales : null = on utilise les seuils globaux.
 
             // Plafond minimum acceptable : 800m
             'cloud_base_min_m' => 800,

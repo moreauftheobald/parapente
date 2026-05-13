@@ -235,7 +235,6 @@ class GrandEstSitesSeeder extends Seeder
                 'wind_speed_min' => 5,
                 'wind_speed_max' => 30,
                 'wind_speed_ideal' => 15,
-                'precip_max' => 0.0,
                 'cloud_base_min_m' => 500,
                 'cloud_cover_low_max' => 60,
                 'notes' => $siteData['notes'],
