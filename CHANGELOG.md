@@ -11,6 +11,35 @@ Conventions :
 
 ---
 
+## 2026-05-14 — Élargissement du catalogue de modèles météo
+
+### Ajouté
+- **6 nouveaux modèles** désormais disponibles côté Open-Meteo
+  self-hosted, ajoutés à `OpenMeteoApi::supportedModelCodes()` et au
+  `WeatherModelSeeder` :
+  - `meteofrance_arome_france0025` — AROME 0.025° (~2.5 km, horizon
+    51h, w_short 0.95). Complète AROME-HD (1.3 km, 48h) avec une
+    grille standard. **Actif**.
+  - `cmc_gem_gdps` — GEM GDPS Canada (15 km, 240h, w_short 0.65,
+    w_medium 0.80). Complément global moyen-terme. **Actif**.
+  - `ncep_gfs_graphcast025` — GraphCast (NOAA/DeepMind, IA, 25 km,
+    240h, w_short 0.60, w_medium 0.80). **Actif**.
+  - `ncep_aigfs025` — AI-GFS NOAA (25 km, 240h, w_short 0.55,
+    w_medium 0.75). **Actif**.
+  - `ncep_aigefs025` — AI-GEFS ensemble NOAA. **Inactif** par défaut
+    (source serveur encore vide ~12 K).
+  - `ncep_hgefs025_ensemble_mean` — Hybrid GEFS ensemble mean NOAA.
+    **Inactif** par défaut (un ensemble *mean* lisse trop les pics de
+    vent utiles au scoring parapente).
+- Migration `2026_05_14_130000_add_new_weather_models` qui insère
+  ces 6 lignes pour les BDD existantes (idempotent). `WeatherModelSeeder`
+  mis à jour pour les fresh installs.
+- Ajout supplémentaire de `cmc_gem_rdps` (GEM régional Canada,
+  10 km, 84h) — **inactif** par défaut, couverture limitée à
+  l'Amérique du Nord. Migration `2026_05_14_140000_add_cmc_gem_rdps_model`.
+
+---
+
 ## 2026-05-14 — Écran admin « Couverture des données météo »
 
 Nouvel écran d'administration pour mesurer en un coup d'œil le taux

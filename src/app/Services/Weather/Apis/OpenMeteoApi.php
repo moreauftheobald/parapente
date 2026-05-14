@@ -55,19 +55,32 @@ class OpenMeteoApi implements WeatherApiInterface
 
     public function supportedModelCodes(): array
     {
-        // 13 modèles servis par le serveur Open-Meteo self-hosted dédié
-        // au projet (cf. OPEN_METEO_MODELS dans la config docker).
+        // Modèles servis par le serveur Open-Meteo self-hosted dédié
+        // au projet (cf. OPEN_METEO_MODELS dans la config docker), plus
+        // les modèles routés sur l'API publique (UKMO).
         return [
+            // ── Météo-France ─────────────────────────────────────
             'meteofrance_arome_france_hd',
             'meteofrance_arome_france_hd_15min',
+            'meteofrance_arome_france0025',
             'meteofrance_arpege_europe',
+            // ── DWD ──────────────────────────────────────────────
             'dwd_icon_eu',
             'dwd_icon_d2',
             'dwd_icon',
+            // ── NOAA / NCEP ──────────────────────────────────────
             'ncep_gfs013',
+            'ncep_gfs_graphcast025',
+            'ncep_aigfs025',
+            'ncep_aigefs025',
+            'ncep_hgefs025_ensemble_mean',
+            // ── ECMWF ────────────────────────────────────────────
             'ecmwf_ifs025',
             'ecmwf_aifs025_single',
+            // ── Autres globaux ───────────────────────────────────
             'ukmo_global_deterministic_10km',
+            'cmc_gem_gdps',
+            'cmc_gem_rdps',
             'bom_access_global',
             'cma_grapes_global',
             'jma_gsm',

@@ -8,14 +8,21 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
 /**
- * 13 modèles servis par le serveur Open-Meteo self-hosted dédié.
+ * 19 modèles servis par le serveur Open-Meteo self-hosted dédié + 1
+ * routé sur l'API publique (UKMO Global — la self-hosted n'expose pas
+ * son vent à 10 m). Plus 1 régional Amérique du Nord (cmc_gem_rdps)
+ * en base mais inactif tant qu'il n'y a pas de site canadien.
  *
  * Codes alignés sur la liste OPEN_METEO_MODELS du conteneur dédié :
- * meteofrance_arome_france_hd, meteofrance_arome_france_hd_15min,
- * meteofrance_arpege_europe, dwd_icon_eu, dwd_icon_d2, dwd_icon,
- * ncep_gfs013, ecmwf_ifs025, ecmwf_aifs025_single,
- * ukmo_global_deterministic_10km, bom_access_global,
- * cma_grapes_global, jma_gsm.
+ *   Météo-France : arome_france_hd, arome_france_hd_15min,
+ *                  arome_france0025, arpege_europe
+ *   DWD          : icon, icon_eu, icon_d2
+ *   NOAA/NCEP    : gfs013, gfs_graphcast025, aigfs025, aigefs025,
+ *                  hgefs025_ensemble_mean
+ *   ECMWF        : ifs025, aifs025_single
+ *   Autres       : ukmo_global_deterministic_10km, cmc_gem_gdps,
+ *                  cmc_gem_rdps (inactif),
+ *                  bom_access_global, cma_grapes_global, jma_gsm
  *
  * Désactive automatiquement les modèles d'anciennes intégrations (icon_eu,
  * icon_d2, icon_seamless, gfs_seamless, gem_seamless,
@@ -53,6 +60,17 @@ class WeatherModelSeeder extends Seeder
                 'weight_short'              => 1.00,
                 'weight_medium'             => 0.00,
                 'refresh_frequency_minutes' => 60,
+                'active'                    => true,
+            ],
+            [
+                'code'                      => 'meteofrance_arome_france0025',
+                'name'                      => 'AROME 0.025°',
+                'provider'                  => 'Météo-France',
+                'resolution_km'             => 2.5,
+                'max_horizon_h'             => 51,
+                'weight_short'              => 0.95,
+                'weight_medium'             => 0.00,
+                'refresh_frequency_minutes' => 180,
                 'active'                    => true,
             ],
             [
@@ -146,6 +164,81 @@ class WeatherModelSeeder extends Seeder
                 'weight_medium'             => 0.85,
                 'refresh_frequency_minutes' => 360,
                 'active'                    => true,
+            ],
+            [
+                'code'                      => 'cmc_gem_gdps',
+                'name'                      => 'GEM GDPS',
+                'provider'                  => 'CMC Canada',
+                'resolution_km'             => 15.0,
+                'max_horizon_h'             => 240,
+                'weight_short'              => 0.65,
+                'weight_medium'             => 0.80,
+                'refresh_frequency_minutes' => 360,
+                'active'                    => true,
+            ],
+            [
+                // Inactif : modèle régional Amérique du Nord — ne couvre
+                // pas l'Europe. À activer si des sites canadiens sont
+                // ajoutés au projet.
+                'code'                      => 'cmc_gem_rdps',
+                'name'                      => 'GEM RDPS',
+                'provider'                  => 'CMC Canada',
+                'resolution_km'             => 10.0,
+                'max_horizon_h'             => 84,
+                'weight_short'              => 0.80,
+                'weight_medium'             => 0.00,
+                'refresh_frequency_minutes' => 360,
+                'active'                    => false,
+            ],
+
+            // ── Modèles IA / hybrides ────────────────────────────
+            [
+                'code'                      => 'ncep_gfs_graphcast025',
+                'name'                      => 'GraphCast',
+                'provider'                  => 'NOAA / DeepMind',
+                'resolution_km'             => 25.0,
+                'max_horizon_h'             => 240,
+                'weight_short'              => 0.60,
+                'weight_medium'             => 0.80,
+                'refresh_frequency_minutes' => 360,
+                'active'                    => true,
+            ],
+            [
+                'code'                      => 'ncep_aigfs025',
+                'name'                      => 'AI-GFS',
+                'provider'                  => 'NOAA',
+                'resolution_km'             => 25.0,
+                'max_horizon_h'             => 240,
+                'weight_short'              => 0.55,
+                'weight_medium'             => 0.75,
+                'refresh_frequency_minutes' => 360,
+                'active'                    => true,
+            ],
+            [
+                // Inactif : sur le serveur self-hosted la source ne
+                // produit pas encore de données utilisables (~12 K).
+                'code'                      => 'ncep_aigefs025',
+                'name'                      => 'AI-GEFS ens.',
+                'provider'                  => 'NOAA',
+                'resolution_km'             => 25.0,
+                'max_horizon_h'             => 240,
+                'weight_short'              => 0.50,
+                'weight_medium'             => 0.65,
+                'refresh_frequency_minutes' => 360,
+                'active'                    => false,
+            ],
+            [
+                // Inactif : ensemble mean = trop lissé pour parapente
+                // (les pics utiles disparaissent dans la moyenne).
+                'code'                      => 'ncep_hgefs025_ensemble_mean',
+                'name'                      => 'HGEFS ens. mean',
+                'provider'                  => 'NOAA',
+                'resolution_km'             => 25.0,
+                'max_horizon_h'             => 240,
+                'weight_short'              => 0.50,
+                'weight_medium'             => 0.65,
+                'refresh_frequency_minutes' => 360,
+                'active'                    => false,
             ],
             [
                 'code'                      => 'bom_access_global',

@@ -298,11 +298,25 @@ URL configurable via `OPEN_METEO_BASE_URL` dans `.env` :
 - dev local : `http://localhost:8888/v1`
 - prod docker-compose : `http://open-meteo-api:8080/v1`
 
-13 modèles servis : `meteofrance_arome_france_hd`, `meteofrance_arome_france_hd_15m`,
-`meteofrance_arpege_europe`, `dwd_icon_eu`, `dwd_icon_d2`, `dwd_icon`,
-`ncep_gfs013`, `ecmwf_ifs025`, `ecmwf_aifs025_single`,
-`ukmo_global_deterministic_10km`, `bom_access_global`, `cma_grapes_global`,
-`jma_gsm`. (Les 3 derniers inactifs par défaut, hémisphère sud / Asie.)
+20 modèles connus (édition individuelle dans `/admin/models`) :
+- **Météo-France** : `meteofrance_arome_france_hd`,
+  `meteofrance_arome_france_hd_15min`, `meteofrance_arome_france0025`,
+  `meteofrance_arpege_europe`.
+- **DWD** : `dwd_icon_eu`, `dwd_icon_d2`, `dwd_icon`.
+- **NOAA/NCEP** : `ncep_gfs013`, `ncep_gfs_graphcast025`,
+  `ncep_aigfs025`, `ncep_aigefs025` (inactif), `ncep_hgefs025_ensemble_mean`
+  (inactif).
+- **ECMWF** : `ecmwf_ifs025`, `ecmwf_aifs025_single`.
+- **Autres globaux / régionaux** : `ukmo_global_deterministic_10km`
+  (routé sur l'API publique Open-Meteo, cf. plus bas), `cmc_gem_gdps`,
+  `cmc_gem_rdps` (inactif, régional Amérique du Nord),
+  `bom_access_global` (inactif), `cma_grapes_global` (inactif),
+  `jma_gsm` (inactif).
+
+Les ensembles *mean* (`ncep_hgefs025_ensemble_mean`) sont inactifs
+par défaut : la moyenne lisse les pics de vent utiles au scoring
+parapente. Les modèles hémisphère sud/Asie (BOM, CMA, JMA) restent
+inactifs car peu pertinents pour des sites France/Bénélux.
 
 **`OpenMeteoApi`** (`app/Services/Weather/Apis/`) :
 - `fetchForSiteAndModel()` : 1 appel par (site, modèle)
