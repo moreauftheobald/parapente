@@ -11,6 +11,63 @@ Conventions :
 
 ---
 
+## 2026-05-14 — Écran admin « Couverture des données météo »
+
+Nouvel écran d'administration pour mesurer en un coup d'œil le taux
+réel de remplissage des données collectées sur leurs périodes de
+rétention respectives, et la fraîcheur des fetches par modèle météo.
+Outil de diagnostic pour repérer rapidement les modèles cassés, les
+balises en panne ou les jours blancs avant que ça ne biaise les calculs
+en aval (notamment la future fiabilité dynamique, cf.
+`FF_model_reliability.md`).
+
+### Ajouté
+- **`/admin/data-coverage`** : page d'administration (lien dans la
+  sidebar « Système ») composée de 4 tableaux :
+  1. *Modèles météo &mdash; fraîcheur* : un modèle par ligne, avec
+     dernier fetch site / balise, cadence prévue vs réalisée, décalage
+     en %, nombre de lignes upsertées au dernier run, et heure du run
+     provider quand elle est connue.
+  2. *Prévisions sites &mdash; J → J+4* : matrice (modèles × jours),
+     cellule = `heures distinctes / (24 × sites actifs)` en %.
+  3. *Prévisions balises &mdash; J-7 → J+5* : même matrice sur
+     `forecast_archive_balises`, dénominateur = balises actives.
+  4. *Relevés balises &mdash; J-7 → J* : **groupé par réseau**
+     (PiouPiou, METAR, …) avec une ligne de synthèse cliquable pour
+     déplier le détail balise par balise. Agrégat réseau =
+     `Σ heures reçues / (24 × nb_balises_du_réseau)`. Plus la
+     dernière réception côté `balise_readings`.
+
+  Code couleur : vert ≥ 95 %, orange 50–95 %, rouge &lt; 50 %, gris si
+  aucune donnée. Cache Redis 5 min.
+
+- **`App\Services\DataCoverage`** : service qui produit les 4
+  agrégations en jointures SQL groupées par `DATE(target_at)` /
+  `DATE(forecast_at)` / `DATE(hour_at)`, avec garde-fous quand les
+  tables n'existent pas encore (resté tolérant comme le job de purge).
+
+### Base de données
+- **`weather_fetch_log`** : nouvelle table journal des fetches météo,
+  une ligne par exécution de `FetchSiteModelJob` ou
+  `FetchBaliseForecastsJob` (colonnes : `weather_model_id`, `scope`
+  `site`/`balise`, `fetched_at`, `rows_upserted`, `provider_run_at`
+  nullable). Sert au tableau de fraîcheur. Rétention 30 jours via
+  `PurgeOldForecastsJob`.
+
+### Modifié
+- `FetchSiteModelJob` et `FetchBaliseForecastsJob` enregistrent
+  désormais une ligne dans `weather_fetch_log` à chaque exécution
+  (succès ou fetch vide).
+- `PurgeOldForecastsJob` purge `weather_fetch_log` au-delà de 30 jours.
+
+### Notes
+- L'extraction de `provider_run_at` côté Open-Meteo n'est pas câblée
+  dans cette PR (la réponse JSON ne l'expose pas systématiquement).
+  La colonne est en place, prête à être renseignée quand on
+  instrumentera l'API.
+
+---
+
 ## 2026-05-13 — Comparaison modèles ↔ balises, phase 1 (infra collecte)
 
 Premier jalon de la comparaison entre les prévisions des modèles météo

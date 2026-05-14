@@ -29,6 +29,9 @@ use Illuminate\Support\Facades\Log;
  *                            7 jours (fenêtre J-6 → J pour la comparaison
  *                            modèles ↔ balises).
  *
+ * - weather_fetch_log     : journal des fetches météo conservé 30 jours
+ *                           (sert à l'écran de couverture admin).
+ *
  * Ce job est dispatché par le scheduler une fois par jour
  * (cf. routes/console.php).
  */
@@ -59,11 +62,18 @@ class PurgeOldForecastsJob implements ShouldQueue
      */
     private const HOURLY_RETENTION_DAYS = 7;
 
+    /**
+     * Rétention du journal des fetches météo (`weather_fetch_log`).
+     * 30 jours suffisent à alimenter l'écran de couverture admin.
+     */
+    private const FETCH_LOG_RETENTION_DAYS = 30;
+
     public function handle(): void
     {
         $forecastCutoff = Carbon::now()->subDays(self::FORECASTS_RETENTION_DAYS)->startOfDay();
         $archiveCutoff  = Carbon::now()->subDays(self::ARCHIVE_RETENTION_DAYS)->startOfDay();
         $hourlyCutoff   = Carbon::now()->subDays(self::HOURLY_RETENTION_DAYS)->startOfDay();
+        $fetchLogCutoff = Carbon::now()->subDays(self::FETCH_LOG_RETENTION_DAYS)->startOfDay();
 
         $deletedForecasts = Forecast::where('forecast_at', '<', $forecastCutoff)->delete();
         $deletedScores    = SiteScore::where('forecast_at', '<', $forecastCutoff)->delete();
@@ -85,14 +95,23 @@ class PurgeOldForecastsJob implements ShouldQueue
                 ->delete();
         }
 
+        $deletedFetchLog = 0;
+        if (DB::getSchemaBuilder()->hasTable('weather_fetch_log')) {
+            $deletedFetchLog = DB::table('weather_fetch_log')
+                ->where('fetched_at', '<', $fetchLogCutoff)
+                ->delete();
+        }
+
         Log::info('PurgeOldForecastsJob completed', [
             'forecasts_deleted'         => $deletedForecasts,
             'site_scores_deleted'       => $deletedScores,
             'archive_balises_deleted'   => $deletedArchive,
             'balise_hourly_deleted'     => $deletedHourly,
+            'fetch_log_deleted'         => $deletedFetchLog,
             'forecast_cutoff'           => $forecastCutoff->toDateTimeString(),
             'archive_cutoff'            => $archiveCutoff->toDateTimeString(),
             'hourly_cutoff'             => $hourlyCutoff->toDateTimeString(),
+            'fetch_log_cutoff'          => $fetchLogCutoff->toDateTimeString(),
         ]);
     }
 }

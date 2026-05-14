@@ -6,6 +6,7 @@ namespace App\Jobs;
 
 use App\Models\Forecast;
 use App\Models\Site;
+use App\Models\WeatherFetchLog;
 use App\Models\WeatherModel;
 use App\Services\Weather\ForecastFetcher;
 use App\Services\Weather\ScoringService;
@@ -49,10 +50,27 @@ class FetchSiteModelJob implements ShouldQueue
 
         if (empty($hourlyData)) {
             Log::warning("FetchSiteModelJob: aucune donnée [{$site->slug}] / [{$model->code}]");
+            // On trace quand même le fetch vide pour que l'écran admin
+            // « Couverture des données » détecte les modèles cassés.
+            WeatherFetchLog::create([
+                'weather_model_id' => $model->id,
+                'scope'            => 'site',
+                'fetched_at'       => now(),
+                'rows_upserted'    => 0,
+                'provider_run_at'  => null,
+            ]);
             return;
         }
 
         $this->upsertForecasts($site, $model, $hourlyData);
+
+        WeatherFetchLog::create([
+            'weather_model_id' => $model->id,
+            'scope'            => 'site',
+            'fetched_at'       => now(),
+            'rows_upserted'    => count($hourlyData),
+            'provider_run_at'  => null,
+        ]);
 
         if ($this->rescore) {
             $scoring->computeScoresForSite($site);

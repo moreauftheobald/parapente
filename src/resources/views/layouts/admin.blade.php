@@ -53,6 +53,9 @@
                 <a href="{{ route('admin.users.index') }}" class="{{ $adminLink($adminSection === 'users') }}">
                     <i class="fa-solid fa-users w-4 text-center"></i> Utilisateurs
                 </a>
+                <a href="{{ route('admin.data-coverage.index') }}" class="{{ $adminLink($adminSection === 'data-coverage') }}">
+                    <i class="fa-solid fa-chart-area w-4 text-center"></i> Couverture des données
+                </a>
                 <a href="{{ route('admin.logs.index') }}" class="{{ $adminLink($adminSection === 'logs') }}">
                     <i class="fa-solid fa-scroll w-4 text-center"></i> Logs / monitoring
                 </a>

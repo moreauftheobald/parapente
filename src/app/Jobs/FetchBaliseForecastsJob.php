@@ -6,6 +6,7 @@ namespace App\Jobs;
 
 use App\Models\Balise;
 use App\Models\WeatherApi;
+use App\Models\WeatherFetchLog;
 use App\Models\WeatherModel;
 use App\Services\Weather\Apis\OpenMeteoApi;
 use Carbon\Carbon;
@@ -82,6 +83,16 @@ class FetchBaliseForecastsJob implements ShouldQueue
         foreach ($models as $model) {
             $batch = $openMeteo->fetchBatchForBalises($points, $model);
             if (empty($batch)) {
+                // Fetch raté : on trace tout de même pour que l'écran de
+                // couverture admin détecte les modèles qui ne répondent
+                // plus.
+                WeatherFetchLog::create([
+                    'weather_model_id' => $model->id,
+                    'scope'            => 'balise',
+                    'fetched_at'       => $fetchedAt,
+                    'rows_upserted'    => 0,
+                    'provider_run_at'  => null,
+                ]);
                 continue;
             }
 
@@ -114,9 +125,17 @@ class FetchBaliseForecastsJob implements ShouldQueue
             }
 
             if (empty($rows)) {
+                WeatherFetchLog::create([
+                    'weather_model_id' => $model->id,
+                    'scope'            => 'balise',
+                    'fetched_at'       => $fetchedAt,
+                    'rows_upserted'    => 0,
+                    'provider_run_at'  => null,
+                ]);
                 continue;
             }
 
+            $modelRows = 0;
             // Upsert en lots de 500 pour ne pas dépasser le max_allowed_packet
             foreach (array_chunk($rows, 500) as $chunk) {
                 DB::table('forecast_archive_balises')->upsert(
@@ -129,8 +148,17 @@ class FetchBaliseForecastsJob implements ShouldQueue
                         'updated_at',
                     ]
                 );
+                $modelRows  += count($chunk);
                 $totalUpsert += count($chunk);
             }
+
+            WeatherFetchLog::create([
+                'weather_model_id' => $model->id,
+                'scope'            => 'balise',
+                'fetched_at'       => $fetchedAt,
+                'rows_upserted'    => $modelRows,
+                'provider_run_at'  => null,
+            ]);
         }
 
         Log::info('FetchBaliseForecastsJob completed', [
