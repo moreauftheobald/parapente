@@ -59,7 +59,7 @@ class OpenMeteoApi implements WeatherApiInterface
         // au projet (cf. OPEN_METEO_MODELS dans la config docker).
         return [
             'meteofrance_arome_france_hd',
-            'meteofrance_arome_france_hd_15m',
+            'meteofrance_arome_france_hd_15min',
             'meteofrance_arpege_europe',
             'dwd_icon_eu',
             'dwd_icon_d2',
@@ -72,6 +72,46 @@ class OpenMeteoApi implements WeatherApiInterface
             'cma_grapes_global',
             'jma_gsm',
         ];
+    }
+
+    /**
+     * Fetch brut : retourne la réponse JSON décodée (avant parsing/filtrage)
+     * pour un site/modèle donné. Sert au diagnostic admin — affiché par
+     * le bouton « Brut » du tableau de fraîcheur quand un modèle renvoie
+     * 0 créneau après parsing.
+     *
+     * Retourne null si l'appel HTTP échoue. URL appelée incluse pour
+     * faciliter la reproduction en curl.
+     */
+    public function fetchRaw(Site $site, WeatherModel $model): ?array
+    {
+        $params = [
+            'latitude'        => $site->latitude,
+            'longitude'       => $site->longitude,
+            'hourly'          => implode(',', self::HOURLY_VARS),
+            'daily'           => implode(',', self::DAILY_VARS),
+            'models'          => $model->code,
+            'forecast_days'   => self::DAYS,
+            'wind_speed_unit' => self::WIND_UNIT,
+            'timezone'        => self::TIMEZONE,
+        ];
+
+        try {
+            $response = Http::timeout(15)->get($this->baseUrl . '/forecast', $params);
+            return [
+                'status'  => $response->status(),
+                'success' => $response->successful(),
+                'url'     => $this->baseUrl . '/forecast?' . http_build_query($params),
+                'body'    => $response->successful() ? $response->json() : $response->body(),
+            ];
+        } catch (\Exception $e) {
+            return [
+                'status'  => 0,
+                'success' => false,
+                'url'     => $this->baseUrl . '/forecast?' . http_build_query($params),
+                'body'    => 'Exception: ' . $e->getMessage(),
+            ];
+        }
     }
 
     public function fetchForSiteAndModel(Site $site, WeatherModel $model): array
@@ -196,7 +236,8 @@ class OpenMeteoApi implements WeatherApiInterface
             return [];
         }
 
-        $parsed = [];
+        $parsed  = [];
+        $skipped = 0;
         foreach ($times as $index => $time) {
             $forecastAt = \Carbon\Carbon::parse($time, self::TIMEZONE);
             if ($forecastAt->isPast()) {
@@ -206,6 +247,7 @@ class OpenMeteoApi implements WeatherApiInterface
             $dir   = $this->getValue($hourly, 'wind_direction_10m', $index);
             $speed = $this->getValue($hourly, 'wind_speed_10m', $index);
             if ($dir === null || $speed === null) {
+                $skipped++;
                 continue;
             }
 
@@ -220,6 +262,13 @@ class OpenMeteoApi implements WeatherApiInterface
                 'temperature'    => $temp !== null ? (float) $temp : 0.0,
             ];
         }
+
+        if (empty($parsed) && $skipped > 0) {
+            Log::info('OpenMeteoApi parseBaliseResponse: tous les créneaux filtrés', [
+                'skipped' => $skipped,
+            ]);
+        }
+
         return $parsed;
     }
 
@@ -251,6 +300,7 @@ class OpenMeteoApi implements WeatherApiInterface
         }
 
         $parsed = [];
+        $skipped = 0;
 
         foreach ($times as $index => $time) {
             $forecastAt = \Carbon\Carbon::parse($time, self::TIMEZONE);
@@ -260,16 +310,21 @@ class OpenMeteoApi implements WeatherApiInterface
 
             $windDir   = $this->getValue($hourly, 'wind_direction_10m', $index);
             $windSpeed = $this->getValue($hourly, 'wind_speed_10m', $index);
-            $humidity  = $this->getValue($hourly, 'relative_humidity_2m', $index);
 
-            if ($windDir === null || $windSpeed === null || $humidity === null) {
+            // Vent direction + vitesse = seules variables indispensables.
+            // Humidité, dew point, nuages, plafond, précip restent optionnels
+            // (certains modèles globaux comme UKMO ne servent pas
+            // `relative_humidity_2m`, sans ça on excluait des modèles entiers
+            // pour rien).
+            if ($windDir === null || $windSpeed === null) {
+                $skipped++;
                 continue;
             }
 
             $parsed[$forecastAt->format('Y-m-d H:i:s')] = [
-                'wind_direction'   => $this->getValue($hourly, 'wind_direction_10m', $index),
-                'wind_speed_avg'   => $this->getValue($hourly, 'wind_speed_10m', $index),
-                'wind_speed_min'   => $this->getValue($hourly, 'wind_speed_10m', $index),
+                'wind_direction'   => $windDir,
+                'wind_speed_avg'   => $windSpeed,
+                'wind_speed_min'   => $windSpeed,
                 'wind_speed_max'   => $this->getValue($hourly, 'wind_gusts_10m', $index),
                 'precipitation'    => $this->getValue($hourly, 'precipitation', $index, 0.0),
                 'cloud_cover_low'  => $this->getValue($hourly, 'cloud_cover_low', $index, 0),
@@ -285,6 +340,13 @@ class OpenMeteoApi implements WeatherApiInterface
                 'temperature'      => $this->getValue($hourly, 'temperature_2m', $index),
                 'humidity'         => $this->getValue($hourly, 'relative_humidity_2m', $index),
             ];
+        }
+
+        if (empty($parsed) && $skipped > 0) {
+            Log::info('OpenMeteoApi parseResponse: tous les créneaux filtrés', [
+                'skipped' => $skipped,
+                'cause'   => 'wind_direction_10m ou wind_speed_10m null sur tous les créneaux',
+            ]);
         }
 
         return $parsed;

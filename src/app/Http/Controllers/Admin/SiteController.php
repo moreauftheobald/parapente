@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Site;
 use App\Models\SiteCondition;
+use App\Services\DataCoverage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -132,6 +133,8 @@ class SiteController extends Controller
     {
         $site->active = ! $site->active;
         $site->save();
+
+        app(DataCoverage::class)->flush();
 
         $message = sprintf(
             '%s "%s" %s.',

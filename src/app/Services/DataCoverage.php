@@ -62,8 +62,13 @@ class DataCoverage
     /**
      * Section 1 — Fraîcheur des modèles météo.
      *
+     * Le cache contient des objets « légers » (stdClass) plutôt que des
+     * Eloquent — évite les soucis de désérialisation Redis quand le
+     * schéma `weather_models` évolue ou quand un modèle est désactivé
+     * entre l'écriture et la lecture du cache.
+     *
      * @return array<int, array{
-     *     model: WeatherModel,
+     *     model: \stdClass,
      *     last_fetch_site: ?Carbon,
      *     last_fetch_balise: ?Carbon,
      *     last_rows_site: ?int,
@@ -78,6 +83,21 @@ class DataCoverage
     {
         return Cache::remember('data_coverage.model_freshness', self::CACHE_TTL_S, function () {
             $models = WeatherModel::query()->orderBy('name')->get();
+            // Si la table n'existe pas encore (déploiement en cours), on
+            // renvoie un tableau vide — pas de 500.
+            if (! DB::getSchemaBuilder()->hasTable('weather_fetch_log')) {
+                return $models->map(fn (WeatherModel $m) => [
+                    'model'                 => $this->lightModel($m),
+                    'last_fetch_site'       => null,
+                    'last_fetch_balise'     => null,
+                    'last_rows_site'        => null,
+                    'last_rows_balise'      => null,
+                    'last_provider_run'     => null,
+                    'expected_interval_min' => max(1, (int) $m->refresh_frequency_minutes),
+                    'observed_interval_min' => null,
+                    'drift_pct'             => null,
+                ])->all();
+            }
 
             // Tous les derniers fetches par (modèle, scope) en une seule
             // requête : on récupère les 2 dernières lignes par modèle &
@@ -130,7 +150,7 @@ class DataCoverage
                     : null;
 
                 $rows[] = [
-                    'model'                 => $model,
+                    'model'                 => $this->lightModel($model),
                     'last_fetch_site'       => $lastFetchSite ? Carbon::parse((string) $lastFetchSite) : null,
                     'last_fetch_balise'     => $lastFetchBalise ? Carbon::parse((string) $lastFetchBalise) : null,
                     'last_rows_site'        => $lastRowsSite !== null ? (int) $lastRowsSite : null,
@@ -149,9 +169,13 @@ class DataCoverage
     /**
      * Section 2 — Couverture des prévisions sites sur J → J+4.
      *
+     * Le dénominateur est ajusté par modèle selon `max_horizon_h` : un
+     * nowcast à 6 h n'est pas pénalisé sur J+2/J+3, sa cellule est
+     * marquée « hors horizon » (cf. expectedHoursForFutureDay()).
+     *
      * @return array{
      *     days: array<int, CarbonImmutable>,
-     *     rows: array<int, array{model: WeatherModel, cells: array<int, ?float>}>,
+     *     rows: array<int, array{model: WeatherModel, cells: array<int, array{pct: ?float, in_horizon: bool, expected_h: int}>}>,
      *     sites_active: int,
      * }
      */
@@ -173,10 +197,6 @@ class DataCoverage
             $start = $days[0]->startOfDay();
             $end   = end($days)->endOfDay();
 
-            // Une requête : nb d'heures distinctes (site_id, forecast_at)
-            // par (modèle, jour). On joint sur sites.active=1 pour ne
-            // compter que les sites actuellement actifs (dénominateur
-            // cohérent).
             $rowsRaw = DB::table('forecasts')
                 ->join('sites', 'sites.id', '=', 'forecasts.site_id')
                 ->where('sites.active', true)
@@ -190,17 +210,18 @@ class DataCoverage
                 $byModelDay[$r->model_id][$r->day] = (int) $r->n;
             }
 
-            $expectedPerDay = 24 * $sitesActive;
+            $tNow = $this->hoursIntoToday();
             $rows = [];
             foreach ($models as $model) {
+                $horizonH = max(1, (int) $model->max_horizon_h);
                 $cells = [];
-                foreach ($days as $day) {
-                    $key = $day->format('Y-m-d');
-                    $n   = $byModelDay[$model->id][$key] ?? 0;
-                    $cells[] = $expectedPerDay > 0 ? round(($n / $expectedPerDay) * 100, 1) : null;
+                foreach ($days as $idx => $day) {
+                    $expectedH = $this->expectedHoursForFutureDay($horizonH, $idx, $tNow);
+                    $n         = $byModelDay[$model->id][$day->format('Y-m-d')] ?? 0;
+                    $cells[]   = $this->cellFromCounts($n, $expectedH, $sitesActive);
                 }
                 $rows[] = [
-                    'model' => $model,
+                    'model' => $this->lightModel($model),
                     'cells' => $cells,
                 ];
             }
@@ -216,9 +237,19 @@ class DataCoverage
     /**
      * Section 3 — Couverture des prévisions balises sur J-7 → J+5.
      *
+     * `FetchBaliseForecastsJob` n'archive que les modèles ayant
+     * `max_horizon_h >= 24` (filtre métier : pas de fiabilité dynamique
+     * en-dessous de 24h). On ne pénalise donc pas un nowcast en lui
+     * imposant une couverture nulle ; sa ligne est entièrement marquée
+     * « hors archive ».
+     *
+     * Pour les jours passés : expected = 24 (on aurait dû archiver
+     * complètement). Pour les jours futurs : horizon-aware (cf.
+     * expectedHoursForFutureDay()).
+     *
      * @return array{
      *     days: array<int, CarbonImmutable>,
-     *     rows: array<int, array{model: WeatherModel, cells: array<int, ?float>}>,
+     *     rows: array<int, array{model: WeatherModel, archived: bool, cells: array<int, array{pct: ?float, in_horizon: bool, expected_h: int}>}>,
      *     balises_active: int,
      * }
      */
@@ -261,18 +292,36 @@ class DataCoverage
                 $byModelDay[$r->model_id][$r->day] = (int) $r->n;
             }
 
-            $expectedPerDay = 24 * $balisesActive;
+            // Offset relatif (n=0 = aujourd'hui) aligné sur l'index du
+            // tableau $days : days[0] correspond à -BALISE_FORECAST_DAYS_PAST.
+            $todayIdx = self::BALISE_FORECAST_DAYS_PAST;
+            $tNow     = $this->hoursIntoToday();
+
             $rows = [];
             foreach ($models as $model) {
+                $horizonH = max(1, (int) $model->max_horizon_h);
+                $archived = $horizonH >= 24; // filtre de FetchBaliseForecastsJob
+
                 $cells = [];
-                foreach ($days as $day) {
-                    $key = $day->format('Y-m-d');
-                    $n   = $byModelDay[$model->id][$key] ?? 0;
-                    $cells[] = $expectedPerDay > 0 ? round(($n / $expectedPerDay) * 100, 1) : null;
+                foreach ($days as $idx => $day) {
+                    if (! $archived) {
+                        $cells[] = ['pct' => null, 'in_horizon' => false, 'expected_h' => 0];
+                        continue;
+                    }
+
+                    $offset    = $idx - $todayIdx;
+                    $expectedH = $offset <= 0
+                        ? 24
+                        : $this->expectedHoursForFutureDay(min($horizonH, 72), $offset, $tNow);
+
+                    $n      = $byModelDay[$model->id][$day->format('Y-m-d')] ?? 0;
+                    $cells[] = $this->cellFromCounts($n, $expectedH, $balisesActive);
                 }
+
                 $rows[] = [
-                    'model' => $model,
-                    'cells' => $cells,
+                    'model'    => $this->lightModel($model),
+                    'archived' => $archived,
+                    'cells'    => $cells,
                 ];
             }
 
@@ -374,7 +423,7 @@ class DataCoverage
                     $groupsByCode[$code]['hours_received'][$i] += $byBaliseDay[$balise->id][$key] ?? 0;
                 }
                 $groupsByCode[$code]['balises'][] = [
-                    'balise'          => $balise,
+                    'balise'          => $this->lightBalise($balise),
                     'cells'           => $cells,
                     'last_reading_at' => $lastByBalise[$balise->id] ?? null,
                 ];
@@ -407,6 +456,32 @@ class DataCoverage
         });
     }
 
+    /**
+     * Snapshot léger d'un modèle météo — limité aux champs utiles à la
+     * vue. Évite de stocker un Eloquent complet dans le cache Redis
+     * (risque de désérialisation foireuse si le schéma évolue ou si la
+     * classe est modifiée entre l'écriture et la lecture du cache).
+     */
+    private function lightModel(WeatherModel $m): \stdClass
+    {
+        return (object) [
+            'id'            => (int) $m->id,
+            'name'          => (string) $m->name,
+            'code'          => (string) $m->code,
+            'active'        => (bool) $m->active,
+            'max_horizon_h' => (int) ($m->max_horizon_h ?? 0),
+        ];
+    }
+
+    private function lightBalise(Balise $b): \stdClass
+    {
+        return (object) [
+            'id'     => (int) $b->id,
+            'name'   => (string) ($b->name ?? ('#' . $b->id)),
+            'source' => (string) ($b->source ?? ''),
+        ];
+    }
+
     private function sourceLabel(string $code): string
     {
         return match (strtolower($code)) {
@@ -416,6 +491,63 @@ class DataCoverage
             'inconnu'  => 'Source inconnue',
             default    => ucfirst($code),
         };
+    }
+
+    /**
+     * Heures attendues d'un jour futur compte tenu de l'horizon du modèle.
+     *
+     * Avec un modèle d'horizon H (en heures) tournant en continu, à
+     * l'heure t_now de la journée courante, les heures couvertes d'un
+     * jour futur d'offset n (1=demain, 2=après-demain…) sont
+     * cumulativement [0, t_now + H - n*24] (bornées dans [0, 24]).
+     *
+     * Pour le jour courant (n=0), on retourne 24 — l'accumulation de
+     * fetches successifs au cours de la journée remplit tout le jour
+     * dès lors que H ≥ 1 h et que le système tourne depuis ≥ 24 h.
+     *
+     * Retourne 0 si le jour est totalement hors de portée du modèle
+     * (la cellule sera rendue « hors horizon » dans la vue).
+     */
+    private function expectedHoursForFutureDay(int $horizonH, int $offset, float $tNow): int
+    {
+        if ($offset < 0) {
+            return 24; // jour passé → on attendait une couverture pleine
+        }
+        if ($offset === 0) {
+            return 24;
+        }
+        $reach = (int) floor($tNow + $horizonH - $offset * 24);
+        return max(0, min(24, $reach));
+    }
+
+    /**
+     * Convertit un nombre d'heures × balises observées en cellule
+     * affichable. Renvoie `in_horizon = false` quand le couple
+     * (horizon, jour) ne permet aucune donnée attendue.
+     *
+     * @return array{pct: ?float, in_horizon: bool, expected_h: int}
+     */
+    private function cellFromCounts(int $observed, int $expectedHours, int $activeUnits): array
+    {
+        if ($expectedHours === 0 || $activeUnits === 0) {
+            return ['pct' => null, 'in_horizon' => false, 'expected_h' => $expectedHours];
+        }
+        $denom = $expectedHours * $activeUnits;
+        $pct   = round(($observed / $denom) * 100, 1);
+        return [
+            'pct'        => $pct > 100 ? 100.0 : $pct, // évite >100 en cas de glissement de bord
+            'in_horizon' => true,
+            'expected_h' => $expectedHours,
+        ];
+    }
+
+    /**
+     * Heure fractionnaire écoulée depuis minuit (0.0 → 24.0).
+     */
+    private function hoursIntoToday(): float
+    {
+        $now = CarbonImmutable::now();
+        return $now->hour + $now->minute / 60.0;
     }
 
     /**

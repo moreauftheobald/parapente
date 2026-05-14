@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
  * 13 modèles servis par le serveur Open-Meteo self-hosted dédié.
  *
  * Codes alignés sur la liste OPEN_METEO_MODELS du conteneur dédié :
- * meteofrance_arome_france_hd, meteofrance_arome_france_hd_15m,
+ * meteofrance_arome_france_hd, meteofrance_arome_france_hd_15min,
  * meteofrance_arpege_europe, dwd_icon_eu, dwd_icon_d2, dwd_icon,
  * ncep_gfs013, ecmwf_ifs025, ecmwf_aifs025_single,
  * ukmo_global_deterministic_10km, bom_access_global,
@@ -45,7 +45,7 @@ class WeatherModelSeeder extends Seeder
                 'active'                    => true,
             ],
             [
-                'code'                      => 'meteofrance_arome_france_hd_15m',
+                'code'                      => 'meteofrance_arome_france_hd_15min',
                 'name'                      => 'AROME-HD 15min',
                 'provider'                  => 'Météo-France',
                 'resolution_km'             => 1.3,

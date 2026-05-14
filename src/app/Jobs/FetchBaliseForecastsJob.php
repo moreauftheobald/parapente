@@ -57,30 +57,39 @@ class FetchBaliseForecastsJob implements ShouldQueue
             return;
         }
 
-        // Le batch multi-coordonnées est spécifique à Open-Meteo. On
-        // injecte la config WeatherApi correspondante.
-        $omConfig = WeatherApi::where('code', 'openmeteo')->first();
-        if ($omConfig) {
-            $openMeteo->setConfig($omConfig);
-        }
-
         $points = $balises->map(fn (Balise $b) => [
             'id'  => $b->id,
             'lat' => (float) $b->latitude,
             'lng' => (float) $b->longitude,
         ])->all();
 
-        // On ne batch que les modèles servis par Open-Meteo.
-        $omApiId = $omConfig?->id;
-        $models  = WeatherModel::where('active', true)
+        // On batch tous les modèles servis par une API Open-Meteo
+        // compatible (self-hosted OU API publique — certains modèles
+        // comme UKMO Global sont routés sur l'API publique car la
+        // self-hosted n'expose pas le vent à 10 m).
+        $omApiIds = WeatherApi::whereIn('code', ['openmeteo', 'openmeteo_public'])
+            ->where('active', true)
+            ->pluck('id', 'id');
+
+        if ($omApiIds->isEmpty()) {
+            Log::warning('FetchBaliseForecastsJob: aucune WeatherApi Open-Meteo active.');
+            return;
+        }
+
+        $models = WeatherModel::with('api')
+            ->where('active', true)
             ->where('max_horizon_h', '>=', 24)
-            ->when($omApiId, fn ($q) => $q->where('weather_api_id', $omApiId))
+            ->whereIn('weather_api_id', $omApiIds->keys())
             ->get();
 
         $fetchedAt = Carbon::now();
         $totalUpsert = 0;
 
         foreach ($models as $model) {
+            // Reconfigure l'API avant chaque modèle (URL/credentials peuvent
+            // changer d'un modèle à l'autre : self-hosted vs public).
+            $openMeteo->setConfig($model->api);
+
             $batch = $openMeteo->fetchBatchForBalises($points, $model);
             if (empty($batch)) {
                 // Fetch raté : on trace tout de même pour que l'écran de

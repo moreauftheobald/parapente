@@ -66,6 +66,91 @@ en aval (notamment la future fiabilité dynamique, cf.
   La colonne est en place, prête à être renseignée quand on
   instrumentera l'API.
 
+### Corrigé
+- **Code du modèle AROME-HD 15min** : `meteofrance_arome_france_hd_15m`
+  → `meteofrance_arome_france_hd_15min` (alignement sur le code servi
+  par l'instance Open-Meteo self-hosted). L'ancien code retournait
+  systématiquement une réponse vide. Migration de mise à jour fournie
+  (`2026_05_14_110000_fix_arome_15min_model_code`) — pas besoin de
+  reseed.
+
+### Modifié (suite)
+- **Calcul de couverture horizon-aware** : pour les tableaux
+  *Prévisions sites* et *Prévisions balises*, le dénominateur de
+  chaque cellule (modèle × jour) est désormais ajusté par
+  `max_horizon_h`. Un nowcast à 6 h n'est plus pénalisé sur J+2/J+3 :
+  ces cellules sont marquées « hors horizon » (gris fonçé distinct)
+  au lieu d'apparaître en rouge. Les modèles d'horizon &lt; 24 h sont
+  explicitement étiquetés *non archivé* dans le tableau prévisions
+  balises (filtre métier de `FetchBaliseForecastsJob`).
+
+### Outillage
+- **Commande artisan `readings:backfill-hourly [--days=7] [--balise=ID]`** :
+  reconstruit `balise_readings_hourly` à partir de `balise_readings`
+  brut, pour ne pas attendre que la fenêtre glissante de 3 h du job
+  horaire ait progressivement rempli les 7 jours après un
+  déploiement.
+
+### Corrigé (suite — UKMO Global et modèles globaux similaires)
+- **`OpenMeteoApi::parseResponse`** rendait `relative_humidity_2m`
+  obligatoire pour conserver un créneau. Or **UKMO Global** (et
+  potentiellement d'autres modèles globaux) ne servent pas cette
+  variable sur Open-Meteo : conséquence, l'API renvoyait HTTP 200
+  mais tous les créneaux étaient filtrés → 0 ligne en base, modèle
+  apparaît comme « cassé ». Le parser n'exige plus désormais que
+  `wind_direction_10m` + `wind_speed_10m` ; humidité, nuages,
+  précipitations, plafond restent optionnels et le scoring tombe en
+  repli proprement (`cloud_base = null` si humidité absente, etc.).
+- Log informatif (`Log::info`) ajouté quand un parse retourne
+  zéro créneau alors que la réponse contenait des données — facilite
+  le diagnostic d'autres mismatches de variables à l'avenir.
+
+### Débogage admin
+- **Bouton « Tester » par modèle** dans le tableau de fraîcheur
+  (`/admin/data-coverage`) : déclenche un fetch synchrone sur le 1er
+  site actif et affiche le résultat brut (succès/échec, nb créneaux,
+  durée, échantillon des 3 premiers créneaux). Indispensable pour
+  diagnostiquer rapidement un modèle qui « ne renvoie rien » sans
+  attendre la prochaine cadence.
+
+### Routage par API (UKMO sur l'API publique)
+- **Nouvelle entrée `weather_apis` `openmeteo_public`** pointant sur
+  `https://api.open-meteo.com/v1` (auth_type none, quota déclaré
+  10 000 req/jour). Le `WeatherApiRegistry` mappe ce code sur
+  `OpenMeteoApi` (même implémentation, base URL différente).
+- **UKMO Global routé sur cette API publique** via migration
+  `2026_05_14_120000_add_openmeteo_public_api`. Motif : notre instance
+  self-hosted ne sert pas `wind_speed_10m` ni `wind_direction_10m`
+  pour ce modèle (interpolation à 10 m non effectuée), ce qui le rend
+  inutilisable pour le scoring parapente. L'API publique, elle,
+  fournit ces variables correctement. Volume attendu ~80 req/jour,
+  largement sous le quota.
+- `FetchBaliseForecastsJob` itère désormais sur **tous les modèles**
+  bound à une API Open-Meteo (`openmeteo` OU `openmeteo_public`), en
+  reconfigurant `setConfig()` par modèle. Avant : seuls les modèles
+  bound à `openmeteo` étaient batchés, UKMO aurait été silencieusement
+  écarté de l'archive balises.
+
+### Diagnostic
+- **Bouton « Brut »** sur le tableau de fraîcheur : appelle un nouvel
+  endpoint `/admin/models/{id}/inspect` qui renvoie la réponse JSON
+  d'Open-Meteo telle quelle, avec en plus un récap par variable
+  `hourly` (présence : non_null/total + 3 premières valeurs). Utile
+  pour diagnostiquer en un clic pourquoi un modèle renvoie 0 créneau
+  après parsing (cas qui a permis d'identifier le mismatch UKMO
+  ci-dessus).
+
+### Robustesse
+- **`DataCoverage` ne stocke plus d'Eloquent dans le cache Redis**
+  (cause d'erreurs « incomplete object » après modification du
+  schéma `weather_models` ou de la classe `WeatherModel`). Les
+  objets cachés sont désormais de petits `stdClass` (id, name,
+  code, active, max_horizon_h). Plus de 500 lors d'une lecture
+  post-déploiement.
+- **Invalidation automatique** du cache `DataCoverage` à chaque
+  toggle/update de modèle, site ou balise via les contrôleurs
+  admin correspondants.
+
 ---
 
 ## 2026-05-13 — Comparaison modèles ↔ balises, phase 1 (infra collecte)

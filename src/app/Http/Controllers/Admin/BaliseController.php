@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Balise;
+use App\Services\DataCoverage;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -90,6 +91,8 @@ class BaliseController extends Controller
     {
         $balise->active = ! $balise->active;
         $balise->save();
+
+        app(DataCoverage::class)->flush();
 
         return redirect()
             ->back()

@@ -37,10 +37,27 @@ class WeatherApiSeeder extends Seeder
             ]
         );
 
+        // API publique Open-Meteo — utilisée pour les modèles que notre
+        // instance self-hosted ne sert pas correctement (typiquement
+        // UKMO Global qui n'expose pas le vent à 10 m). Quota gratuit
+        // ~10 000 req/jour.
+        DB::table('weather_apis')->updateOrInsert(
+            ['code' => 'openmeteo_public'],
+            [
+                'name'        => 'Open-Meteo (API publique)',
+                'base_url'    => 'https://api.open-meteo.com/v1',
+                'auth_type'   => 'none',
+                'daily_quota' => 10000,
+                'active'      => true,
+                'created_at'  => now(),
+                'updated_at'  => now(),
+            ]
+        );
+
         // Désactive les éventuelles entrées d'anciennes APIs encore en
         // base (BD existante migrée). Idempotent.
         DB::table('weather_apis')
-            ->whereNotIn('code', ['openmeteo'])
+            ->whereNotIn('code', ['openmeteo', 'openmeteo_public'])
             ->update(['active' => false, 'updated_at' => now()]);
     }
 }

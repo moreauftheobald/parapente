@@ -15,9 +15,21 @@ use InvalidArgumentException;
  */
 class WeatherApiRegistry
 {
-    /** @var array<string, class-string<WeatherApiInterface>> */
+    /**
+     * Codes WeatherApi connus → implémentation PHP.
+     *
+     * `openmeteo`        : instance Open-Meteo self-hosted (réseau docker
+     *                      `meteo-net`).
+     * `openmeteo_public` : API publique api.open-meteo.com (utilisée pour
+     *                      les modèles que notre instance self-hosted ne
+     *                      sert pas correctement — typiquement UKMO Global
+     *                      qui n'expose pas le vent à 10 m).
+     *
+     * @var array<string, class-string<WeatherApiInterface>>
+     */
     private const REGISTRY = [
-        'openmeteo' => OpenMeteoApi::class,
+        'openmeteo'        => OpenMeteoApi::class,
+        'openmeteo_public' => OpenMeteoApi::class,
     ];
 
     /**

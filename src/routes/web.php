@@ -92,6 +92,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::patch('/models/{model}',        [AdminModelController::class, 'update'])->name('models.update');
         Route::post('/models/{model}/toggle',  [AdminModelController::class, 'toggleActive'])->name('models.toggle');
         Route::post('/models/{model}/test',    [AdminModelController::class, 'test'])->name('models.test');
+        Route::post('/models/{model}/inspect', [AdminModelController::class, 'inspect'])->name('models.inspect');
 
         // ── APIs météo ───────────────────────────────────────────
         Route::get('/apis',                [AdminApiController::class, 'index'])->name('apis.index');

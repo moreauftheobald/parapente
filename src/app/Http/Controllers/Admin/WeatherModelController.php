@@ -7,6 +7,8 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\WeatherApi;
 use App\Models\WeatherModel;
+use App\Services\DataCoverage;
+use App\Services\Weather\Apis\OpenMeteoApi;
 use App\Services\Weather\Apis\WeatherApiRegistry;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -138,6 +140,8 @@ class WeatherModelController extends Controller
 
         $model->save();
 
+        app(DataCoverage::class)->flush();
+
         return redirect()
             ->route('admin.models.edit', $model)
             ->with('status', "Modèle « {$model->name} » enregistré.");
@@ -225,10 +229,83 @@ class WeatherModelController extends Controller
         ]);
     }
 
+    /**
+     * Inspection brute : récupère la réponse JSON d'Open-Meteo telle quelle
+     * (avant parsing/filtrage), pour diagnostiquer pourquoi un modèle
+     * renvoie 0 créneau après parsing — typiquement quand certaines
+     * variables sont null. Spécifique Open-Meteo pour l'instant.
+     */
+    public function inspect(WeatherModel $model, OpenMeteoApi $openMeteo): JsonResponse
+    {
+        $model->loadMissing('api');
+
+        if (! $model->api) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Aucune API associée.',
+            ], 422);
+        }
+        if ($model->api->code !== 'openmeteo') {
+            return response()->json([
+                'success' => false,
+                'message' => 'L\'inspection brute n\'est implémentée que pour Open-Meteo.',
+            ], 422);
+        }
+
+        $site = Site::active()->orderBy('id')->first();
+        if (! $site) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Aucun site actif disponible.',
+            ], 422);
+        }
+
+        $openMeteo->setConfig($model->api);
+        $raw = $openMeteo->fetchRaw($site, $model);
+
+        if ($raw === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Aucune réponse retournée.',
+            ], 200);
+        }
+
+        // Aplatissement des variables hourly pour rendre le débogage lisible :
+        // pour chaque variable, on indique sa présence + le nombre de valeurs
+        // non-null sur les ~120 créneaux.
+        $hourlyStats = [];
+        if (is_array($raw['body'] ?? null) && isset($raw['body']['hourly']) && is_array($raw['body']['hourly'])) {
+            $hourly = $raw['body']['hourly'];
+            $total  = count($hourly['time'] ?? []);
+            foreach ($hourly as $key => $values) {
+                if ($key === 'time' || ! is_array($values)) {
+                    continue;
+                }
+                $nonNull = count(array_filter($values, fn ($v) => $v !== null));
+                $hourlyStats[$key] = [
+                    'non_null' => $nonNull,
+                    'total'    => $total,
+                    'first3'   => array_slice($values, 0, 3),
+                ];
+            }
+        }
+
+        return response()->json([
+            'success'      => $raw['success'],
+            'status'       => $raw['status'],
+            'site'         => $site->slug,
+            'url'          => $raw['url'],
+            'hourly_stats' => $hourlyStats,
+            'raw_body'     => $raw['body'], // payload complet (peut être gros)
+        ]);
+    }
+
     public function toggleActive(WeatherModel $model): RedirectResponse
     {
         $model->active = ! $model->active;
         $model->save();
+
+        app(DataCoverage::class)->flush();
 
         return redirect()
             ->back()
