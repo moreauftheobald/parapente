@@ -245,7 +245,7 @@ class WeatherModelController extends Controller
                 'message' => 'Aucune API associée.',
             ], 422);
         }
-        if ($model->api->code !== 'openmeteo') {
+        if (! in_array($model->api->code, ['openmeteo', 'openmeteo_public'], true)) {
             return response()->json([
                 'success' => false,
                 'message' => 'L\'inspection brute n\'est implémentée que pour Open-Meteo.',

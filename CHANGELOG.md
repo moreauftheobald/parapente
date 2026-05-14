@@ -11,6 +11,48 @@ Conventions :
 
 ---
 
+## 2026-05-14 — Robustesse de l'écran « Couverture des données »
+
+### Corrigé
+- **500 récurrent sur `/admin/data-coverage`** (notamment après une
+  visite de la carte) causé par d'anciens payloads sérialisés dans le
+  cache (file en dev, redis en prod) contenant des Eloquent
+  `WeatherModel` complets — au déballage avec le nouveau code (qui
+  attend des `stdClass` issus de `lightModel()`), PHP renvoyait des
+  `__PHP_Incomplete_Class` et Blade crashait sur `$row['model']->id`.
+  Le `try/catch` du service ne pouvait pas attraper l'erreur car elle
+  survenait dans le template, après que le service ait renvoyé sa
+  payload.
+
+### Modifié
+- `App\Services\DataCoverage` :
+  - **Cache désactivé** sur les 4 sections (rebuild systématique à
+    chaque requête — page admin consultée ponctuellement, build
+    < 100 ms). La signature `safeSection()` est conservée pour
+    permettre une réactivation ultérieure.
+  - **Stockage en primitives** (strings/ints uniquement, plus de
+    Carbon en cache) : si on réactive le cache un jour, les
+    timestamps seront sérialisés en string ISO 8601 et reconstruits
+    en Carbon à la lecture via `inflate*Payload()`.
+  - **Requête `weather_fetch_log` bornée** à 14 jours / 2000 lignes
+    (avant : chargement de toute la table en mémoire sans `LIMIT`).
+  - **Résilience par section** : chaque méthode est wrapped dans un
+    `try/catch` qui log via `Log::error` et renvoie un payload vide
+    si la build échoue — la page reste affichable au lieu d'un 500
+    nu.
+
+### Déploiement
+Après ce déploiement, **nettoyer agressivement les caches** une seule
+fois pour purger les anciennes entrées sérialisées :
+```bash
+docker exec parapente_php php artisan optimize:clear
+docker exec parapente_php rm -rf storage/framework/cache/data/* \
+    storage/framework/views/* bootstrap/cache/*.php
+docker compose restart parapente-php
+```
+
+---
+
 ## 2026-05-14 — Élargissement du catalogue de modèles météo
 
 ### Ajouté

@@ -507,6 +507,19 @@ docker logs parapente_worker -f
    changement majeur (voir la section *Changelog* en haut de ce fichier).
 10. **Shell global `<x-app-shell>`** — ne pas imbriquer de composant anonyme dans
     ses slots (utiliser `@include`) ; un slot vide n'affiche pas le panneau.
+11. **Cache et objets sérialisés** — ne **jamais** stocker d'Eloquent
+    dans `Cache::remember()` (file ou redis). Quand le schéma de la
+    classe évolue (colonne ajoutée, cast modifié…) ou que la classe
+    elle-même est remplacée, les anciennes entrées se déballent en
+    `__PHP_Incomplete_Class` et crashent la vue (erreur typique :
+    *« script tried to access a property on an incomplete object »*).
+    Toujours stocker des **primitives** (strings/ints/arrays) et
+    reconstruire les Carbon/Eloquent à la lecture. Si le schéma
+    change quand même, **bump une `CACHE_VERSION`** dans la clé pour
+    rendre les vieilles entrées orphelines. Cf. `App\Services\DataCoverage`
+    pour le pattern `safeSection() + inflate*Payload()` (cache
+    actuellement désactivé sur cette page, à réactiver une fois le
+    diagnostic d'environnement clarifié).
 
 ---
 

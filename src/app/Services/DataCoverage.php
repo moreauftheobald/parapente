@@ -12,6 +12,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Mesure la couverture réelle des données météo collectées pour
@@ -37,6 +38,14 @@ class DataCoverage
 {
     private const CACHE_TTL_S = 300;
 
+    /**
+     * Version du schéma des payloads en cache. À incrémenter à chaque
+     * fois que la forme des données stockées change — sinon une vieille
+     * entrée (avec p.ex. des Eloquent sérialisés) crashe le template
+     * Blade au déballage (`__PHP_Incomplete_Class`).
+     */
+    private const CACHE_VERSION = 'v2';
+
     /** Périmètre des prévisions sites : 5 jours futurs (J → J+4) */
     private const SITE_FORECAST_DAYS_FUTURE = 5;
 
@@ -53,10 +62,10 @@ class DataCoverage
      */
     public function flush(): void
     {
-        Cache::forget('data_coverage.model_freshness');
-        Cache::forget('data_coverage.site_forecasts');
-        Cache::forget('data_coverage.balise_forecasts');
-        Cache::forget('data_coverage.balise_readings');
+        Cache::forget('data_coverage.' . self::CACHE_VERSION . '.model_freshness');
+        Cache::forget('data_coverage.' . self::CACHE_VERSION . '.site_forecasts');
+        Cache::forget('data_coverage.' . self::CACHE_VERSION . '.balise_forecasts');
+        Cache::forget('data_coverage.' . self::CACHE_VERSION . '.balise_readings');
     }
 
     /**
@@ -81,89 +90,146 @@ class DataCoverage
      */
     public function modelFreshness(): array
     {
-        return Cache::remember('data_coverage.model_freshness', self::CACHE_TTL_S, function () {
-            $models = WeatherModel::query()->orderBy('name')->get();
-            // Si la table n'existe pas encore (déploiement en cours), on
-            // renvoie un tableau vide — pas de 500.
-            if (! DB::getSchemaBuilder()->hasTable('weather_fetch_log')) {
-                return $models->map(fn (WeatherModel $m) => [
-                    'model'                 => $this->lightModel($m),
-                    'last_fetch_site'       => null,
-                    'last_fetch_balise'     => null,
-                    'last_rows_site'        => null,
-                    'last_rows_balise'      => null,
-                    'last_provider_run'     => null,
-                    'expected_interval_min' => max(1, (int) $m->refresh_frequency_minutes),
-                    'observed_interval_min' => null,
-                    'drift_pct'             => null,
-                ])->all();
-            }
+        // Cache désactivé temporairement : la persistance file/redis a
+        // pollué les entrées avec des Eloquent sérialisés (avant le
+        // refactor lightModel) qui se déballent en __PHP_Incomplete_Class
+        // → 500 dans Blade. Mieux vaut rebuilder à chaque appel (page
+        // admin consultée ponctuellement, build < 100 ms).
+        try {
+            return $this->inflateModelFreshness($this->buildModelFreshness());
+        } catch (\Throwable $e) {
+            Log::error('DataCoverage::modelFreshness build failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return [];
+        }
+    }
 
-            // Tous les derniers fetches par (modèle, scope) en une seule
-            // requête : on récupère les 2 dernières lignes par modèle &
-            // scope pour calculer l'intervalle observé.
-            $logs = DB::table('weather_fetch_log')
-                ->select('weather_model_id', 'scope', 'fetched_at', 'rows_upserted', 'provider_run_at')
-                ->orderByDesc('fetched_at')
-                ->get()
-                ->groupBy(fn ($r) => $r->weather_model_id . '|' . $r->scope);
+    private function buildModelFreshness(): array
+    {
+        $models = WeatherModel::query()->orderBy('name')->get();
+        // Si la table n'existe pas encore (déploiement en cours), on
+        // renvoie un tableau vide — pas de 500.
+        if (! DB::getSchemaBuilder()->hasTable('weather_fetch_log')) {
+            return $models->map(fn (WeatherModel $m) => [
+                'model'                 => $this->lightModel($m),
+                'last_fetch_site'       => null,
+                'last_fetch_balise'     => null,
+                'last_rows_site'        => null,
+                'last_rows_balise'      => null,
+                'last_provider_run'     => null,
+                'expected_interval_min' => max(1, (int) $m->refresh_frequency_minutes),
+                'observed_interval_min' => null,
+                'drift_pct'             => null,
+            ])->all();
+        }
 
-            $rows = [];
-            foreach ($models as $model) {
-                $siteLogs   = $logs->get($model->id . '|site',   collect());
-                $baliseLogs = $logs->get($model->id . '|balise', collect());
+        // Borne la requête : on n'a besoin que des fetches récents
+        // pour calculer la cadence observée. Sans borne la table
+        // grossit indéfiniment et la lecture explose en mémoire.
+        $since = CarbonImmutable::now()->subDays(14);
+        $logs = DB::table('weather_fetch_log')
+            ->select('weather_model_id', 'scope', 'fetched_at', 'rows_upserted', 'provider_run_at')
+            ->where('fetched_at', '>=', $since)
+            ->orderByDesc('fetched_at')
+            ->limit(2000)
+            ->get()
+            ->groupBy(fn ($r) => $r->weather_model_id . '|' . $r->scope);
 
-                // Combine les scopes pour l'intervalle observé (le modèle
-                // est fetché à la même cadence quel que soit le scope).
-                $allLogs = $siteLogs->merge($baliseLogs)
-                    ->sortByDesc('fetched_at')
-                    ->values();
+        $rows = [];
+        foreach ($models as $model) {
+            $siteLogs   = $logs->get($model->id . '|site',   collect());
+            $baliseLogs = $logs->get($model->id . '|balise', collect());
 
-                $lastFetchSite   = $siteLogs->first()?->fetched_at;
-                $lastFetchBalise = $baliseLogs->first()?->fetched_at;
-                $lastRowsSite    = $siteLogs->first()?->rows_upserted;
-                $lastRowsBalise  = $baliseLogs->first()?->rows_upserted;
-                $lastProviderRun = $allLogs->first()?->provider_run_at;
+            $allLogs = $siteLogs->merge($baliseLogs)
+                ->sortByDesc('fetched_at')
+                ->values();
 
-                // Intervalle observé = minutes entre les 2 derniers fetches
-                // (on cherche 2 timestamps distincts car un même run de
-                // l'orchestrateur peut produire site+balise quasi-simultanés).
-                $observedMin = null;
-                if ($allLogs->count() >= 2) {
-                    $latest = CarbonImmutable::parse((string) $allLogs[0]->fetched_at);
-                    $prev   = null;
+            $lastFetchSite   = $siteLogs->first()?->fetched_at;
+            $lastFetchBalise = $baliseLogs->first()?->fetched_at;
+            $lastRowsSite    = $siteLogs->first()?->rows_upserted;
+            $lastRowsBalise  = $baliseLogs->first()?->rows_upserted;
+            $lastProviderRun = $allLogs->first()?->provider_run_at;
+
+            $observedMin = null;
+            if ($allLogs->count() >= 2) {
+                $latest = $this->safeParse((string) $allLogs[0]->fetched_at);
+                $prev   = null;
+                if ($latest !== null) {
                     foreach ($allLogs->skip(1) as $log) {
-                        $candidate = CarbonImmutable::parse((string) $log->fetched_at);
-                        if ($latest->diffInMinutes($candidate, true) >= 1) {
+                        $candidate = $this->safeParse((string) $log->fetched_at);
+                        if ($candidate !== null && $latest->diffInMinutes($candidate, true) >= 1) {
                             $prev = $candidate;
                             break;
                         }
                     }
-                    if ($prev !== null) {
-                        $observedMin = (int) round($latest->diffInMinutes($prev, true));
-                    }
                 }
-
-                $expectedMin = max(1, (int) $model->refresh_frequency_minutes);
-                $driftPct    = $observedMin !== null
-                    ? round((($observedMin - $expectedMin) / $expectedMin) * 100, 1)
-                    : null;
-
-                $rows[] = [
-                    'model'                 => $this->lightModel($model),
-                    'last_fetch_site'       => $lastFetchSite ? Carbon::parse((string) $lastFetchSite) : null,
-                    'last_fetch_balise'     => $lastFetchBalise ? Carbon::parse((string) $lastFetchBalise) : null,
-                    'last_rows_site'        => $lastRowsSite !== null ? (int) $lastRowsSite : null,
-                    'last_rows_balise'      => $lastRowsBalise !== null ? (int) $lastRowsBalise : null,
-                    'last_provider_run'     => $lastProviderRun ? Carbon::parse((string) $lastProviderRun) : null,
-                    'expected_interval_min' => $expectedMin,
-                    'observed_interval_min' => $observedMin,
-                    'drift_pct'             => $driftPct,
-                ];
+                if ($prev !== null && $latest !== null) {
+                    $observedMin = (int) round($latest->diffInMinutes($prev, true));
+                }
             }
 
-            return $rows;
-        });
+            $expectedMin = max(1, (int) $model->refresh_frequency_minutes);
+            $driftPct    = $observedMin !== null
+                ? round((($observedMin - $expectedMin) / $expectedMin) * 100, 1)
+                : null;
+
+            // Stockage en strings/scalars pour éviter toute fragilité
+            // de désérialisation Carbon en cache Redis. Le contrôleur
+            // re-parse à la lecture (cf. inflateModelFreshness()).
+            $rows[] = [
+                'model'                 => $this->lightModel($model),
+                'last_fetch_site'       => $lastFetchSite ? (string) $lastFetchSite : null,
+                'last_fetch_balise'     => $lastFetchBalise ? (string) $lastFetchBalise : null,
+                'last_rows_site'        => $lastRowsSite !== null ? (int) $lastRowsSite : null,
+                'last_rows_balise'      => $lastRowsBalise !== null ? (int) $lastRowsBalise : null,
+                'last_provider_run'     => $lastProviderRun ? (string) $lastProviderRun : null,
+                'expected_interval_min' => $expectedMin,
+                'observed_interval_min' => $observedMin,
+                'drift_pct'             => $driftPct,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Carbon::parse safe : null si la string est vide ou invalide.
+     */
+    private function safeParse(?string $value): ?CarbonImmutable
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        try {
+            return CarbonImmutable::parse($value);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Reconvertit les timestamps stringifiés en Carbon mutable (la vue
+     * `data-coverage/index.blade.php` les attend en `?Carbon\Carbon`).
+     *
+     * @param array<int, array<string, mixed>> $rows
+     * @return array<int, array<string, mixed>>
+     */
+    private function inflateModelFreshness(array $rows): array
+    {
+        foreach ($rows as &$row) {
+            foreach (['last_fetch_site', 'last_fetch_balise', 'last_provider_run'] as $key) {
+                if (isset($row[$key]) && is_string($row[$key])) {
+                    try {
+                        $row[$key] = Carbon::parse($row[$key]);
+                    } catch (\Throwable) {
+                        $row[$key] = null;
+                    }
+                }
+            }
+        }
+        return $rows;
     }
 
     /**
@@ -181,14 +247,14 @@ class DataCoverage
      */
     public function siteForecastCoverage(): array
     {
-        return Cache::remember('data_coverage.site_forecasts', self::CACHE_TTL_S, function () {
+        return $this->safeSection('data_coverage.' . self::CACHE_VERSION . '.site_forecasts', function () {
             $days = $this->dayRange(0, self::SITE_FORECAST_DAYS_FUTURE - 1);
             $sitesActive = Site::where('active', true)->count();
             $models = WeatherModel::query()->where('active', true)->orderBy('name')->get();
 
             if ($sitesActive === 0 || $models->isEmpty()) {
                 return [
-                    'days'         => $days,
+                    'days'         => $this->daysToStrings($days),
                     'rows'         => [],
                     'sites_active' => $sitesActive,
                 ];
@@ -227,11 +293,13 @@ class DataCoverage
             }
 
             return [
-                'days'         => $days,
+                'days'         => $this->daysToStrings($days),
                 'rows'         => $rows,
                 'sites_active' => $sitesActive,
             ];
-        });
+        }, fn (array $payload) => $this->inflateDayPayload($payload), default: [
+            'days' => [], 'rows' => [], 'sites_active' => 0,
+        ]);
     }
 
     /**
@@ -255,7 +323,7 @@ class DataCoverage
      */
     public function baliseForecastCoverage(): array
     {
-        return Cache::remember('data_coverage.balise_forecasts', self::CACHE_TTL_S, function () {
+        return $this->safeSection('data_coverage.' . self::CACHE_VERSION . '.balise_forecasts', function () {
             $days = $this->dayRange(
                 -self::BALISE_FORECAST_DAYS_PAST,
                 self::BALISE_FORECAST_DAYS_FUTURE - 1
@@ -264,7 +332,7 @@ class DataCoverage
             $models = WeatherModel::query()->where('active', true)->orderBy('name')->get();
 
             $payload = [
-                'days'           => $days,
+                'days'           => $this->daysToStrings($days),
                 'rows'           => [],
                 'balises_active' => $balisesActive,
             ];
@@ -327,7 +395,9 @@ class DataCoverage
 
             $payload['rows'] = $rows;
             return $payload;
-        });
+        }, fn (array $payload) => $this->inflateDayPayload($payload), default: [
+            'days' => [], 'rows' => [], 'balises_active' => 0,
+        ]);
     }
 
     /**
@@ -352,12 +422,12 @@ class DataCoverage
      */
     public function baliseReadingsCoverage(): array
     {
-        return Cache::remember('data_coverage.balise_readings', self::CACHE_TTL_S, function () {
+        return $this->safeSection('data_coverage.' . self::CACHE_VERSION . '.balise_readings', function () {
             $days    = $this->dayRange(-self::BALISE_READINGS_DAYS_PAST, 0);
             $balises = Balise::where('active', true)->orderBy('source')->orderBy('name')->get();
 
             $payload = [
-                'days'   => $days,
+                'days'   => $this->daysToStrings($days),
                 'groups' => [],
             ];
 
@@ -391,7 +461,9 @@ class DataCoverage
                     ->get();
                 foreach ($rawLast as $r) {
                     if ($r->last_at) {
-                        $lastByBalise[$r->balise_id] = Carbon::parse((string) $r->last_at);
+                        // Stocké en string : inflaté en Carbon après
+                        // lecture du cache (cf. inflateDayPayload()).
+                        $lastByBalise[$r->balise_id] = (string) $r->last_at;
                     }
                 }
             }
@@ -453,7 +525,9 @@ class DataCoverage
 
             $payload['groups'] = $groups;
             return $payload;
-        });
+        }, fn (array $payload) => $this->inflateReadingsPayload($payload), default: [
+            'days' => [], 'groups' => [],
+        ]);
     }
 
     /**
@@ -563,5 +637,100 @@ class DataCoverage
             $days[] = $today->addDays($i);
         }
         return $days;
+    }
+
+    /**
+     * Helper de cache pour les sections 2/3/4 : encapsule
+     *   - cache primitive uniquement (pas de Carbon en Redis),
+     *   - retry sans cache si la lecture/build pète,
+     *   - fallback vers `$default` si tout échoue,
+     *   - inflation post-cache via `$inflate`.
+     *
+     * @param callable():array     $build    Construit la payload (primitives).
+     * @param callable(array):array $inflate Reconvertit les strings en Carbon pour la vue.
+     * @param array $default Payload retournée si tout échoue.
+     */
+    private function safeSection(
+        string $cacheKey,
+        callable $build,
+        callable $inflate,
+        array $default,
+    ): array {
+        // Cache désactivé temporairement (cf. commentaire sur
+        // modelFreshness()). Le paramètre $cacheKey est conservé pour
+        // ne pas casser la signature et faciliter la réactivation.
+        try {
+            return $inflate($build());
+        } catch (\Throwable $e) {
+            Log::error("DataCoverage::{$cacheKey} build failed", [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return $default;
+        }
+    }
+
+    /**
+     * Convertit un tableau de CarbonImmutable en tableau de strings
+     * `Y-m-d`. Utilisé avant la mise en cache pour éviter de
+     * sérialiser des Carbon dans Redis.
+     *
+     * @param array<int, CarbonImmutable> $days
+     * @return array<int, string>
+     */
+    private function daysToStrings(array $days): array
+    {
+        return array_map(fn ($d) => $d->format('Y-m-d'), $days);
+    }
+
+    /**
+     * Reconvertit `days` (strings Y-m-d) en CarbonImmutable pour la
+     * vue. Appliqué après lecture du cache pour les sections 2 et 3.
+     *
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function inflateDayPayload(array $payload): array
+    {
+        if (isset($payload['days']) && is_array($payload['days'])) {
+            $payload['days'] = array_map(
+                fn ($d) => is_string($d) ? CarbonImmutable::parse($d) : $d,
+                $payload['days']
+            );
+        }
+        return $payload;
+    }
+
+    /**
+     * Idem `inflateDayPayload()` + reconvertit `last_reading_at`
+     * (string) en Carbon mutable dans chaque balise des groupes.
+     *
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function inflateReadingsPayload(array $payload): array
+    {
+        $payload = $this->inflateDayPayload($payload);
+
+        if (isset($payload['groups']) && is_array($payload['groups'])) {
+            foreach ($payload['groups'] as &$group) {
+                if (! isset($group['balises']) || ! is_array($group['balises'])) {
+                    continue;
+                }
+                foreach ($group['balises'] as &$b) {
+                    if (isset($b['last_reading_at']) && is_string($b['last_reading_at'])) {
+                        try {
+                            $b['last_reading_at'] = Carbon::parse($b['last_reading_at']);
+                        } catch (\Throwable) {
+                            $b['last_reading_at'] = null;
+                        }
+                    }
+                }
+                unset($b);
+            }
+            unset($group);
+        }
+
+        return $payload;
     }
 }
