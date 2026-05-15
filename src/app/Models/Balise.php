@@ -19,19 +19,22 @@ class Balise extends Model
     protected $fillable = [
         'site_id',
         'source',
+        'reliability_class',
         'external_id',
         'name',
         'latitude',
         'longitude',
         'altitude_m',
+        'height_agl_m',
         'active',
     ];
 
     protected $casts = [
-        'latitude'   => 'decimal:7',
-        'longitude'  => 'decimal:7',
-        'altitude_m' => 'integer',
-        'active'     => 'boolean',
+        'latitude'     => 'decimal:7',
+        'longitude'    => 'decimal:7',
+        'altitude_m'   => 'integer',
+        'height_agl_m' => 'integer',
+        'active'       => 'boolean',
     ];
 
     // ── Relations ───────────────────────────────────────────────

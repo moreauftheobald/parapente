@@ -8,6 +8,7 @@ use App\Models\Balise;
 use App\Services\Balises\BaliseProviderInterface;
 use App\Services\Balises\MetarProvider;
 use App\Services\Balises\PiouPiouProvider;
+use App\Services\Balises\WindyOpenDataProvider;
 use Illuminate\Console\Command;
 
 /**
@@ -26,7 +27,7 @@ use Illuminate\Console\Command;
 class BalisesDiscover extends Command
 {
     protected $signature = 'balises:discover
-        {--source=pioupiou : Identifiant du fournisseur (pioupiou, holfuy, metar)}
+        {--source=pioupiou : Identifiant du fournisseur (pioupiou, metar, windy)}
         {--lat-min=47.0 : Latitude minimum de la bbox}
         {--lat-max=50.5 : Latitude maximum de la bbox}
         {--lng-min=3.5  : Longitude minimum de la bbox}
@@ -44,7 +45,7 @@ class BalisesDiscover extends Command
 
         $provider = $this->resolveProvider($source);
         if (! $provider) {
-            $this->error("Source inconnue : '{$source}' (sources gérées : pioupiou, metar)");
+            $this->error("Source inconnue : '{$source}' (sources gérées : pioupiou, metar, windy)");
             return self::FAILURE;
         }
 
@@ -72,6 +73,12 @@ class BalisesDiscover extends Command
                 'longitude'  => $s['longitude'],
                 'altitude_m' => $s['altitude_m'],
             ]);
+            if (array_key_exists('height_agl_m', $s) && $s['height_agl_m'] !== null) {
+                $balise->height_agl_m = (int) $s['height_agl_m'];
+            }
+            if (! empty($s['reliability_class']) && $balise->reliability_class === null) {
+                $balise->reliability_class = $s['reliability_class'];
+            }
             // On ne touche pas active=false existant (la désactivation est gérée par le job)
             if ($isNew) {
                 $balise->active = true;
@@ -100,6 +107,7 @@ class BalisesDiscover extends Command
         return match ($source) {
             'pioupiou' => app(PiouPiouProvider::class),
             'metar'    => app(MetarProvider::class),
+            'windy'    => app(WindyOpenDataProvider::class),
             default    => null,
         };
     }

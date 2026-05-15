@@ -31,7 +31,7 @@
             $loc   = $report['location'];
             $sites = $report['sites'];
             $bals  = $report['balises'];
-            $sourceLabel = ['pioupiou' => 'PiouPiou', 'metar' => 'METAR (NOAA)'];
+            $sourceLabel = ['pioupiou' => 'PiouPiou', 'metar' => 'METAR (NOAA)', 'windy' => 'Windy.com'];
         @endphp
         <div class="mb-6 bg-emerald-500/10 border border-emerald-500/30 rounded-xl overflow-hidden">
             <div class="px-4 py-3 border-b border-emerald-500/20 flex items-baseline justify-between flex-wrap gap-2">
@@ -96,8 +96,8 @@
             <p class="text-sm text-gray-500 mb-4">
                 Géocode la ville (Open-Meteo), puis active <strong class="text-gray-400">tous les sites</strong>
                 déjà en base situés dans le rayon, et <strong class="text-gray-400">découvre + active</strong>
-                toutes les balises (PiouPiou, METAR) du périmètre. Cumulatif : rien n'est désactivé hors zone.
-                Les balises désactivées manuellement restent off.
+                toutes les balises (PiouPiou, METAR, Windy si clé API configurée) du périmètre. Cumulatif : rien
+                n'est désactivé hors zone. Les balises désactivées manuellement restent off.
             </p>
             <form method="POST" action="{{ route('admin.sync.deploy') }}"
                   onsubmit="this.querySelector('button[type=submit]').disabled=true; this.querySelector('button[type=submit]').innerHTML='<i class=&quot;fa-solid fa-spinner fa-spin&quot;></i> Déploiement en cours…';">
@@ -197,6 +197,37 @@
                 @include('admin.sync._bbox')
                 <button type="submit" class="{{ $btnCls }}">
                     <i class="fa-solid fa-tower-broadcast"></i> Découvrir les balises METAR
+                </button>
+            </form>
+        </div>
+
+        {{-- ── Balises Windy.com ──────────────────────────────────── --}}
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+            <div class="flex items-start justify-between mb-1">
+                <h2 class="text-lg font-medium text-white">🌬 Balises — Windy.com (Open Data)</h2>
+                <span class="text-xs text-gray-500">{{ number_format($balisesWindy, 0, ',', ' ') }} en base</span>
+            </div>
+            <p class="text-sm text-gray-500 mb-4">
+                Découvre les stations Windy publiées sous licence ouverte dans la zone géographique
+                ci-dessous (Stations API v2). Chaque réseau amont (Holfuy, Davis, Netatmo…) dont le
+                propriétaire a opté pour le partage ouvert apparaît ici.
+            </p>
+            @if (! $windyKeyConfigured)
+                <div class="mb-4 px-3 py-2 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs">
+                    <i class="fa-solid fa-key"></i>
+                    Clé API Windy non configurée. Renseigne-la dans
+                    <a href="{{ route('admin.settings.index') }}" class="underline hover:text-amber-200">
+                        Paramètres généraux → Sources balises
+                    </a>
+                    avant de lancer la découverte.
+                </div>
+            @endif
+            <form method="POST" action="{{ route('admin.sync.balises') }}" onsubmit="this.querySelector('button[type=submit]').disabled=true; this.querySelector('button[type=submit]').innerHTML='<i class=&quot;fa-solid fa-spinner fa-spin&quot;></i> Découverte en cours…';">
+                @csrf
+                <input type="hidden" name="source" value="windy">
+                @include('admin.sync._bbox')
+                <button type="submit" class="{{ $btnCls }}" @disabled(! $windyKeyConfigured)>
+                    <i class="fa-solid fa-tower-broadcast"></i> Découvrir les balises Windy
                 </button>
             </form>
         </div>

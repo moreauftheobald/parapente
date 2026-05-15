@@ -11,6 +11,80 @@ Conventions :
 
 ---
 
+## 2026-05-15 — Source balises : Windy.com (Open Data API v2)
+
+### Ajouté
+- Nouveau provider **`WindyOpenDataProvider`** (source `windy`) qui
+  consomme la **Stations API v2** (mise en service janv. 2026) en mode
+  *Open Data* (`/api/v2/opendata/station` + `…/{id}/observation`).
+- **Saisie de la clé API dans `/admin/settings`** (nouveau groupe
+  *« Sources balises »*, clé `windy.api_key`). Champ password masqué
+  avec toggle d'affichage et preview des 4 derniers caractères. Sans
+  clé, le provider est **silencieux** (pas d'appel HTTP, log warning).
+- Provider câblé dans :
+  - `GeoDeploymentService::providers()` → le déploiement géographique
+    par ville embarque automatiquement Windy.
+  - `BalisesDiscover` (commande `php artisan balises:discover --source=windy`).
+  - `/admin/sync` → nouvelle section « Balises — Windy.com (Open Data) »
+    avec garde-fou si la clé n'est pas configurée.
+- Nouveau job **`FetchWindyReadingsJob`** scheduled toutes les 30 min
+  (cadence conservatrice : Windy ne propose pas de batch, c'est 1
+  appel HTTP par balise active).
+
+### Settings — type `secret` / `string`
+- Le service `Settings` accepte désormais `type=secret` (champ password
+  full-width dans la vue admin, autocomplete=new-password) et
+  `type=string`. Validation `nullable|string|max:500`.
+- Refactor mineur de `SettingsController::update` (cast unifié par type).
+
+### Base de données
+- Migration **`2026_05_15_130000_add_reliability_class_to_balises.php`** :
+  ajoute deux colonnes pré-requises pour ouvrir les sources de masse :
+  - `balises.reliability_class` ENUM(`pro`, `amateur`) nullable —
+    backfill des balises existantes : pioupiou + metar passent toutes
+    en `pro`. Les futures balises Windy sont à tagger heuristiquement
+    (par `model`/`vendor` renvoyé par Windy, à durcir).
+  - `balises.height_agl_m` SMALLINT UNSIGNED nullable — hauteur de
+    l'anémomètre au-dessus du sol (10 m mât aérodrome vs 2 m jardin).
+  - Index `(active, reliability_class)` pour permettre au futur scoring
+    de filtrer rapidement sur *pro only*.
+
+### Format Windy v2 figé (sonde 2026-05-15)
+- **Catalogue** : `{ data: [...], pagination: {page, pageSize,
+  totalPages, offset, totalItems} }`. ~14 300 stations Open Data
+  mondiales à la mise en service de l'API. Filtre bbox **ignoré
+  côté serveur** → on scanne toutes les pages et on filtre client.
+- **Champs station** : `id`, `name`, `lat`, `lon`, `elev_m`,
+  `agl_wind`, `agl_temp`, `station_type` (texte libre saisi par les
+  propriétaires — variantes orthographiques attendues, parser
+  insensible à la casse + substring match), `is_online`,
+  `last_observation_time`, `share_option`.
+- **Observation** : `data.{wind, wind_dir, wind_gust, pressure, ts}`,
+  séries temporelles alignées sur le même axe `ts` (unix
+  **millisecondes** — c'est précisé parce que Windy facture le
+  détail). Pas de `temp` / `humidity` sur certaines stations
+  (Netatmo sans module T°) → traités nullable.
+- **Vent** publié en **m/s** côté Windy → conversion en km/h.
+  **Direction** en convention FROM (norme météo, comme PiouPiou
+  après inversion).
+- **Pression** disponible (en Pa, pas hPa) mais ignorée — pas de
+  colonne en base.
+
+### Constats opérationnels
+- **77 % des stations Open Data sont offline** (sonde sur 100
+  premières) → notre filtre `is_online` retient ~23 %.
+- Le `station_type` confirme le verdict du FF : **Davis Vantage Pro
+  2** ≈ 50 %, Netatmo / Ecowitt / Ambient le reste. Quasiment aucune
+  station « pro » au sens parapente. Le mapping
+  `reliability_class='amateur'` par défaut est bien calibré.
+- **Filtrage scoring sur `reliability_class`** non encore implémenté :
+  la voting logic actuelle ignore le flag — par construction, ouvrir
+  Windy n'aggrave rien tant qu'on ne reçoit que des stations *pro*
+  (ce qui est probable au démarrage). À ajouter avant d'introduire
+  Netatmo / Davis amateur en masse.
+
+---
+
 ## 2026-05-15 — Qualité des données : détection des doublons (admin)
 
 ### Ajouté

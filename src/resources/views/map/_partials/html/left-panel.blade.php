@@ -20,14 +20,20 @@
                     <div class="lp-tabpane" x-show="lpTab === 'params'">
 
                         <div class="lp-section">
-                            <div class="lp-title">Calques</div>
-                            <button class="lp-toggle" :class="balisesVisible ? 'is-on' : ''"
-                                    @click="toggleBalises()"
-                                    :title="balisesVisible ? 'Masquer les balises météo' : 'Afficher les balises météo'">
-                                <span class="lp-lbl">🪁 Balises météo</span>
-                                <span class="lp-count mono" x-text="balises.length || ''"></span>
-                                <span class="lp-switch"></span>
-                            </button>
+                            <div class="lp-title">Réseaux de balises</div>
+                            <template x-for="net in BALISE_NETWORKS" :key="net.key">
+                                <button class="lp-toggle"
+                                        :class="networksVisible[net.key] ? 'is-on' : ''"
+                                        @click="toggleNetwork(net.key)"
+                                        :title="(networksVisible[net.key] ? 'Masquer' : 'Afficher') + ' les balises ' + net.label">
+                                    <span class="lp-lbl">
+                                        <span x-text="net.icon" style="margin-right:4px"></span>
+                                        <span x-text="net.label"></span>
+                                    </span>
+                                    <span class="lp-count mono" x-text="balisesCountByNetwork(net.key) || ''"></span>
+                                    <span class="lp-switch"></span>
+                                </button>
+                            </template>
                         </div>
 
                         <div class="lp-section">

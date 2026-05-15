@@ -56,6 +56,8 @@ class DataSyncController extends Controller
             'sitesPge'        => Site::where('source', 'paraglidingearth')->count(),
             'balisesPiou'     => Balise::where('source', 'pioupiou')->count(),
             'balisesMetar'    => Balise::where('source', 'metar')->count(),
+            'balisesWindy'    => Balise::where('source', 'windy')->count(),
+            'windyKeyConfigured' => trim((string) app(\App\Services\Settings::class)->get('windy.api_key', '')) !== '',
         ]);
     }
 
@@ -90,7 +92,7 @@ class DataSyncController extends Controller
     public function discoverBalises(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'source'  => ['required', 'in:pioupiou,metar'],
+            'source'  => ['required', 'in:pioupiou,metar,windy'],
             'lat_min' => ['required', 'numeric', 'between:-90,90'],
             'lat_max' => ['required', 'numeric', 'between:-90,90', 'gt:lat_min'],
             'lng_min' => ['required', 'numeric', 'between:-180,180'],
@@ -107,7 +109,12 @@ class DataSyncController extends Controller
             '--lng-max' => $data['lng_max'],
         ]);
 
-        $label = $data['source'] === 'pioupiou' ? 'PiouPiou' : 'METAR';
+        $label = match ($data['source']) {
+            'pioupiou' => 'PiouPiou',
+            'metar'    => 'METAR',
+            'windy'    => 'Windy',
+            default    => $data['source'],
+        };
 
         return redirect()
             ->route('admin.sync.index')

@@ -7,6 +7,7 @@ use App\Jobs\FetchBaliseForecastsJob;
 use App\Jobs\FetchForecastsJob;
 use App\Jobs\FetchMetarReadingsJob;
 use App\Jobs\FetchPiouPiouReadingsJob;
+use App\Jobs\FetchWindyReadingsJob;
 use App\Jobs\PurgeOldForecastsJob;
 
 Artisan::command('inspire', function () {
@@ -41,6 +42,16 @@ Schedule::job(FetchPiouPiouReadingsJob::class)
 Schedule::job(FetchMetarReadingsJob::class)
     ->everyThirtyMinutes()
     ->name('fetch-metar')
+    ->withoutOverlapping();
+
+// Polling Windy.com (Open Data v2) toutes les 30 minutes
+//   - Cadence conservatrice : 1 appel HTTP par balise windy active
+//     (pas d'endpoint batch côté Windy)
+//   - Skip silencieux si la clé API n'est pas configurée
+//     (settings.windy.api_key, éditable dans /admin/settings)
+Schedule::job(FetchWindyReadingsJob::class)
+    ->everyThirtyMinutes()
+    ->name('fetch-windy')
     ->withoutOverlapping();
 
 // Archivage horaire des prévisions Open-Meteo aux coords des balises

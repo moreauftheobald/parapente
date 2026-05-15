@@ -32,9 +32,19 @@ function mapApp(){return{
     // notamment pour les cellules split (2 valeurs à afficher).
     votingTip:{visible:false, x:0, y:0, lines:[]},
 
-    // Balises météo (PiouPiou — phase 1.1)
-    balises:[], balisesVisible:true,
-    _balisesLayer:null, _balisesMarkers:{}, _balisesTimer:null,
+    // Balises météo — un layerGroup et un toggle par réseau
+    // (les clés DOIVENT correspondre à `balises.source` côté API
+    //  : pioupiou / metar / windy)
+    BALISE_NETWORKS: [
+        { key:'pioupiou', label:'PiouPiou', icon:'🪁' },
+        { key:'metar',    label:'METAR',    icon:'✈️' },
+        { key:'windy',    label:'Windy',    icon:'🌬️' },
+    ],
+    balises:[],
+    networksVisible:{ pioupiou:true, metar:true, windy:true },
+    _balisesLayers:{},        // { source: L.layerGroup() }
+    _balisesMarkers:{},       // { baliseId: L.marker } (toutes sources confondues)
+    _balisesTimer:null,
     // Volet droit (balise) : relevés + historique du jour
     baliseData:null, baliseLoading:false, _baliseObj:null,
 
@@ -541,41 +551,78 @@ function mapApp(){return{
             this.renderBalises();
         }catch(e){console.warn('loadBalises failed',e);}
     },
+    /** Source d'une balise, normalisée vers une clé connue de
+     *  BALISE_NETWORKS. Un fournisseur inattendu (ex. holfuy à venir)
+     *  est rangé dans pioupiou par défaut pour rester visible. */
+    _baliseNetworkKey(b){
+        const known = this.BALISE_NETWORKS.map(n => n.key);
+        return known.includes(b.source) ? b.source : 'pioupiou';
+    },
+    /** layerGroup d'un réseau, créé à la volée si nécessaire. */
+    _ensureNetworkLayer(key){
+        if(!this._balisesLayers[key]){
+            this._balisesLayers[key] = L.layerGroup();
+            if(this.networksVisible[key]) this._balisesLayers[key].addTo(this.map);
+        }
+        return this._balisesLayers[key];
+    },
+    balisesCountByNetwork(key){
+        let n = 0;
+        for(const b of this.balises){
+            if(this._baliseNetworkKey(b) === key) n++;
+        }
+        return n;
+    },
     renderBalises(){
         if(!this.map) return;
-        if(!this._balisesLayer){
-            this._balisesLayer=L.layerGroup();
-            if(this.balisesVisible) this._balisesLayer.addTo(this.map);
-        }
-        const seen=new Set();
+        const seen = new Set();
         for(const b of this.balises){
             seen.add(b.id);
-            const icon=L.icon({iconUrl:baliseIconUrl(b.reading), iconSize:[40,40], iconAnchor:[20,20]});
-            const tooltip=baliseTooltipHtml(b);
-            const existing=this._balisesMarkers[b.id];
+            const netKey  = this._baliseNetworkKey(b);
+            const layer   = this._ensureNetworkLayer(netKey);
+            const icon    = L.icon({iconUrl:baliseIconUrl(b.reading), iconSize:[40,40], iconAnchor:[20,20]});
+            const tooltip = baliseTooltipHtml(b);
+            const existing = this._balisesMarkers[b.id];
             if(existing){
                 existing.setIcon(icon);
                 existing.setLatLng([b.lat,b.lng]);
                 existing.setTooltipContent(tooltip);
+                // Si la source d'une balise change (rare mais possible
+                // si on l'a rebadgée côté admin), on la déplace de layer
+                if(existing._netKey !== netKey){
+                    if(this._balisesLayers[existing._netKey]){
+                        this._balisesLayers[existing._netKey].removeLayer(existing);
+                    }
+                    layer.addLayer(existing);
+                    existing._netKey = netKey;
+                }
             }else{
-                const m=L.marker([b.lat,b.lng],{icon}).bindTooltip(tooltip,{direction:'top',offset:[0,-22],opacity:.95});
+                const m = L.marker([b.lat,b.lng],{icon})
+                    .bindTooltip(tooltip,{direction:'top',offset:[0,-22],opacity:.95});
+                m._netKey = netKey;
                 m.on('click',(e)=>{L.DomEvent.stopPropagation(e);this.clickBalise(b.id,m.getElement());});
-                m.addTo(this._balisesLayer);
-                this._balisesMarkers[b.id]=m;
+                m.addTo(layer);
+                this._balisesMarkers[b.id] = m;
             }
         }
         for(const id of Object.keys(this._balisesMarkers)){
             if(!seen.has(parseInt(id,10))){
-                this._balisesLayer.removeLayer(this._balisesMarkers[id]);
+                const m = this._balisesMarkers[id];
+                if(m._netKey && this._balisesLayers[m._netKey]){
+                    this._balisesLayers[m._netKey].removeLayer(m);
+                }
                 delete this._balisesMarkers[id];
             }
         }
     },
-    toggleBalises(){
-        this.balisesVisible=!this.balisesVisible;
-        if(!this._balisesLayer || !this.map) return;
-        if(this.balisesVisible) this._balisesLayer.addTo(this.map);
-        else this.map.removeLayer(this._balisesLayer);
+    /** Affiche / masque un réseau de balises sans toucher aux autres. */
+    toggleNetwork(key){
+        if(!(key in this.networksVisible)) return;
+        this.networksVisible[key] = !this.networksVisible[key];
+        const layer = this._balisesLayers[key];
+        if(!layer || !this.map) return;
+        if(this.networksVisible[key]) layer.addTo(this.map);
+        else this.map.removeLayer(layer);
     },
 
     // ── Clic sur une balise → volet droit (relevés + historique du jour) ──

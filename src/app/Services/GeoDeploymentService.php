@@ -9,6 +9,7 @@ use App\Models\Site;
 use App\Services\Balises\BaliseProviderInterface;
 use App\Services\Balises\MetarProvider;
 use App\Services\Balises\PiouPiouProvider;
+use App\Services\Balises\WindyOpenDataProvider;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -36,6 +37,7 @@ class GeoDeploymentService
     public function __construct(
         private readonly PiouPiouProvider $piouPiou,
         private readonly MetarProvider $metar,
+        private readonly WindyOpenDataProvider $windy,
     ) {}
 
     /**
@@ -229,6 +231,14 @@ class GeoDeploymentService
                 'longitude'  => $s['longitude'],
                 'altitude_m' => $s['altitude_m'],
             ]);
+            // Champs optionnels fournis par certains providers (Windy)
+            if (array_key_exists('height_agl_m', $s) && $s['height_agl_m'] !== null) {
+                $balise->height_agl_m = (int) $s['height_agl_m'];
+            }
+            if (! empty($s['reliability_class']) && $balise->reliability_class === null) {
+                // On ne surcharge pas un tag déjà posé manuellement
+                $balise->reliability_class = $s['reliability_class'];
+            }
 
             if ($isNew) {
                 $balise->active = true;
@@ -265,6 +275,7 @@ class GeoDeploymentService
         return [
             $this->piouPiou->source() => $this->piouPiou,
             $this->metar->source()    => $this->metar,
+            $this->windy->source()    => $this->windy,
         ];
     }
 }

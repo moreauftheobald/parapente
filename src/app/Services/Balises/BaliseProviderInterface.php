@@ -39,6 +39,8 @@ interface BaliseProviderInterface
      *     latitude: float,
      *     longitude: float,
      *     altitude_m: ?int,
+     *     height_agl_m?: ?int,
+     *     reliability_class?: 'pro'|'amateur'|null,
      * }>
      */
     public function discoverStations(

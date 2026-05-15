@@ -39,6 +39,7 @@ class SettingsController extends Controller
             'gust'      => ['title' => 'Rafales',                  'icon' => 'fa-tornado',        'keys' => []],
             'viability' => ['title' => "Viabilité d'une journée",  'icon' => 'fa-chart-line',     'keys' => []],
             'quality'   => ['title' => 'Qualité des données',      'icon' => 'fa-clipboard-check','keys' => []],
+            'balises'   => ['title' => 'Sources balises',          'icon' => 'fa-tower-broadcast','keys' => []],
         ];
         foreach (Settings::DEFAULTS as $key => $meta) {
             $g = $meta['group'] ?? 'misc';
@@ -57,13 +58,14 @@ class SettingsController extends Controller
     public function update(Request $request): RedirectResponse
     {
         // Construction dynamique des règles de validation à partir du
-        // catalogue (type int vs float).
+        // catalogue (int / float / secret-string).
         $rules = [];
         foreach (Settings::DEFAULTS as $key => $meta) {
             $name = $this->keyToField($key);
             $rules[$name] = match ($meta['type'] ?? 'float') {
-                'int'   => ['required', 'integer', 'min:0'],
-                default => ['required', 'numeric', 'min:0'],
+                'int'             => ['required', 'integer', 'min:0'],
+                'string', 'secret' => ['nullable', 'string', 'max:500'],
+                default            => ['required', 'numeric', 'min:0'],
             };
         }
         $data = $request->validate($rules);
@@ -71,10 +73,14 @@ class SettingsController extends Controller
         $values = [];
         foreach (Settings::DEFAULTS as $key => $meta) {
             $name = $this->keyToField($key);
-            $raw  = $data[$name];
-            $values[$key] = ($meta['type'] ?? 'float') === 'int'
-                ? (int) $raw
-                : (float) $raw;
+            $raw  = $data[$name] ?? null;
+            $type = $meta['type'] ?? 'float';
+
+            $values[$key] = match ($type) {
+                'int'             => (int) $raw,
+                'string', 'secret' => trim((string) ($raw ?? '')),
+                default           => (float) $raw,
+            };
         }
 
         $this->settings->setMany($values);

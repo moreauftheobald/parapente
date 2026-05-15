@@ -150,6 +150,15 @@ class Settings
             'group'       => 'quality',
             'type'        => 'int',
         ],
+
+        // ── Sources balises ──────────────────────────────────────
+        'windy.api_key' => [
+            'default'     => '',
+            'label'       => 'Windy.com — clé API',
+            'description' => "Clé de la Windy Stations API v2 (https://api.windy.com → API Keys). Indispensable pour découvrir et lire les balises Windy en licence ouverte. Sans clé, le provider Windy est silencieux.",
+            'group'       => 'balises',
+            'type'        => 'secret',
+        ],
     ];
 
     /**

@@ -24,6 +24,11 @@
             le matin / fin de journée), de la continuité (un créneau isolé pèse
             moins), et des seuils de qualification d'une journée (vert / orange / rouge).
         </div>
+        <div>
+            <div class="font-semibold text-gray-200 mb-1">Sources balises</div>
+            Clés API des fournisseurs externes (Windy…). Stockées chiffrées dans
+            la table <code>settings</code>. Effacer le champ supprime la clé.
+        </div>
         <p class="text-xs text-gray-500 mt-3 pt-3 border-t border-gray-800">
             Les valeurs prennent effet <strong>immédiatement</strong> pour les nouveaux
             scores. Pour appliquer les nouvelles couleurs aux scores déjà en base
@@ -77,29 +82,68 @@
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                         @foreach ($group['keys'] as $key => $meta)
-                            @php $name = $field($key); @endphp
-                            <div>
+                            @php
+                                $name = $field($key);
+                                $type = $meta['type'] ?? 'float';
+                                $isSecret = $type === 'secret';
+                                $isString = $type === 'string';
+                                $colSpan = ($isSecret || $isString) ? 'md:col-span-2' : '';
+                            @endphp
+                            <div class="{{ $colSpan }}">
                                 <label class="{{ $labelCls }}" for="{{ $name }}">
                                     {{ $meta['label'] ?? $key }}
                                 </label>
-                                <input type="number"
-                                       id="{{ $name }}"
-                                       name="{{ $name }}"
-                                       @if (($meta['type'] ?? 'float') === 'int')
-                                           step="1"
-                                       @else
-                                           step="any"
-                                       @endif
-                                       min="0"
-                                       required
-                                       value="{{ old($name, $meta['value']) }}"
-                                       class="{{ $inputCls }}">
+                                @if ($isSecret)
+                                    @php
+                                        $current = (string) ($meta['value'] ?? '');
+                                        $hasValue = $current !== '';
+                                        $tail = $hasValue ? substr($current, -4) : '';
+                                    @endphp
+                                    <div x-data="{ shown: false }" class="relative">
+                                        <input :type="shown ? 'text' : 'password'"
+                                               id="{{ $name }}"
+                                               name="{{ $name }}"
+                                               autocomplete="new-password"
+                                               value="{{ old($name, $current) }}"
+                                               placeholder="{{ $hasValue ? '••••••••••••' . $tail : 'Coller la clé ici…' }}"
+                                               class="{{ $inputCls }} pr-10">
+                                        <button type="button"
+                                                @click="shown = ! shown"
+                                                tabindex="-1"
+                                                class="absolute inset-y-0 right-2 flex items-center px-2 text-gray-500 hover:text-gray-200 transition"
+                                                :title="shown ? 'Masquer' : 'Afficher'">
+                                            <i :class="shown ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'" class="text-xs"></i>
+                                        </button>
+                                    </div>
+                                    @if ($hasValue)
+                                        <p class="text-[11px] text-emerald-400 mt-1">
+                                            <i class="fa-solid fa-circle-check"></i> Clé enregistrée (se termine par <code>{{ $tail }}</code>). Laisser vide pour la supprimer.
+                                        </p>
+                                    @endif
+                                @elseif ($isString)
+                                    <input type="text"
+                                           id="{{ $name }}"
+                                           name="{{ $name }}"
+                                           value="{{ old($name, $meta['value']) }}"
+                                           class="{{ $inputCls }}">
+                                @else
+                                    <input type="number"
+                                           id="{{ $name }}"
+                                           name="{{ $name }}"
+                                           step="{{ $type === 'int' ? '1' : 'any' }}"
+                                           min="0"
+                                           required
+                                           value="{{ old($name, $meta['value']) }}"
+                                           class="{{ $inputCls }}">
+                                @endif
                                 @if (! empty($meta['description']))
                                     <p class="text-xs text-gray-500 mt-1 leading-relaxed">{{ $meta['description'] }}</p>
                                 @endif
                                 <p class="text-[11px] text-gray-600 mt-1">
                                     <span class="text-gray-700">clé :</span> <code>{{ $key }}</code>
-                                    <span class="text-gray-700">· défaut :</span> <code>{{ $meta['default'] }}</code>
+                                    @if (! $isSecret)
+                                        <span class="text-gray-700">· défaut :</span> <code>{{ $meta['default'] }}</code>
+                                    @endif
                                 </p>
                                 @error($name) <p class="{{ $errorCls }}">{{ $message }}</p> @enderror
                             </div>
