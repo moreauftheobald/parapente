@@ -24,6 +24,13 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $title ? $title . ' · ' : '' }}Qui Vole ?</title>
 
+    {{-- ── Favicon (silhouette parapente, fond sky-500) ───────────────── --}}
+    <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
+    <link rel="icon" type="image/x-icon" sizes="any" href="{{ asset('favicon.ico') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('apple-touch-icon.png') }}">
+    <link rel="manifest" href="{{ asset('site.webmanifest') }}">
+    <meta name="theme-color" content="#0ea5e9">
+
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 
     {{-- Font Awesome 6 (icônes des modules / actions) --}}
