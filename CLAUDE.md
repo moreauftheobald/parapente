@@ -107,7 +107,6 @@ src/                        ← Racine Laravel
 │   ├── partials/
 │   │   └── app-shell-navbar.blade.php    ← Barre de menu supérieure
 │   ├── layouts/
-│   │   ├── app.blade.php                 ← (legacy) layout de la vue carte
 │   │   └── admin.blade.php               ← BackOffice (utilise <x-app-shell>)
 │   ├── home.blade.php                    ← Page d'accueil (/)
 │   ├── admin/                            ← Vues BackOffice (articles/, modules/, sites/, …)
@@ -238,8 +237,15 @@ Notes :
   Un module sans `route_name` est affiché grisé (« non implémenté »).
 - **Articles** : éditeur WYSIWYG **TinyMCE** (CDN), upload d'images via
   `POST /admin/articles/upload-image` → disque `public` (⇒ `php artisan storage:link`).
-- La **vue carte** (`/carte`) garde encore son ancien layout `layouts/app.blade.php`
-  (migration vers `<x-app-shell>` à faire).
+- La **vue carte** (`/carte`) utilise désormais `<x-app-shell>` comme toutes
+  les autres pages (depuis V2.x — refonte mobile). `mapApp()` est passé
+  directement en `x-data` du shell via la prop `x-data="mapApp()"` ; il
+  expose les variables `leftOpen` / `rightOpen` consommées par le shell.
+  Les volets carte (filtres / détail) sont des `<x-slot:detail>` /
+  `<x-slot:help>` avec `hideDetailHeader`/`hideHelpHeader=true` (la carte
+  fournit ses propres en-têtes) et `right-class` élargi en desktop
+  (`lg:w-[clamp(420px,45vw,640px)] xl:w-[50vw]`) pour les graphes /
+  tableaux scoring.
 
 ---
 
@@ -520,6 +526,21 @@ docker logs parapente_worker -f
     pour le pattern `safeSection() + inflate*Payload()` (cache
     actuellement désactivé sur cette page, à réactiver une fois le
     diagnostic d'environnement clarifié).
+12. **Hiérarchie z-index officielle** (à respecter pour toute nouvelle UI) :
+    `30` overlay backdrop mobile (shell) · `40` navbar + volets latéraux
+    (shell) · `50` dropdowns navbar (modules / auth) · `70` contrôles
+    flottants carte (`#day-selector`, `.dd-menu`) · `80` tooltips
+    (`#chart-tooltip`, `.rp-voting-tip`). Pas de `z-index: 9999/99999` —
+    si une nouvelle couche est nécessaire, l'insérer dans cette échelle.
+13. **Commentaires CSS / JS dans les Blade** — **ne jamais** écrire
+    `<x-app-shell>` (ou toute balise composant Blade) dans un commentaire
+    `/* ... */` ou `// ...` : Blade les interprète quand même comme une
+    balise composant et casse la compilation (erreur typique « expecting
+    elseif/else/endif »). Utiliser `<x-app-shell\>` en l'évoquant, ou
+    écrire « le shell global » sans la balise. Idem pour `@media`,
+    `@keyframes` dans un fichier CSS Blade : encapsuler dans
+    `@verbatim ... @endverbatim` (sauf à la racine du fichier où
+    `@keyframes` est laissé tranquille).
 
 ---
 

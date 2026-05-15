@@ -1,15 +1,9 @@
             {{-- ═══ VOLET GAUCHE : onglets Paramètres / Légende ═══ --}}
-            {{-- Repliable en barre étroite (bouton ☰). Le détail d'un
-                 site / d'une balise s'affiche dans le volet DROIT. --}}
-            <div id="left-panel" :class="leftCollapsed ? 'collapsed' : ''">
-
-                <div class="lp-head">
-                    <button class="lp-burger" @click="toggleLeftPanel()"
-                            :title="leftCollapsed ? 'Afficher le panneau' : 'Replier le panneau'">☰</button>
-                    <span class="lp-head-title" x-show="!leftCollapsed">Carte</span>
-                </div>
-
-                <div class="lp-body" x-show="!leftCollapsed">
+            {{-- Le wrapper et le bouton ☰ sont fournis par <x-app-shell>. Ici
+                 on ne déclare que le contenu (onglets, sections). Le détail
+                 d'un site / d'une balise s'affiche dans le volet DROIT. --}}
+            <div id="left-panel">
+                <div class="lp-body">
 
                     <div class="lp-tabs">
                         <button class="lp-tab" :class="lpTab === 'params' ? 'active' : ''" @click="lpTab = 'params'">Paramètres</button>
@@ -18,6 +12,24 @@
 
                     {{-- ═══════ Onglet PARAMÈTRES ═══════ --}}
                     <div class="lp-tabpane" x-show="lpTab === 'params'">
+
+                        {{-- Sélecteur de jour — visible uniquement sur mobile,
+                             où il a quitté la carte pour rejoindre le volet. --}}
+                        <div class="lp-section lp-section-mobile-only">
+                            <div class="lp-title">Jour</div>
+                            <button class="dd-trigger" style="width:100%;" @click.stop="toggleDayDrop($el)">
+                                <span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;"
+                                      :style="{background:days[selectedDayIdx]?.bestStatus==='green'?'#22c55e':days[selectedDayIdx]?.bestStatus==='orange'?'#f59e0b':days[selectedDayIdx]?.bestStatus==='red'?'#ef4444':'#6b7280'}"></span>
+                                <div style="flex:1;text-align:left;min-width:0;">
+                                    <div style="font-weight:500;color:#fff;font-size:14px;" x-text="days[selectedDayIdx]?.label??'Chargement…'"></div>
+                                    <div style="font-size:11px;margin-top:1px;">
+                                        <span x-show="days[selectedDayIdx]?.greenSlots>0" style="color:#4ade80;" x-text="days[selectedDayIdx]?.greenSlots+'h de vol possible'"></span>
+                                        <span x-show="!days[selectedDayIdx]?.greenSlots" style="color:#4b5563;">Aucun créneau favorable</span>
+                                    </div>
+                                </div>
+                                <span class="dd-arrow" :class="dayDropOpen?'open':''">▼</span>
+                            </button>
+                        </div>
 
                         <div class="lp-section">
                             <div class="lp-title">Réseaux de balises</div>

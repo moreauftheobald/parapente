@@ -1,13 +1,7 @@
-        /* ── Volet gauche : onglets Paramètres / Légende (repliable) ── */
-        #left-panel { flex:0 0 300px; background:#0f172a; border-right:1px solid rgba(55,65,81,.6); display:flex; flex-direction:column; overflow:hidden; transition:flex-basis .3s cubic-bezier(.4,0,.2,1); }
-        #left-panel.collapsed { flex:0 0 44px; }
-
-        .lp-head { display:flex; align-items:center; gap:10px; padding:12px; border-bottom:1px solid rgba(55,65,81,.5); flex-shrink:0; }
-        #left-panel.collapsed .lp-head { padding:12px 6px; justify-content:center; }
-        .lp-burger { background:rgba(31,41,55,.7); border:1px solid rgba(75,85,99,.5); color:#9ca3af; border-radius:8px; width:32px; height:32px; cursor:pointer; flex-shrink:0; font-size:15px; line-height:1; transition:color .15s, border-color .15s; }
-        .lp-burger:hover { color:#fff; border-color:rgba(156,163,175,.6); }
-        .lp-head-title { font-size:12px; font-weight:600; color:#cbd5e1; white-space:nowrap; }
-
+        /* -- Volet gauche : onglets Parametres / Legende --
+           Le wrapper (largeur, overlay mobile, fermeture) est pilote par
+           le shell global. Ici on ne fait que styler le contenu interne. */
+        #left-panel { display:flex; flex-direction:column; height:100%; overflow:hidden; }
         .lp-body { flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
         .lp-tabs { display:flex; flex-shrink:0; border-bottom:1px solid rgba(55,65,81,.5); }
         .lp-tab { flex:1; padding:10px 8px; background:transparent; border:none; border-bottom:2px solid transparent; color:#6b7280; font-size:13px; font-weight:500; cursor:pointer; transition:color .15s, border-color .15s; }
@@ -43,10 +37,11 @@
         .lp-icon-ex .pg-site-marker:hover { transform:none; }
         .lp-balise-ex { width:30px; height:30px; flex-shrink:0; }
 
-        /* ── Volet droit : détail site / balise (s'ouvre à moitié d'écran) ── */
-        #right-panel { flex:0 0 0; min-width:0; background:#0f172a; border-left:1px solid rgba(55,65,81,.6); display:flex; flex-direction:column; overflow:hidden; transition:flex-basis .35s cubic-bezier(.4,0,.2,1); }
-        #right-panel.open { flex:0 0 50vw; }
-        .rp-wrap { flex:1; min-width:50vw; min-height:0; display:flex; flex-direction:column; }
+        /* -- Volet droit : detail site / balise --
+           Largeur, animation et ouverture/fermeture pilotes par le shell.
+           Ici, on ne fait que styler le contenu interne. */
+        #right-panel { display:flex; flex-direction:column; height:100%; overflow:hidden; }
+        .rp-wrap { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; }
 
         /* Titre sur une seule ligne */
         .rp-head { display:flex; align-items:center; gap:12px; padding:13px 16px; border-bottom:1px solid rgba(55,65,81,.5); flex-shrink:0; }
@@ -95,7 +90,19 @@
         .rp-voting-day:last-of-type { margin-bottom:8px; }
         .rp-voting-daylabel { display:flex; align-items:baseline; gap:8px; font-size:13px; font-weight:600; color:#e5e7eb; margin-bottom:6px; padding:0 2px; }
         .rp-voting-dayhint  { font-size:11px; color:#6b7280; font-weight:400; font-family:'DM Mono',monospace; }
-        .rp-voting-tablewrap { overflow-x:auto; background:rgba(13,27,38,.4); border:1px solid rgba(55,65,81,.4); border-radius:10px; }
+        /* Wrapper scrollable du tableau de scoring : sur mobile le tableau
+           dépasse facilement la largeur du volet (13 colonnes d'heures +
+           colonne paramètre + white-space:nowrap). On rend la scrollbar
+           horizontale clairement visible (couleur sky) au lieu des 3px
+           génériques quasi invisibles, pour que l'utilisateur sache
+           qu'il peut scroller. */
+        .rp-voting-tablewrap { overflow-x:auto; background:rgba(13,27,38,.4); border:1px solid rgba(55,65,81,.4); border-radius:10px;
+            scrollbar-color:#38bdf8 rgba(55,65,81,.3);
+            scrollbar-width:thin; }
+        .rp-voting-tablewrap::-webkit-scrollbar { height:8px; width:8px; }
+        .rp-voting-tablewrap::-webkit-scrollbar-track { background:rgba(55,65,81,.3); border-radius:4px; }
+        .rp-voting-tablewrap::-webkit-scrollbar-thumb { background:#38bdf8; border-radius:4px; }
+        .rp-voting-tablewrap::-webkit-scrollbar-thumb:hover { background:#0ea5e9; }
         .rp-voting-table { border-collapse:separate; border-spacing:0; width:100%; font-size:11px; }
         .rp-voting-table th, .rp-voting-table td { padding:5px 4px; text-align:center; white-space:nowrap; }
         .rp-voting-th-param { text-align:left !important; padding-left:12px !important; color:#9ca3af; font-weight:500; font-size:11px; border-bottom:1px solid rgba(55,65,81,.5); background:rgba(17,24,39,.6); }
@@ -124,7 +131,7 @@
 
         /* Tooltip flottant pour les cellules de l'onglet « Détail scoring ».
            Position en pixels absolus (calculée depuis le viewport). */
-        .rp-voting-tip { position:fixed; transform:translate(-50%, -100%); z-index:60; background:#0f172a; border:1px solid #334155; color:#e5e7eb; font-size:11px; line-height:1.5; padding:6px 10px; border-radius:6px; box-shadow:0 8px 20px rgba(0,0,0,.5); pointer-events:none; white-space:nowrap; font-family:'DM Sans',sans-serif; }
+        .rp-voting-tip { position:fixed; transform:translate(-50%, -100%); z-index:80; background:#0f172a; border:1px solid #334155; color:#e5e7eb; font-size:11px; line-height:1.5; padding:6px 10px; border-radius:6px; box-shadow:0 8px 20px rgba(0,0,0,.5); pointer-events:none; white-space:nowrap; font-family:'DM Sans',sans-serif; }
         .rp-voting-tip > div + div { margin-top:2px; padding-top:2px; border-top:1px dashed rgba(148,163,184,.25); }
         .rp-voting-legend span { display:inline-flex; align-items:center; gap:6px; }
 
@@ -138,6 +145,18 @@
         .rp-balise-dial svg { display:block; width:100%; height:auto; overflow:visible; }
         .rp-balise-leg  { flex:0 1 230px; min-width:0; font-size:12px; color:#9ca3af; line-height:1.6; }
 
-        /* Sélecteur de jour flottant + contrôles de zoom Leaflet (haut-droite de la carte) */
-        #day-selector { position:absolute; top:10px; right:10px; z-index:1000; }
-        .leaflet-top.leaflet-right .leaflet-control-zoom { margin-top:60px; }
+        /* Sélecteur de jour flottant (haut-droite de la carte, desktop ≥640px).
+           Sur mobile, le sélecteur est dupliqué dans le volet gauche
+           (.lp-section-mobile-only) et celui flottant est masqué pour
+           libérer la carte. */
+        #day-selector { position:absolute; top:10px; right:10px; z-index:70; }
+        @verbatim
+        @media (max-width:639px) {
+            #day-selector { display:none; }
+            .leaflet-top.leaflet-right .leaflet-control-zoom { margin-top:0; }
+        }
+        @media (min-width:640px) {
+            .lp-section-mobile-only { display:none; }
+            .leaflet-top.leaflet-right .leaflet-control-zoom { margin-top:60px; }
+        }
+        @endverbatim

@@ -5,6 +5,31 @@
     'helpTitle'    => 'Aide',
     'leftDefault'  => false,  // panneau gauche ouvert d'emblée (desktop only)
     'rightDefault' => false,  // panneau droit ouvert d'emblée (desktop only)
+    // Permet à une page (typiquement la carte) de fournir son propre scope
+    // Alpine racine. Doit exposer au minimum `leftOpen` et `rightOpen`.
+    // Quand fourni, leftDefault/rightDefault sont ignorés.
+    'xData'        => null,
+    // Classes Tailwind additionnelles pour les volets — la carte les
+    // élargit en desktop large pour ses graphes / tableaux.
+    'leftClass'    => 'w-80 max-w-[85vw]',
+    'rightClass'   => 'w-80 max-w-[85vw]',
+    // Classes additionnelles sur le <main> (utile pour retirer
+    // overflow-y-auto sur la vue carte qui gère son propre layout).
+    'mainClass'    => 'overflow-y-auto',
+    // Classes additionnelles sur le wrapper racine (utile quand le
+    // scope fourni via xData n'expose pas .leftOpen / .rightOpen
+    // directement, etc.).
+    'rootClass'    => '',
+    // Classes sur le conteneur interne des slots latéraux. La carte
+    // les passe à `flex-1 min-h-0` (sans padding) car son contenu
+    // (lp-tabpane / rp-pane) gère son propre layout.
+    'detailBodyClass' => 'flex-1 overflow-y-auto p-4 text-sm text-gray-300',
+    'helpBodyClass'   => 'flex-1 overflow-y-auto p-4 text-sm text-gray-300',
+    // Cache les en-têtes par défaut des volets (titre + bouton close
+    // dans une barre h-11). La carte fournit ses propres titres dans
+    // le contenu et préfère pas d'en-tête.
+    'hideDetailHeader' => false,
+    'hideHelpHeader'   => false,
 ])
 
 @php
@@ -14,6 +39,7 @@
     $hasHelp   = isset($help)   && trim((string) $help)   !== '';
     $leftInit  = $hasDetail && $leftDefault  ? "window.matchMedia('(min-width: 1024px)').matches" : 'false';
     $rightInit = $hasHelp   && $rightDefault ? "window.matchMedia('(min-width: 1024px)').matches" : 'false';
+    $xDataExpr = $xData ?? "{ leftOpen: {$leftInit}, rightOpen: {$rightInit} }";
 @endphp
 
 <!DOCTYPE html>
@@ -43,8 +69,8 @@
 </head>
 <body class="h-full bg-gray-950 text-gray-100">
 
-<div class="h-screen flex flex-col overflow-hidden"
-     x-data="{ leftOpen: {{ $leftInit }}, rightOpen: {{ $rightInit }} }"
+<div class="h-screen flex flex-col overflow-hidden {{ $rootClass }}"
+     x-data="{{ $xDataExpr }}"
      @keydown.escape.window="leftOpen = false; rightOpen = false">
 
     {{-- ═══ Barre de menu ═══════════════════════════════════════════ --}}
@@ -68,21 +94,23 @@
                    x-transition:leave="transition transform ease-in duration-150"
                    x-transition:leave-start="translate-x-0" x-transition:leave-end="-translate-x-full"
                    class="absolute inset-y-0 left-0 border-r border-gray-800 z-40 lg:relative lg:z-auto
-                          w-80 max-w-[85vw] bg-gray-900 shrink-0 flex flex-col shadow-2xl lg:shadow-none">
-                <header class="shrink-0 h-11 px-4 flex items-center justify-between border-b border-gray-800">
-                    <span class="text-sm font-medium text-gray-200">{{ $detailTitle }}</span>
-                    <button type="button" @click="leftOpen = false"
-                            class="w-7 h-7 -mr-1 rounded flex items-center justify-center text-gray-500 hover:text-gray-200 hover:bg-gray-800 transition"
-                            aria-label="Fermer le panneau">
-                        <i class="fa-solid fa-xmark"></i>
-                    </button>
-                </header>
-                <div class="flex-1 overflow-y-auto p-4 text-sm text-gray-300">{{ $detail }}</div>
+                          {{ $leftClass }} bg-gray-900 shrink-0 flex flex-col shadow-2xl lg:shadow-none">
+                @unless ($hideDetailHeader)
+                    <header class="shrink-0 h-11 px-4 flex items-center justify-between border-b border-gray-800">
+                        <span class="text-sm font-medium text-gray-200">{{ $detailTitle }}</span>
+                        <button type="button" @click="leftOpen = false"
+                                class="w-7 h-7 -mr-1 rounded flex items-center justify-center text-gray-500 hover:text-gray-200 hover:bg-gray-800 transition"
+                                aria-label="Fermer le panneau">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </header>
+                @endunless
+                <div class="{{ $detailBodyClass }}">{{ $detail }}</div>
             </aside>
         @endif
 
         {{-- Contenu principal --}}
-        <main class="flex-1 min-w-0 overflow-y-auto">
+        <main class="flex-1 min-w-0 {{ $mainClass }}">
             @if (session('status'))
                 <div class="m-4 px-4 py-2 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-sm">
                     {{ session('status') }}
@@ -103,16 +131,18 @@
                    x-transition:leave="transition transform ease-in duration-150"
                    x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full"
                    class="absolute inset-y-0 right-0 border-l border-gray-800 z-40 lg:relative lg:z-auto
-                          w-80 max-w-[85vw] bg-gray-900 shrink-0 flex flex-col shadow-2xl lg:shadow-none">
-                <header class="shrink-0 h-11 px-4 flex items-center justify-between border-b border-gray-800">
-                    <span class="text-sm font-medium text-gray-200">{{ $helpTitle }}</span>
-                    <button type="button" @click="rightOpen = false"
-                            class="w-7 h-7 -mr-1 rounded flex items-center justify-center text-gray-500 hover:text-gray-200 hover:bg-gray-800 transition"
-                            aria-label="Fermer le panneau">
-                        <i class="fa-solid fa-xmark"></i>
-                    </button>
-                </header>
-                <div class="flex-1 overflow-y-auto p-4 text-sm text-gray-300">{{ $help }}</div>
+                          {{ $rightClass }} bg-gray-900 shrink-0 flex flex-col shadow-2xl lg:shadow-none">
+                @unless ($hideHelpHeader)
+                    <header class="shrink-0 h-11 px-4 flex items-center justify-between border-b border-gray-800">
+                        <span class="text-sm font-medium text-gray-200">{{ $helpTitle }}</span>
+                        <button type="button" @click="rightOpen = false"
+                                class="w-7 h-7 -mr-1 rounded flex items-center justify-center text-gray-500 hover:text-gray-200 hover:bg-gray-800 transition"
+                                aria-label="Fermer le panneau">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </header>
+                @endunless
+                <div class="{{ $helpBodyClass }}">{{ $help }}</div>
             </aside>
         @endif
 

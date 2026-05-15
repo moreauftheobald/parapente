@@ -1,9 +1,13 @@
 /* Layout & marqueurs */
 body { font-family:'DM Sans',sans-serif; }
 .mono { font-family:'DM Mono',monospace; }
-#pg-app  { display:flex; flex-direction:column; height:100%; overflow:hidden; }
-#map-wrap { flex:1 1 0%; min-height:0; overflow:hidden; display:flex; }
-#map-area { flex:1 1 0%; min-width:0; position:relative; }
+/* Conteneur de la carte : le <main> du shell occupe tout l'espace dispo
+   moins la navbar (h-14). #map-area occupe ensuite tout le <main>.
+   `isolation: isolate` est CRITIQUE : sans ça, les z-index élevés
+   utilisés par Leaflet en interne (tile-pane 200, marker-pane 600,
+   control 800…) fuient hors de #map-area et passent devant les
+   volets latéraux du shell (z-40), rendant ces derniers invisibles. */
+#map-area { width:100%; height:100%; min-width:0; position:relative; isolation:isolate; }
 #map { height:100%; width:100%; }
 
 /* Marqueurs des sites de vol — icône SpotAir + glow flou coloré

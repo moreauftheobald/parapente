@@ -1,5 +1,5 @@
         /* Tooltip multi-modèles au survol des graphes */
-        #chart-tooltip { position:fixed; z-index:9999; background:#0f172a; border:1px solid rgba(75,85,99,.7); border-radius:10px; padding:10px 12px; font-size:11px; color:#e5e7eb; pointer-events:none; box-shadow:0 12px 32px rgba(0,0,0,.7); min-width:200px; max-width:260px; }
+        #chart-tooltip { position:fixed; z-index:80; background:#0f172a; border:1px solid rgba(75,85,99,.7); border-radius:10px; padding:10px 12px; font-size:11px; color:#e5e7eb; pointer-events:none; box-shadow:0 12px 32px rgba(0,0,0,.7); min-width:200px; max-width:260px; }
         #chart-tooltip .tt-hour { font-size:13px; font-weight:600; color:#fff; margin-bottom:8px; font-family:'DM Mono',monospace; }
         #chart-tooltip .tt-row { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:2px 0; }
         #chart-tooltip .tt-row .name { display:flex; align-items:center; gap:6px; color:#cbd5e1; font-size:11px; }

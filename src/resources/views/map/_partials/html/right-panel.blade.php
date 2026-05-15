@@ -1,6 +1,28 @@
             {{-- ═══ VOLET DROIT : détail du site / de la balise sélectionné ═══ --}}
-            {{-- S'ouvre (moitié d'écran) au clic sur un marqueur. --}}
-            <div id="right-panel" :class="rightPanelOpen ? 'open' : ''">
+            {{-- Le wrapper et l'ouverture/fermeture sont fournis par le shell
+                 global (via rightOpen). Ici on ne déclare que le contenu.
+                 S'ouvre au clic sur un marqueur (openRightPanel). --}}
+            <div id="right-panel">
+
+                {{-- ═══════════ PLACEHOLDER (aucune sélection) ═══════════ --}}
+                {{-- Affiché quand le volet est ouvert mais qu'aucun site/balise
+                     n'a été sélectionné — typiquement quand l'utilisateur a
+                     cliqué le bouton ? de la navbar sans avoir cliqué sur la
+                     carte. Donne une instruction et un bouton fermer pour
+                     ne pas laisser un panneau noir totalement vide. --}}
+                <template x-if="!selectedFeature">
+                    <div class="rp-wrap">
+                        <div class="rp-head">
+                            <div class="rp-headline">
+                                <span class="rp-name">Détail d'un site</span>
+                            </div>
+                            <button class="rp-close" @click="rightOpen = false" title="Fermer">✕</button>
+                        </div>
+                        <div class="rp-placeholder" style="padding:48px 24px;text-align:center;">
+                            Clique sur un site ou une balise de la carte pour afficher son détail ici.
+                        </div>
+                    </div>
+                </template>
 
                 {{-- ═══════════ SITE ═══════════ --}}
                 <template x-if="selectedFeature?.type === 'site'">

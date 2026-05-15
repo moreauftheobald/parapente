@@ -49,7 +49,7 @@ services:
   # Nginx (pas de port exposé — NPM fait le reverse proxy)
   # ──────────────────────────────────────────
   parapente-nginx:
-    image: nginx:1.26-alpine
+    image: nginx:alpine
     container_name: parapente_nginx
     volumes:
       - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro

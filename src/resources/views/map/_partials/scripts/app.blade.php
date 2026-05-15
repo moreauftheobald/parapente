@@ -12,8 +12,16 @@ function mapApp(){return{
     currentBasemap:'topo',basemapList:BASEMAP_LIST,
     dayDropOpen:false,dayDropPos:{top:0,left:0},
     bmDropOpen:false,bmDropPos:{top:0,left:0,width:0},
-    // Volet gauche (onglets Paramètres / Légende, repliable) ; volet droit (détail)
-    leftCollapsed:false, lpTab:'params', rightPanelOpen:false, selectedFeature:null,
+    // Volet gauche (onglets Paramètres / Légende) ; volet droit (détail).
+    // leftOpen / rightOpen sont consommés ET pilotés par le shell global
+    // via les boutons ☰ / ? de la navbar — on les expose donc au scope
+    // racine Alpine pour que le shell les voie. Le volet droit n'a pas
+    // d'ouverture manuelle : il s'ouvre automatiquement quand l'utilisateur
+    // sélectionne un site/balise (cf. openRightPanel/closeRightPanel).
+    // Le volet gauche est ouvert d'emblée en desktop (≥1024px) — c'est le
+    // comportement historique de la vue carte ; sur mobile il reste fermé.
+    leftOpen: typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches,
+    lpTab:'params', rightOpen:false, selectedFeature:null,
     // Filtres d'affichage des sites par statut météo
     showGreen:true, showOrange:true, showRed:true,
     // Filtre « Mes sites » : ne montrer que les sites avec scoring perso (actif ou inactif).
@@ -57,9 +65,17 @@ function mapApp(){return{
         await this.loadSites();
         await this.loadBalises();
         this._balisesTimer = setInterval(() => this.loadBalises(), 5 * 60 * 1000);
+
+        // Re-dimensionner Leaflet quand un volet s'ouvre ou se ferme. Le shell
+        // utilise une transition CSS de 200 ms ; on attend 250 ms pour être
+        // sûr que la largeur finale est appliquée avant invalidateSize().
+        const onPanelChange = () => setTimeout(() => this.map?.invalidateSize(), 250);
+        this.$watch('leftOpen',  onPanelChange);
+        this.$watch('rightOpen', onPanelChange);
+
         // Re-rendu des graphes du volet droit sur redimensionnement
         window.addEventListener('resize', () => {
-            if (!this.rightPanelOpen) return;
+            if (!this.rightOpen) return;
             if (this.selectedFeature?.type === 'site') {
                 if (this.rpTab === 'synthese' && this.chartData)       this.renderSynthese();
                 if (this.rpTab === 'models'   && this.multimodelData)  this.renderCharts();
@@ -88,30 +104,24 @@ function mapApp(){return{
     toggleBmDrop(btn){if(!this.bmDropOpen){const r=btn.getBoundingClientRect();this.bmDropPos={top:r.bottom+6,left:r.left,width:r.width};}this.bmDropOpen=!this.bmDropOpen;this.dayDropOpen=false;},
     get currentBasemapObj(){return BASEMAP_LIST.find(b=>b.key===this.currentBasemap)??BASEMAP_LIST[0];},
 
-    // ── Volet gauche : repli en barre étroite ────────────────────
-    toggleLeftPanel(){
-        this.leftCollapsed=!this.leftCollapsed;
-        setTimeout(()=>this.map?.invalidateSize(),320);
-    },
-
     // ── Volet droit : ouverture / fermeture ──────────────────────
+    // Le pan & invalidateSize sont déclenchés via $watch('rightOpen') (init).
     openRightPanel(){
-        this.rightPanelOpen=true;
-        // Largeur animée (.35s) : on revalide la taille de la carte et on
-        // recentre sur le marqueur une fois la transition finie.
-        setTimeout(()=>{
-            this.map?.invalidateSize();
-            if(this.selectedFeature?.lat!=null) this.map?.panTo([this.selectedFeature.lat,this.selectedFeature.lng]);
-        },380);
+        this.rightOpen=true;
+        // Sur mobile, on referme le volet gauche pour ne pas masquer la carte.
+        if (window.matchMedia('(max-width: 1023px)').matches) this.leftOpen=false;
+        // Recentrer la carte sur le marqueur une fois la transition finie.
+        if (this.selectedFeature?.lat!=null) {
+            setTimeout(()=>this.map?.panTo([this.selectedFeature.lat,this.selectedFeature.lng]), 280);
+        }
     },
     closeRightPanel(){
-        this.rightPanelOpen=false;
+        this.rightOpen=false;
         this.selectedFeature=null;
         this.chartData=null; this.chartSite=null;
         this.multimodelData=null; this.multimodel5Data=null;
         this.baliseData=null; this._baliseObj=null;
         Object.values(this.markers).forEach(m=>m.getElement()?.querySelector('.pg-site-marker')?.classList.remove('selected'));
-        setTimeout(()=>this.map?.invalidateSize(),380);
     },
 
     async loadSites(){
@@ -177,7 +187,7 @@ function mapApp(){return{
         this.selectedDayIdx=idx;
         this.renderMarkers();
         // Si le volet droit affiche un site : le jour a changé → MAJ contenu
-        if(this.rightPanelOpen && this.selectedFeature?.type==='site'){
+        if(this.rightOpen && this.selectedFeature?.type==='site'){
             this.multimodelData=null; // endpoint multimodèle est par jour → invalidé
             if(this.rpTab==='synthese' && this.chartData) this.$nextTick(()=>this.renderSynthese());
             if(this.rpTab==='models') this.loadMultimodel();

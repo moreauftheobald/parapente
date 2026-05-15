@@ -11,6 +11,44 @@ Conventions :
 
 ---
 
+## 2026-05-15 — Refonte mobile de la vue carte
+
+### Modifié
+- La **vue carte** (`/carte`) est désormais bâtie sur `<x-app-shell>`
+  comme toutes les autres pages, au lieu d'un layout dédié
+  `layouts/app.blade.php` (supprimé). Bénéfices :
+  - **Volets latéraux en overlay sur mobile** (au lieu de pousser le
+    contenu) : les volets gauche (filtres / légende) et droit (détail
+    site / balise) glissent par-dessus la carte sur mobile, avec
+    backdrop semi-transparent. La carte reste visible derrière.
+  - **Navbar toujours accessible** : le bouton ☰ (volet gauche) et le
+    bouton ? (volet droit) sont désormais dans la navbar globale,
+    accessibles en permanence — plus de cas où le menu du haut est
+    masqué par les volets.
+  - Sur desktop, le volet droit s'élargit dynamiquement
+    (`clamp(420px, 45vw, 640px)` en `lg`, `50vw` en `xl`) pour
+    accueillir les graphes et tableaux scoring sans débordement.
+- **Sélecteur de jour & fond de carte sur mobile** : sur petit écran
+  (< 640 px) le sélecteur de jour flottant en haut-droite de la carte
+  est remplacé par une section en haut du volet gauche. Le sélecteur
+  de fond de carte y était déjà ; cela libère totalement l'espace
+  carte sur mobile.
+- **Hiérarchie z-index unifiée** (30 backdrop / 40 navbar+volets /
+  50 dropdowns navbar / 70 contrôles flottants carte / 80 tooltips).
+  Plus de `z-index: 99999` qui écrase tout.
+- `mapApp()` expose désormais `leftOpen` / `rightOpen` (au lieu de
+  `leftCollapsed` / `rightPanelOpen`) — ces variables sont partagées
+  avec le shell global et pilotées par les boutons de la navbar.
+
+### Corrigé
+- `#right-panel .rp-wrap { min-width: 50vw }` qui forçait un
+  débordement horizontal sur écran étroit a été supprimé.
+
+### Supprimé
+- `resources/views/layouts/app.blade.php` (legacy, plus utilisé).
+
+---
+
 ## 2026-05-15 — Trafic / fréquentation (admin)
 
 ### Ajouté

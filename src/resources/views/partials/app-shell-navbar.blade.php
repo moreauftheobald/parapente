@@ -13,7 +13,7 @@
     $moduleActive = fn (\App\Models\Module $m): bool => $m->route_name !== null && request()->routeIs($m->route_name);
 @endphp
 
-<nav class="shrink-0 h-14 bg-gray-900 border-b border-gray-800 px-2 sm:px-4 flex items-center gap-1 sm:gap-3 z-40">
+<nav class="relative shrink-0 h-14 bg-gray-900 border-b border-gray-800 px-2 sm:px-4 flex items-center gap-1 sm:gap-3 z-50">
 
     {{-- Bouton panneau détail (gauche) --}}
     @if ($hasDetail)
