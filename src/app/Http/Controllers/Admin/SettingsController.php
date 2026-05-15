@@ -40,6 +40,7 @@ class SettingsController extends Controller
             'viability' => ['title' => "Viabilité d'une journée",  'icon' => 'fa-chart-line',     'keys' => []],
             'quality'   => ['title' => 'Qualité des données',      'icon' => 'fa-clipboard-check','keys' => []],
             'balises'   => ['title' => 'Sources balises',          'icon' => 'fa-tower-broadcast','keys' => []],
+            'analytics' => ['title' => 'Trafic / analytics',       'icon' => 'fa-chart-line',     'keys' => []],
         ];
         foreach (Settings::DEFAULTS as $key => $meta) {
             $g = $meta['group'] ?? 'misc';

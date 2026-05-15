@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\LogController as AdminLogController;
 use App\Http\Controllers\Admin\ModuleController as AdminModuleController;
 use App\Http\Controllers\Admin\SettingsController as AdminSettingsController;
 use App\Http\Controllers\Admin\SiteController as AdminSiteController;
+use App\Http\Controllers\Admin\TrafficController as AdminTrafficController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Admin\WeatherApiController as AdminApiController;
 use App\Http\Controllers\Admin\WeatherModelController as AdminModelController;
@@ -111,6 +112,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/data-quality',                            [AdminDataQualityController::class, 'index'])->name('data-quality.index');
         Route::post('/data-quality/ignore',                    [AdminDataQualityController::class, 'ignore'])->name('data-quality.ignore');
         Route::delete('/data-quality/ignore/{ignored}',        [AdminDataQualityController::class, 'unignore'])->name('data-quality.unignore');
+
+        // ── Trafic / fréquentation ────────────────────────────────
+        Route::get('/traffic', [AdminTrafficController::class, 'index'])->name('traffic.index');
 
         // ── Articles / changelog (page d'accueil) ────────────────
         Route::get('/articles',                   [AdminArticleController::class, 'index'])->name('articles.index');

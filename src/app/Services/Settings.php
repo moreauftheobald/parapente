@@ -151,6 +151,15 @@ class Settings
             'type'        => 'int',
         ],
 
+        // ── Trafic / analytics ───────────────────────────────────
+        'pageviews.retention_days' => [
+            'default'     => 365,
+            'label'       => 'Trafic · rétention (jours)',
+            'description' => "Nombre de jours pendant lesquels les pages vues sont conservées en base. Au-delà, le job quotidien `PurgePageViewsJob` les supprime. 365 = comparaison année/année possible.",
+            'group'       => 'analytics',
+            'type'        => 'int',
+        ],
+
         // ── Sources balises ──────────────────────────────────────
         'windy.api_key' => [
             'default'     => '',

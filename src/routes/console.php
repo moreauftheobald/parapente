@@ -9,6 +9,7 @@ use App\Jobs\FetchMetarReadingsJob;
 use App\Jobs\FetchPiouPiouReadingsJob;
 use App\Jobs\FetchWindyReadingsJob;
 use App\Jobs\PurgeOldForecastsJob;
+use App\Jobs\PurgePageViewsJob;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -70,5 +71,12 @@ Schedule::job(FetchBaliseForecastsJob::class)
 Schedule::job(AggregateBaliseReadingsHourlyJob::class)
     ->hourlyAt(5)
     ->name('aggregate-balise-readings-hourly')
+    ->withoutOverlapping();
+
+// Purge des pages vues au-delà de la rétention configurée
+// (setting pageviews.retention_days, défaut 365 j) — tous les jours à 03h15
+Schedule::job(PurgePageViewsJob::class)
+    ->dailyAt('03:15')
+    ->name('purge-page-views')
     ->withoutOverlapping();
 

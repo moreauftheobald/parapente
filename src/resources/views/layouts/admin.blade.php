@@ -48,6 +48,9 @@
                 <a href="{{ route('admin.data-quality.index') }}" class="{{ $adminLink($adminSection === 'data-quality') }}">
                     <i class="fa-solid fa-clipboard-check w-4 text-center"></i> Qualité des données
                 </a>
+                <a href="{{ route('admin.traffic.index') }}" class="{{ $adminLink($adminSection === 'traffic') }}">
+                    <i class="fa-solid fa-chart-line w-4 text-center"></i> Trafic
+                </a>
 
                 <div class="mt-3 px-3 text-[10px] uppercase tracking-widest text-gray-600">Système</div>
                 <a href="{{ route('admin.modules.index') }}" class="{{ $adminLink($adminSection === 'modules') }}">

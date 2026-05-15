@@ -17,6 +17,14 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin' => \App\Http\Middleware\EnsureAdmin::class,
         ]);
 
+        // Journalisation des visites Blade pour /admin/traffic (privacy-first :
+        // pas de cookie, hash visiteur à sel quotidien). N'agit que sur le
+        // groupe `web` ; les /api/* et /admin/* sont écartés dans le
+        // middleware lui-même.
+        $middleware->web(append: [
+            \App\Http\Middleware\RecordPageView::class,
+        ]);
+
         // Les routes /api reposent sur le même cookie de session que le
         // front Blade (pas de Sanctum). On ajoute donc les middlewares
         // session + cookies + CSRF au groupe `api` pour que `auth:web`,

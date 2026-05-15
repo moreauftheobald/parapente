@@ -11,6 +11,56 @@ Conventions :
 
 ---
 
+## 2026-05-15 — Trafic / fréquentation (admin)
+
+### Ajouté
+- Nouvelle section **`/admin/traffic`** : tableau de bord de
+  fréquentation self-hosted, alimenté par un middleware
+  `RecordPageView` branché sur le groupe `web`.
+  - **KPI tiles** : visites + uniques sur 3 fenêtres (aujourd'hui,
+    7 j, 30 j) avec delta % vs période précédente.
+  - **Graphe horaire** : visites par heure pour la journée en cours
+    (24 buckets, SVG inline).
+  - **Graphe quotidien** : visites par jour sur 30 j (SVG inline).
+  - **Top pages** (30 j), **type d'appareil**
+    (bureau/mobile/tablette/bot) avec barres de progression,
+    **OS + navigateur** avec %, **sites référents** (30 j).
+- **Conformité RGPD** : pas de cookie posé, pas de bannière de
+  consentement nécessaire. Le `visitor_hash` est un SHA-256
+  (ip + UA + jour + APP_KEY) qui tourne à minuit — uniques/jour
+  comptables, suivi inter-jour impossible.
+- Filtres appliqués par le middleware : seules les pages GET/HEAD
+  avec status 2xx/3xx ; les `/api/*`, `/admin/*`, AJAX, assets et
+  bots sont écartés (bots quand même enregistrés pour traçabilité,
+  mais filtrés des KPI « humains »).
+- Parseur User-Agent maison (substring matching, sans dépendance) :
+  reconnaît iOS/Android/Windows/macOS/Linux/ChromeOS + Chrome/
+  Firefox/Safari/Edge/Opera/Brave/Vivaldi + bots les plus courants.
+
+### Base de données
+- Migration `2026_05_15_140000_create_page_views_table.php` (table
+  `page_views` avec index sur `visited_at`, `(visited_at, device_type)`,
+  `(visitor_hash, visited_at)`).
+- Nouveau setting **`pageviews.retention_days`** (défaut 365) éditable
+  dans `/admin/settings` (nouveau groupe « Trafic / analytics »).
+- Job **`PurgePageViewsJob`** schedulé tous les jours à 03h15 qui
+  supprime les lignes au-delà de la rétention (lots de 5000).
+
+### Architecture
+- `App\Http\Middleware\RecordPageView` — branché en `append` du
+  groupe `web` dans `bootstrap/app.php`. Ne casse jamais la requête
+  (try/catch + log warning).
+- `App\Services\Analytics\UserAgentParser` — heuristique
+  substring/regex, ordre d'évaluation soigné (Edge avant Chrome,
+  Chrome avant Safari, iPad/tablette avant mobile, etc.).
+- `App\Http\Controllers\Admin\TrafficController` — agrégations SQL
+  natives (`HOUR(visited_at)`, `DATE(visited_at)`,
+  `COUNT(DISTINCT visitor_hash)`), tout filtre bot côté humain.
+- Vue Tailwind + SVG inline pour les charts (cohérent avec le reste
+  de l'admin, pas de dépendance JS).
+
+---
+
 ## 2026-05-15 — Source balises : Windy.com (Open Data API v2)
 
 ### Ajouté
