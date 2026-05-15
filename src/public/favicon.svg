@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Qui Vole ?">
+    <title>Qui Vole ?</title>
+    <!-- Fond arrondi bleu ciel (cohérent avec le thème sky-500 de l'app) -->
+    <rect width="64" height="64" rx="12" ry="12" fill="#0ea5e9"/>
+
+    <!-- Voile : arc dans la moitié haute (silhouette blanche, lisible à 16px) -->
+    <path d="M 6 26 Q 32 6 58 26 L 54 32 Q 32 18 10 32 Z" fill="#ffffff"/>
+
+    <!-- Suspentes : 5 lignes convergeant vers le pilote -->
+    <g stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" fill="none">
+        <line x1="11" y1="31" x2="32" y2="50"/>
+        <line x1="22" y1="26" x2="32" y2="50"/>
+        <line x1="32" y1="24" x2="32" y2="50"/>
+        <line x1="42" y1="26" x2="32" y2="50"/>
+        <line x1="53" y1="31" x2="32" y2="50"/>
+    </g>
+
+    <!-- Pilote (sellette) -->
+    <rect x="28" y="49" width="8" height="9" rx="2" ry="2" fill="#ffffff"/>
+</svg>
