@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\BaliseController as AdminBaliseController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DataCoverageController as AdminDataCoverageController;
+use App\Http\Controllers\Admin\DataQualityController as AdminDataQualityController;
 use App\Http\Controllers\Admin\DataSyncController as AdminSyncController;
 use App\Http\Controllers\Admin\LogController as AdminLogController;
 use App\Http\Controllers\Admin\ModuleController as AdminModuleController;
@@ -104,6 +105,12 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/sync',          [AdminSyncController::class, 'index'])->name('sync.index');
         Route::post('/sync/sites',   [AdminSyncController::class, 'importSites'])->name('sync.sites');
         Route::post('/sync/balises', [AdminSyncController::class, 'discoverBalises'])->name('sync.balises');
+        Route::post('/sync/deploy',  [AdminSyncController::class, 'deploy'])->name('sync.deploy');
+
+        // ── Qualité des données (doublons sites / balises) ────────
+        Route::get('/data-quality',                            [AdminDataQualityController::class, 'index'])->name('data-quality.index');
+        Route::post('/data-quality/ignore',                    [AdminDataQualityController::class, 'ignore'])->name('data-quality.ignore');
+        Route::delete('/data-quality/ignore/{ignored}',        [AdminDataQualityController::class, 'unignore'])->name('data-quality.unignore');
 
         // ── Articles / changelog (page d'accueil) ────────────────
         Route::get('/articles',                   [AdminArticleController::class, 'index'])->name('articles.index');

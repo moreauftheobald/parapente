@@ -45,6 +45,9 @@
                 <a href="{{ route('admin.sync.index') }}" class="{{ $adminLink($adminSection === 'sync') }}">
                     <i class="fa-solid fa-rotate w-4 text-center"></i> Synchronisation
                 </a>
+                <a href="{{ route('admin.data-quality.index') }}" class="{{ $adminLink($adminSection === 'data-quality') }}">
+                    <i class="fa-solid fa-clipboard-check w-4 text-center"></i> Qualité des données
+                </a>
 
                 <div class="mt-3 px-3 text-[10px] uppercase tracking-widest text-gray-600">Système</div>
                 <a href="{{ route('admin.modules.index') }}" class="{{ $adminLink($adminSection === 'modules') }}">

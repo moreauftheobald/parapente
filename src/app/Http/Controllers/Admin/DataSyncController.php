@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Balise;
 use App\Models\Site;
+use App\Services\GeoDeploymentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
@@ -112,5 +113,32 @@ class DataSyncController extends Controller
             ->route('admin.sync.index')
             ->with('status', 'Découverte des balises ' . $label . ' terminée.')
             ->with('sync_output', trim(Artisan::output()));
+    }
+
+    /**
+     * Déploiement géographique : géocode une ville, calcule un rayon et
+     * active sites + balises (pioupiou, metar) dans la zone.
+     */
+    public function deploy(Request $request, GeoDeploymentService $service): RedirectResponse
+    {
+        $data = $request->validate([
+            'city'      => ['required', 'string', 'max:120'],
+            'radius_km' => ['required', 'numeric', 'min:1', 'max:500'],
+        ]);
+
+        @set_time_limit(300);
+
+        try {
+            $report = $service->deploy(trim($data['city']), (float) $data['radius_km']);
+        } catch (\Throwable $e) {
+            return back()
+                ->withInput()
+                ->withErrors(['city' => $e->getMessage()]);
+        }
+
+        return redirect()
+            ->route('admin.sync.index')
+            ->with('status', 'Déploiement géographique terminé.')
+            ->with('deploy_report', $report);
     }
 }

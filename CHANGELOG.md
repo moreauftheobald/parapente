@@ -11,6 +11,68 @@ Conventions :
 
 ---
 
+## 2026-05-15 — Qualité des données : détection des doublons (admin)
+
+### Ajouté
+- Nouvelle section **`/admin/data-quality`** qui liste les paires de
+  doublons potentiels sur la base des coordonnées géographiques.
+  - **Sites** : distance Haversine + écart d'altitude + chevauchement
+    d'orientation (intersection des arcs `wind_dir_min`→`wind_dir_max`).
+    Les critères altitude / orientation sont **ignorés** si la donnée
+    manque sur l'une des deux entités.
+  - **Balises** : distance, **tous réseaux confondus**. Les paires
+    **intra-réseau** sont triées en tête (suspicion forte), les paires
+    **inter-réseaux** sont marquées « info » (souvent légitimes : un
+    pioupiou et un METAR sur le même aéroport, par ex.).
+- Pour chaque paire : side-by-side des deux entités (statut actif/inactif),
+  boutons **Désactiver A** / **Désactiver B** (passent par les toggles
+  existants) et **Ignorer la paire** (mémorisée en base).
+- Toggle **« Voir aussi les paires ignorées »** + bouton **Restaurer**.
+- 4 nouveaux **seuils éditables** dans `/admin/settings` (groupe
+  *« Qualité des données »*) :
+  - `quality.site_dup_distance_m` (défaut 200)
+  - `quality.site_dup_altitude_m` (défaut 30)
+  - `quality.site_dup_orientation_overlap_pct` (défaut 60)
+  - `quality.balise_dup_distance_m` (défaut 300)
+
+### Base de données
+- Nouvelle table **`ignored_duplicates`** (polymorphe `site|balise`,
+  paires canonisées `entity_a_id < entity_b_id`, unique sur le triplet).
+- Migration `2026_05_15_120000_create_ignored_duplicates_table.php`.
+- `SettingsSeeder` à relancer (idempotent) pour insérer les clés `quality.*`.
+
+### Architecture
+- `App\Services\DataQualityService` : détection O(n²) avec early-exit
+  sur l'écart latitudinal, suffisante jusqu'à plusieurs dizaines de
+  milliers d'entités (à bucketiser au-delà).
+- `App\Models\IgnoredDuplicate` + `App\Http\Controllers\Admin\DataQualityController`.
+- Calcul du chevauchement angulaire par discrétisation 360° (gère
+  les arcs traversant le Nord, ex. 315→45).
+
+---
+
+## 2026-05-15 — Déploiement géographique (admin)
+
+### Ajouté
+- Nouvelle carte **« 🌍 Déploiement géographique »** en tête de
+  `/admin/sync` : on saisit une **ville** et un **rayon en km**, l'app
+  géocode (API Open-Meteo, gratuite, sans clé), calcule une bbox +
+  filtre Haversine au rayon exact, puis :
+  - **active** tous les sites de la base situés dans le rayon
+    (`sites.active = true`) — sans rien désactiver hors zone ;
+  - **découvre + active** les balises **PiouPiou** et **METAR** via
+    les providers existants (`PiouPiouProvider`, `MetarProvider`).
+- Synthèse de retour : nb sites / balises **nouvellement activés**,
+  **déjà actifs**, et **dans la zone** par réseau.
+- Les balises désactivées manuellement (`active=false`) restent off
+  (cohérent avec la politique de `BaliseController` — la désactivation
+  manuelle bloque la réactivation auto).
+
+### Architecture
+- `App\Services\GeoDeploymentService` : géocodage + bbox + Haversine +
+  activation sites + boucle providers.
+- `DataSyncController::deploy()` + route `POST /admin/sync/deploy`.
+
 ## 2026-05-14 — Robustesse de l'écran « Couverture des données »
 
 ### Corrigé

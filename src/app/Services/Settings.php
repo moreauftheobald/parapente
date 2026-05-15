@@ -120,6 +120,36 @@ class Settings
             'group'       => 'viability',
             'type'        => 'int',
         ],
+
+        // ── Qualité des données (détection de doublons) ──────────
+        'quality.site_dup_distance_m' => [
+            'default'     => 200,
+            'label'       => 'Sites · distance max entre doublons (m)',
+            'description' => "Deux sites séparés de moins de cette distance sont candidats à un signalement de doublon.",
+            'group'       => 'quality',
+            'type'        => 'int',
+        ],
+        'quality.site_dup_altitude_m' => [
+            'default'     => 30,
+            'label'       => 'Sites · écart d\'altitude max entre doublons (m)',
+            'description' => "Écart d'altitude (en m) en-deçà duquel deux sites proches sont considérés comme un même décollage.",
+            'group'       => 'quality',
+            'type'        => 'int',
+        ],
+        'quality.site_dup_orientation_overlap_pct' => [
+            'default'     => 60,
+            'label'       => 'Sites · chevauchement d\'orientation min (%)',
+            'description' => "Pourcentage minimum de recouvrement angulaire (sur le plus petit des deux arcs wind_dir_min→wind_dir_max) pour considérer l'orientation comme « la même ». Sans site_conditions sur l'un des deux : critère ignoré.",
+            'group'       => 'quality',
+            'type'        => 'int',
+        ],
+        'quality.balise_dup_distance_m' => [
+            'default'     => 300,
+            'label'       => 'Balises · distance max entre doublons (m)',
+            'description' => "Deux balises séparées de moins de cette distance sont candidates à un signalement de doublon (tous réseaux confondus ; les paires inter-réseaux sont marquées « info »).",
+            'group'       => 'quality',
+            'type'        => 'int',
+        ],
     ];
 
     /**

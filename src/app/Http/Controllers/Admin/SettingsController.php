@@ -35,9 +35,10 @@ class SettingsController extends Controller
 
         // Regroupement par section (cf. catalogue Settings::DEFAULTS) :
         $groups = [
-            'precip'    => ['title' => 'Précipitations',           'icon' => 'fa-cloud-rain',  'keys' => []],
-            'gust'      => ['title' => 'Rafales',                  'icon' => 'fa-tornado',     'keys' => []],
-            'viability' => ['title' => "Viabilité d'une journée",  'icon' => 'fa-chart-line',  'keys' => []],
+            'precip'    => ['title' => 'Précipitations',           'icon' => 'fa-cloud-rain',     'keys' => []],
+            'gust'      => ['title' => 'Rafales',                  'icon' => 'fa-tornado',        'keys' => []],
+            'viability' => ['title' => "Viabilité d'une journée",  'icon' => 'fa-chart-line',     'keys' => []],
+            'quality'   => ['title' => 'Qualité des données',      'icon' => 'fa-clipboard-check','keys' => []],
         ];
         foreach (Settings::DEFAULTS as $key => $meta) {
             $g = $meta['group'] ?? 'misc';
