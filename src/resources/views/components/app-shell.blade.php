@@ -73,23 +73,29 @@
            rétracte en portrait. --}}
     <style>
         [x-cloak] { display: none !important; }
-        /* Reset minimal html/body : aucune hauteur imposée — le shell
-           prend en charge l'ancrage via position:fixed. Cela évite
-           toute dépendance à une chaîne `height:100% / 100dvh` qui
-           est instable sur Chrome Android et Safari iOS (navbar du
-           navigateur qui apparait/disparait, safe areas, etc.). */
-        html, body { background-color: #030712; margin: 0; min-height: 100dvh; min-height: 100vh; }
-        /* Shell racine : position:fixed pour s'ancrer SUR la viewport
-           visuelle, indépendamment de toute hauteur de parent. Cela
-           résout les glitches mobiles signalés (navbar qui disparait,
-           volet qui dépasse au-dessus, bande grise en haut). */
-        .app-shell-root { position: fixed; top: 0; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; overflow: hidden; }
-        /* will-change sur les volets : pré-réserve une couche GPU pour
-           les transitions transform, supprime les artefacts de
-           compositing (volet « fantôme » semi-transparent qui freeze)
-           sur Safari iOS / Chrome Android. */
-        aside { will-change: transform; }
+        /* Hauteur via CSS variable --app-height, calculée en JS depuis
+           window.innerHeight. Les unités CSS `vh`/`dvh`/`lvh` sont
+           bugguées sur Chrome Android (`flex-grow:1` ne consomme pas
+           correctement l'espace restant en portrait quand le parent
+           utilise ces unités). Mesurer window.innerHeight et l'injecter
+           en --app-height contourne ces bugs. */
+        html, body { margin: 0; background-color: #030712; height: var(--app-height, 100vh); overflow: hidden; }
+        .app-shell-root { height: var(--app-height, 100vh); display: flex; flex-direction: column; overflow: hidden; }
     </style>
+
+    {{-- Script inline (avant le bundle Vite) qui injecte --app-height au plus tôt
+         pour éviter le FOUC de hauteur. Le bundle re-attache les listeners
+         après. --}}
+    <script>
+        (function() {
+            function setAppHeight() {
+                document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');
+            }
+            setAppHeight();
+            window.addEventListener('resize', setAppHeight, { passive: true });
+            window.addEventListener('orientationchange', setAppHeight, { passive: true });
+        })();
+    </script>
 
     {{-- Font Awesome auto-hébergé via Vite (cf. resources/css/app.css) :
          pas de dépendance CDN cloudflare qui était bloquée par

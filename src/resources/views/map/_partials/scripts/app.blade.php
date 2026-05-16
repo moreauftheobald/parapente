@@ -66,12 +66,20 @@ function mapApp(){return{
         await this.loadBalises();
         this._balisesTimer = setInterval(() => this.loadBalises(), 5 * 60 * 1000);
 
-        // Re-dimensionner Leaflet quand un volet s'ouvre ou se ferme. Le shell
-        // utilise une transition CSS de 200 ms ; on appelle invalidateSize()
-        // PLUSIEURS fois (pendant et après la transition) pour éviter les
-        // tuiles grises observées sur mobile lent — un seul appel à 250ms
-        // arrive parfois avant que la largeur finale soit stabilisée.
+        // Re-dimensionner Leaflet quand un volet s'ouvre ou se ferme + forcer
+        // un repaint complet du document. Sur Chrome Android, on a observé
+        // que l'ouverture d'un volet ne déclenchait pas de recalcul de
+        // layout (le volet apparaissait minuscule, la navbar disparaissait
+        // visuellement) tant que l'utilisateur ne mettait pas l'app en
+        // background puis foreground. Le toggle d'une transform invisible
+        // sur <html> + dispatch resize force Chrome à tout recalculer.
         const onPanelChange = () => {
+            const root = document.documentElement;
+            root.style.transform = 'translateZ(0)';
+            requestAnimationFrame(() => {
+                root.style.transform = '';
+                window.dispatchEvent(new Event('resize'));
+            });
             [50, 250, 450, 700].forEach(ms => setTimeout(() => this.map?.invalidateSize(), ms));
         };
         this.$watch('leftOpen',  onPanelChange);
