@@ -136,28 +136,126 @@ function mapApp(){return{
         Object.values(this.markers).forEach(m=>m.getElement()?.querySelector('.pg-site-marker')?.classList.remove('selected'));
     },
 
+    /**
+     * Boot de la carte : charge le « map bundle » (1 seul appel) puis,
+     * si user authentifié, les overrides de scoring perso (1 appel).
+     * Cf. FF_map_bundle_cache.md.
+     *
+     * Avant : 1 appel /api/sites + N appels /api/sites/{id}/scores (15
+     * requêtes pour 14 sites). Maintenant : 1 ou 2 appels max.
+     *
+     * Les scores horaires détaillés (alimentant l'onglet « Détail
+     * scoring » du volet droit) sont chargés à la demande au clic via
+     * loadSiteScores (lazy).
+     */
     async loadSites(){
-        const r=await fetch('/api/sites',{credentials:'same-origin'});
-        this.sites=await r.json();
-        await Promise.all(this.sites.map(s=>this.loadSiteScores(s.id)));
-        this.buildDays();this.renderMarkers();
-    },
-    async loadSiteScores(id){
-        try{
-            const r=await fetch(`/api/sites/${id}/scores`,{credentials:'same-origin'});
-            const d=await r.json();
-            this.allScores[id]=d.scores||[];
-            this.sunWindows[id]=d.sun_windows||{};
-            this.dayQuality[id]=d.day_quality||{};
-            // 'user' (scoring perso actif) ou 'global' (scoring standard).
-            this.scoringSource[id]=d.scoring_source||'global';
+        try {
+            const r = await fetch('/api/map-bundle', {credentials:'same-origin'});
+            if (!r.ok) throw new Error('map-bundle HTTP ' + r.status);
+            const bundle = await r.json();
+
+            this.sites = (bundle.sites || []).map(s => ({
+                id: s.id, name: s.name, lat: s.lat, lng: s.lng,
+                altitude: s.altitude, level: s.level, region: s.region,
+                wind_dir_min: s.wind_dir_min, wind_dir_max: s.wind_dir_max,
+                // user_scoring sera fusionné par loadScoringOverrides()
+                user_scoring: null,
+            }));
+
+            // Index par site_id (équivalents des anciens this.dayQuality[id],
+            // this.sunWindows[id] alimentés par /api/sites/{id}/scores)
+            this.dayQuality = {};
+            this.sunWindows = {};
+            this.scoringSource = {};
+            (bundle.sites || []).forEach(s => {
+                this.dayQuality[s.id] = s.days || {};
+                this.sunWindows[s.id] = s.sun_windows || {};
+                this.scoringSource[s.id] = 'global';
+            });
+
+            // Agrégat global par jour (remplace buildDays). Le serveur a
+            // pré-calculé best_status et green_slots cumulés sur tous les sites.
+            this.days = (bundle.days_summary || []).map(d => ({
+                raw: d.raw,
+                bestStatus: d.best_status,
+                greenSlots: d.green_slots,
+                label: this._labelForDay(d.raw),
+            }));
+        } catch (e) {
+            console.error('loadSites:', e);
+            this.sites = []; this.days = []; this.dayQuality = {};
+            this.sunWindows = {}; this.scoringSource = {};
         }
-        catch(e){this.allScores[id]=[];this.dayQuality[id]={};this.scoringSource[id]='global';}
+
+        // Phase 4 : sur-couche perso (badge + overrides scoring actif)
+        if (this.authUser) await this.loadScoringOverrides();
+
+        this.renderMarkers();
+    },
+
+    /**
+     * Récupère les overrides de scoring perso pour l'utilisateur connecté
+     * (typiquement 1-3 sites max). Fusionne en mémoire avec le bundle global.
+     */
+    async loadScoringOverrides(){
+        try {
+            const r = await fetch('/api/me/scoring-overrides', {credentials:'same-origin'});
+            if (!r.ok) return;
+            const data = await r.json();
+            Object.entries(data.overrides || {}).forEach(([siteId, override]) => {
+                const sid = parseInt(siteId, 10);
+                const site = this.sites.find(s => s.id === sid);
+                if (!site) return;
+                // Badge user_scoring (active / inactive) — affiché sur le marker
+                site.user_scoring = override.user_scoring || null;
+                // Override des statuts journaliers si scoring perso ACTIF
+                if (override.days && Object.keys(override.days).length > 0) {
+                    this.dayQuality[sid] = override.days;
+                    this.scoringSource[sid] = 'user';
+                }
+            });
+        } catch (e) {
+            // silencieux : on continue avec le bundle global, l'utilisateur
+            // verra juste son scoring global au lieu de son perso
+            console.warn('loadScoringOverrides:', e);
+        }
+    },
+
+    /**
+     * Formate un jour `d/m` en libellé court : « Aujourd'hui », « Demain »
+     * ou jour de semaine abrégé + date.
+     */
+    _labelForDay(raw){
+        const [d, mo] = raw.split('/');
+        const dt = new Date(new Date().getFullYear(), parseInt(mo) - 1, parseInt(d));
+        const now = new Date(), tom = new Date(now); tom.setDate(now.getDate() + 1);
+        if (dt.toDateString() === now.toDateString()) return 'Aujourd\'hui';
+        if (dt.toDateString() === tom.toDateString()) return 'Demain';
+        return DF[dt.getDay()] + ' ' + d + '/' + mo;
+    },
+
+    /**
+     * Chargement lazy des scores horaires détaillés d'un site. Appelé au
+     * clic sur un marker pour alimenter l'onglet « Détail scoring » du
+     * volet droit. Le bundle global suffit pour les markers + couleurs.
+     */
+    async loadSiteScores(id){
+        if (this.allScores[id]) return; // déjà chargé
+        try{
+            const r = await fetch(`/api/sites/${id}/scores`, {credentials:'same-origin'});
+            const d = await r.json();
+            this.allScores[id] = d.scores || [];
+            // Les sunWindows et dayQuality sont déjà fournis par le bundle ;
+            // /scores peut renvoyer du scoring perso actif (scoring_source='user')
+            // — on met à jour scoringSource pour cohérence avec isUserScoringFor.
+            if (d.scoring_source) this.scoringSource[id] = d.scoring_source;
+        }
+        catch(e){ this.allScores[id] = []; }
     },
 
     /** Retourne l'état du scoring perso de l'utilisateur sur un site :
      *  'active' | 'inactive' | null. Utilisé pour les badges du marker
-     *  et le filtre « Mes sites ». Donnée fournie par /api/sites. */
+     *  et le filtre « Mes sites ». Donnée fournie par /api/me/scoring-overrides. */
     userScoringFor(site){ return site?.user_scoring ?? null; },
 
     /** Vrai quand l'API a appliqué le scoring perso pour ce site. */
@@ -176,25 +274,9 @@ function mapApp(){return{
     },
     hideVotingTip(){ this.votingTip.visible = false; },
 
-    buildDays(){
-        const m={};
-        Object.values(this.allScores).flat().forEach(s=>{if(!m[s.day])m[s.day]=[];m[s.day].push(s);});
-        const rank={green:3,orange:2,red:1,unknown:0};
-        this.days=Object.keys(m).slice(0,5).map(day=>{
-            // meilleur statut "jour" parmi tous les sites (viabilité, pas heure-par-heure)
-            let best='unknown';
-            for(const site of this.sites){
-                const st=this.dayQuality[site.id]?.[day]?.status;
-                if(st && (rank[st]??0) > (rank[best]??0)) best=st;
-            }
-            const gs=[...new Set(Object.values(this.allScores).flat().filter(s=>s.day===day&&s.status==='green').map(s=>s.hour))].length;
-            const[d,mo]=day.split('/');
-            const dt=new Date(new Date().getFullYear(),parseInt(mo)-1,parseInt(d));
-            const now=new Date(),tom=new Date(now);tom.setDate(now.getDate()+1);
-            const label=dt.toDateString()===now.toDateString()?'Aujourd\'hui':dt.toDateString()===tom.toDateString()?'Demain':DF[dt.getDay()]+' '+d+'/'+mo;
-            return{label,raw:day,bestStatus:best,greenSlots:gs};
-        });
-    },
+    // (buildDays supprimé — agrégat global maintenant pré-calculé côté
+    // serveur dans le map bundle, sous la clé `days_summary`. Cf.
+    // loadSites() pour le mapping vers this.days[]. FF_map_bundle_cache.md)
     selectDay(idx){
         this.selectedDayIdx=idx;
         this.renderMarkers();
@@ -262,6 +344,11 @@ function mapApp(){return{
         this.chartData=null; this.chartSite=null;
         this.multimodelData=null; this.multimodel5Data=null;
         this.openRightPanel();
+        // Chargements lazy en parallèle :
+        //  - loadSiteScores : pour l'onglet « Détail scoring » (allScores[id])
+        //    Plus rapide en cache miss qu'avant car le bundle a fait l'essentiel.
+        //  - loadSiteChart  : pour l'onglet « Synthèse » (graphes confiance + plafond)
+        this.loadSiteScores(site.id);
         this.loadSiteChart();
     },
 

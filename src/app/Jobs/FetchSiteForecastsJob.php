@@ -54,6 +54,10 @@ class FetchSiteForecastsJob implements ShouldQueue
         // calés dessus. Sera reconstruit à la prochaine consultation.
         $userScoring->invalidateSite($site->id);
 
+        // Régénérer le map bundle pour que `/api/map-bundle` reflète les
+        // nouveaux scores du site sans attendre le prochain cycle horaire.
+        RebuildMapBundleJob::dispatch();
+
         Log::info("FetchSiteForecastsJob: terminé [{$site->slug}].");
     }
 }
