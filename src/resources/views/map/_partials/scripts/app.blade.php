@@ -67,9 +67,13 @@ function mapApp(){return{
         this._balisesTimer = setInterval(() => this.loadBalises(), 5 * 60 * 1000);
 
         // Re-dimensionner Leaflet quand un volet s'ouvre ou se ferme. Le shell
-        // utilise une transition CSS de 200 ms ; on attend 250 ms pour être
-        // sûr que la largeur finale est appliquée avant invalidateSize().
-        const onPanelChange = () => setTimeout(() => this.map?.invalidateSize(), 250);
+        // utilise une transition CSS de 200 ms ; on appelle invalidateSize()
+        // PLUSIEURS fois (pendant et après la transition) pour éviter les
+        // tuiles grises observées sur mobile lent — un seul appel à 250ms
+        // arrive parfois avant que la largeur finale soit stabilisée.
+        const onPanelChange = () => {
+            [50, 250, 450, 700].forEach(ms => setTimeout(() => this.map?.invalidateSize(), ms));
+        };
         this.$watch('leftOpen',  onPanelChange);
         this.$watch('rightOpen', onPanelChange);
 

@@ -145,18 +145,7 @@
         .rp-balise-dial svg { display:block; width:100%; height:auto; overflow:visible; }
         .rp-balise-leg  { flex:0 1 230px; min-width:0; font-size:12px; color:#9ca3af; line-height:1.6; }
 
-        /* Sélecteur de jour flottant (haut-droite de la carte, desktop ≥640px).
-           Sur mobile, le sélecteur est dupliqué dans le volet gauche
-           (.lp-section-mobile-only) et celui flottant est masqué pour
-           libérer la carte. */
-        #day-selector { position:absolute; top:10px; right:10px; z-index:70; }
-        @verbatim
-        @media (max-width:639px) {
-            #day-selector { display:none; }
-            .leaflet-top.leaflet-right .leaflet-control-zoom { margin-top:0; }
-        }
-        @media (min-width:640px) {
-            .lp-section-mobile-only { display:none; }
-            .leaflet-top.leaflet-right .leaflet-control-zoom { margin-top:60px; }
-        }
-        @endverbatim
+        /* Le sélecteur de jour vit dans la 1ère .lp-section de l'onglet
+           Paramètres (cf. left-panel.blade.php). Le bouton flottant qui
+           était sur la carte a été supprimé (problèmes de positionnement
+           en paysage + chevauchement contrôles Leaflet). */

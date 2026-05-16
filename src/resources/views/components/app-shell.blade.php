@@ -43,7 +43,7 @@
 @endphp
 
 <!DOCTYPE html>
-<html lang="fr" class="h-full">
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -55,9 +55,30 @@
     <link rel="icon" type="image/x-icon" sizes="any" href="{{ asset('favicon.ico') }}">
     <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('apple-touch-icon.png') }}">
     <link rel="manifest" href="{{ asset('site.webmanifest') }}">
-    <meta name="theme-color" content="#0ea5e9">
+    <meta name="theme-color" content="#111827">
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+
+    {{-- Anti-FOUC + correctifs mobile injectés AVANT l'arrivée du bundle CSS
+         Vite. Plusieurs problèmes spécifiques mobile traités ici :
+         - [x-cloak] : masque les éléments Alpine x-show pendant le boot
+         - html/body en dvh : évite que la zone soit recalculée depuis
+           un parent non-mesuré, surtout sur Safari iOS / Chrome Android
+           où 100% du parent peut donner une hauteur instable
+         - will-change sur les <aside> : pré-réserve une couche GPU
+           pour les transitions transform, supprime les artefacts de
+           compositing (volet « fantôme » semi-transparent qui freeze)
+         - background-color sur html : évite qu'une bande blanche
+           apparaisse en bordure quand la barre URL navigateur se
+           rétracte en portrait. --}}
+    <style>
+        [x-cloak] { display: none !important; }
+        html, body { background-color: #030712; height: 100dvh; min-height: 100dvh; }
+        @supports not (height: 100dvh) {
+            html, body { height: 100vh; min-height: 100vh; }
+        }
+        aside { will-change: transform; }
+    </style>
 
     {{-- Font Awesome 6 (icônes des modules / actions) --}}
     <link rel="stylesheet"
@@ -67,9 +88,9 @@
 
     @stack('styles')
 </head>
-<body class="h-full bg-gray-950 text-gray-100">
+<body class="bg-gray-950 text-gray-100">
 
-<div class="h-screen flex flex-col overflow-hidden {{ $rootClass }}"
+<div class="h-full flex flex-col overflow-hidden {{ $rootClass }}"
      x-data="{{ $xDataExpr }}"
      @keydown.escape.window="leftOpen = false; rightOpen = false">
 

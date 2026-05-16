@@ -13,9 +13,9 @@
                     {{-- ═══════ Onglet PARAMÈTRES ═══════ --}}
                     <div class="lp-tabpane" x-show="lpTab === 'params'">
 
-                        {{-- Sélecteur de jour — visible uniquement sur mobile,
-                             où il a quitté la carte pour rejoindre le volet. --}}
-                        <div class="lp-section lp-section-mobile-only">
+                        {{-- Sélecteur de jour : 1ère section de l'onglet Paramètres,
+                             stylé comme n'importe quel autre contrôle du volet. --}}
+                        <div class="lp-section">
                             <div class="lp-title">Jour</div>
                             <button class="dd-trigger" style="width:100%;" @click.stop="toggleDayDrop($el)">
                                 <span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;"

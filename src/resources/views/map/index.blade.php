@@ -33,10 +33,11 @@
     </x-slot:help>
 
     {{-- ═══ CONTENU PRINCIPAL : la carte Leaflet ═══ --}}
-    {{-- init() de mapApp() est appelé automatiquement par Alpine. --}}
+    {{-- init() de mapApp() est appelé automatiquement par Alpine.
+         Le sélecteur de jour n'est plus flottant sur la carte ; il
+         vit désormais en tête fixe du volet gauche (cf. left-panel). --}}
     <div id="map-area" @click.window="dayDropOpen=false; bmDropOpen=false;">
         <div id="map"></div>
-        @include('map._partials.html.day-selector')
     </div>
 
     {{-- Tooltips & dropdowns flottants (échappent au flux normal via position:fixed) --}}

@@ -6,7 +6,7 @@
             30 : overlay backdrop mobile  (shell)
             40 : navbar + volets latéraux (shell)
             50 : dropdowns navbar         (shell)
-            70 : contrôles flottants carte (day-selector, dropdowns dd-menu)
+            70 : dropdowns flottants carte (.dd-menu : jour / fond de carte)
             80 : tooltips graphes / cellules scoring                    */
         .dd-menu { position:fixed; background:#111827; border:1px solid rgba(55,65,81,.7); border-radius:16px; box-shadow:0 24px 48px rgba(0,0,0,.85); padding:6px 0; z-index:70; }
         .dd-item { display:flex; align-items:center; gap:12px; padding:10px 16px; cursor:pointer; transition:background .1s; font-size:13px; color:#9ca3af; width:100%; background:none; border:none; text-align:left; }
