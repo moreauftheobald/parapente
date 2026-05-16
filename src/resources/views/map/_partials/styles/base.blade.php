@@ -14,8 +14,14 @@ body { font-family:'DM Sans',sans-serif; }
    selon statut météo. Glow plutôt que cercle solide pour mieux
    contraster avec les fonds de carte (notamment topo, où il y a
    déjà beaucoup de vert "nature"). Vert pomme/citron volontairement
-   lumineux pour ressortir du décor. */
-.pg-site-marker { position:relative; width:38px; height:38px; border-radius:50%; display:grid; place-items:center; cursor:pointer; transition:transform .15s, filter .15s; }
+   lumineux pour ressortir du décor.
+   IMPORTANT : `transition:filter` retiré (gardé seulement transform).
+   Chrome Android ralentissait drastiquement en portrait à cause des
+   recalculs constants de filter sur ~50 markers visibles, chacun
+   avec 4 drop-shadow empilés (= 200 drop-shadows à recompositer en
+   continu). Le hover/selected re-applique le nouveau filter, sans
+   transition c'est instantané et le GPU respire. */
+.pg-site-marker { position:relative; width:38px; height:38px; border-radius:50%; display:grid; place-items:center; cursor:pointer; transition:transform .15s; }
 .pg-site-marker img { width:30px; height:30px; pointer-events:none; }
 
 /* Badge user_scoring (coin bas-droite du marker). Échappe au filter glow
@@ -35,6 +41,22 @@ body { font-family:'DM Sans',sans-serif; }
 .pg-site-marker.pg-status-orange.selected  { filter:drop-shadow(0 0 8px #fb923c) drop-shadow(0 0 18px #fb923c) drop-shadow(0 0 26px rgba(251,146,60,.9)) drop-shadow(0 0 3px #fff); }
 .pg-site-marker.pg-status-red.selected     { filter:drop-shadow(0 0 8px #f87171) drop-shadow(0 0 18px #f87171) drop-shadow(0 0 26px rgba(248,113,113,.9)) drop-shadow(0 0 3px #fff); }
 .pg-site-marker.pg-status-unknown.selected { filter:drop-shadow(0 0 4px #fff) drop-shadow(0 0 10px rgba(255,255,255,.7)); }
+
+/* Sur mobile (max-width:768px) on réduit drastiquement la charge GPU :
+   2 drop-shadows au lieu de 4 sur les markers. Le visuel reste très
+   correct (glow visible) mais le composit GPU passe de ~200 ops à ~100
+   sur une carte chargée. Chrome Android en portrait passe alors de
+   1-2 fps à fluide. */
+@verbatim
+@media (max-width: 768px) {
+    .pg-site-marker.pg-status-green   { filter:drop-shadow(0 0 10px #3BFF00) drop-shadow(0 2px 3px rgba(0,0,0,.7)); }
+    .pg-site-marker.pg-status-orange  { filter:drop-shadow(0 0 10px #fb923c) drop-shadow(0 2px 3px rgba(0,0,0,.7)); }
+    .pg-site-marker.pg-status-red     { filter:drop-shadow(0 0 10px #f87171) drop-shadow(0 2px 3px rgba(0,0,0,.7)); }
+    .pg-site-marker.pg-status-green.selected   { filter:drop-shadow(0 0 14px #3BFF00) drop-shadow(0 0 3px #fff); }
+    .pg-site-marker.pg-status-orange.selected  { filter:drop-shadow(0 0 14px #fb923c) drop-shadow(0 0 3px #fff); }
+    .pg-site-marker.pg-status-red.selected     { filter:drop-shadow(0 0 14px #f87171) drop-shadow(0 0 3px #fff); }
+}
+@endverbatim
 
 @keyframes spin { to { transform:rotate(360deg); } }
 
