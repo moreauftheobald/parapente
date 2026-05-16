@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\HasFilterableIndex;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -24,26 +25,20 @@ use Illuminate\View\View;
  */
 class UserController extends Controller
 {
+    use HasFilterableIndex;
+
+    private const SORTABLE = ['name', 'email', 'role', 'created_at'];
+
     public function index(Request $request): View
     {
         $query = User::query();
 
-        if ($search = trim((string) $request->input('search', ''))) {
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
-            });
-        }
+        $this->applySearch($query, $request->input('search'), ['name', 'email']);
         if ($role = $request->input('role')) {
             $query->where('role', $role);
         }
 
-        $sort = $request->input('sort', 'created_at');
-        if (! in_array($sort, ['name', 'email', 'role', 'created_at'], true)) {
-            $sort = 'created_at';
-        }
-        $dir = $request->input('dir', 'desc') === 'asc' ? 'asc' : 'desc';
-        $query->orderBy($sort, $dir);
+        [$sort, $dir] = $this->applySorting($query, $request, self::SORTABLE, 'created_at', 'desc');
 
         $users = $query->paginate(50)->withQueryString();
 

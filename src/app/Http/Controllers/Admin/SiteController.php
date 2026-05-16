@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\HasFilterableIndex;
 use App\Http\Controllers\Controller;
 use App\Models\Site;
 use App\Models\SiteCondition;
@@ -24,6 +25,8 @@ use Illuminate\View\View;
  */
 class SiteController extends Controller
 {
+    use HasFilterableIndex;
+
     /** Champs autorisés au tri (whitelist, anti-injection) */
     private const SORTABLE = [
         'name', 'source', 'level', 'altitude_m', 'active', 'region', 'created_at',
@@ -33,18 +36,11 @@ class SiteController extends Controller
     {
         $query = Site::query();
 
-        // ── Filtres ──────────────────────────────────────────────
-        if ($search = trim((string) $request->input('search', ''))) {
-            $query->where('name', 'like', '%' . $search . '%');
-        }
+        $this->applySearch($query, $request->input('search'), ['name']);
         if ($source = $request->input('source')) {
             $query->where('source', $source);
         }
-        // active : '1', '0' ou '' (= tous)
-        $activeRaw = $request->input('active');
-        if ($activeRaw === '1' || $activeRaw === '0') {
-            $query->where('active', (int) $activeRaw);
-        }
+        $this->applyTriStateFilter($query, $request->input('active'), 'active');
         if ($level = $request->input('level')) {
             $query->where('level', $level);
         }
@@ -52,17 +48,10 @@ class SiteController extends Controller
             $query->where('region', $region);
         }
 
-        // ── Tri ──────────────────────────────────────────────────
-        $sort = $request->input('sort', 'name');
-        if (! in_array($sort, self::SORTABLE, true)) {
-            $sort = 'name';
-        }
-        $dir = $request->input('dir', 'asc') === 'desc' ? 'desc' : 'asc';
-        $query->orderBy($sort, $dir);
+        [$sort, $dir] = $this->applySorting($query, $request, self::SORTABLE, 'name');
         // Ordre stable secondaire
         if ($sort !== 'id') $query->orderBy('id');
 
-        // ── Pagination ───────────────────────────────────────────
         $sites = $query->paginate(50)->withQueryString();
 
         // Listes d'options pour les selects

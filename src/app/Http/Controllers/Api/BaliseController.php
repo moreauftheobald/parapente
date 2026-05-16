@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Balise;
 use App\Models\BaliseReading;
+use App\Services\Balises\BaliseReadingFormatter;
 use App\Services\Map\BalisesBundleCache;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -77,14 +78,9 @@ class BaliseController extends Controller
                 $prev   = $readings->first(fn ($r) => $r->read_at->lessThanOrEqualTo($cutoff));
 
                 $reading = [
-                    'read_at'        => $latest->read_at->toIso8601String(),
-                    'wind_direction' => $latest->wind_direction,
-                    'wind_speed_avg' => $latest->wind_speed_avg !== null ? (float) $latest->wind_speed_avg : null,
-                    'wind_speed_min' => $latest->wind_speed_min !== null ? (float) $latest->wind_speed_min : null,
-                    'wind_speed_max' => $latest->wind_speed_max !== null ? (float) $latest->wind_speed_max : null,
-                    'temperature'    => $latest->temperature !== null ? (float) $latest->temperature : null,
-                    'humidity'       => $latest->humidity,
-                    'trend'          => $this->computeTrend($latest, $prev),
+                    'read_at' => $latest->read_at->toIso8601String(),
+                    ...BaliseReadingFormatter::meteorology($latest),
+                    'trend'   => $this->computeTrend($latest, $prev),
                 ];
             }
 
@@ -154,18 +150,15 @@ class BaliseController extends Controller
 
         $latest = $balise->readings()->orderByDesc('read_at')->first($cols);
 
-        $serialize = fn (BaliseReading $r) => [
-            'read_at'        => $r->read_at->toIso8601String(),
-            'time'           => $r->read_at->copy()->setTimezone($tz)->format('H:i'),
-            'min_of_day'     => (int) $r->read_at->copy()->setTimezone($tz)->format('G') * 60
-                              + (int) $r->read_at->copy()->setTimezone($tz)->format('i'),
-            'wind_direction' => $r->wind_direction,
-            'wind_speed_avg' => $r->wind_speed_avg !== null ? (float) $r->wind_speed_avg : null,
-            'wind_speed_min' => $r->wind_speed_min !== null ? (float) $r->wind_speed_min : null,
-            'wind_speed_max' => $r->wind_speed_max !== null ? (float) $r->wind_speed_max : null,
-            'temperature'    => $r->temperature !== null ? (float) $r->temperature : null,
-            'humidity'       => $r->humidity,
-        ];
+        $serialize = function (BaliseReading $r) use ($tz) {
+            $local = $r->read_at->copy()->setTimezone($tz);
+            return [
+                'read_at'    => $r->read_at->toIso8601String(),
+                'time'       => $local->format('H:i'),
+                'min_of_day' => (int) $local->format('G') * 60 + (int) $local->format('i'),
+                ...BaliseReadingFormatter::meteorology($r),
+            ];
+        };
 
         return [
             'balise' => [

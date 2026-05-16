@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\HasFilterableIndex;
 use App\Http\Controllers\Controller;
 use App\Models\Balise;
 use App\Services\DataCoverage;
@@ -27,6 +28,8 @@ use Illuminate\View\View;
  */
 class BaliseController extends Controller
 {
+    use HasFilterableIndex;
+
     private const SORTABLE = [
         'name', 'source', 'external_id', 'active', 'created_at',
     ];
@@ -35,26 +38,13 @@ class BaliseController extends Controller
     {
         $query = Balise::query();
 
-        if ($search = trim((string) $request->input('search', ''))) {
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('external_id', 'like', "%{$search}%");
-            });
-        }
+        $this->applySearch($query, $request->input('search'), ['name', 'external_id']);
         if ($source = $request->input('source')) {
             $query->where('source', $source);
         }
-        $activeRaw = $request->input('active');
-        if ($activeRaw === '1' || $activeRaw === '0') {
-            $query->where('active', (int) $activeRaw);
-        }
+        $this->applyTriStateFilter($query, $request->input('active'), 'active');
 
-        $sort = $request->input('sort', 'name');
-        if (! in_array($sort, self::SORTABLE, true)) {
-            $sort = 'name';
-        }
-        $dir = $request->input('dir', 'asc') === 'desc' ? 'desc' : 'asc';
-        $query->orderBy($sort, $dir);
+        [$sort, $dir] = $this->applySorting($query, $request, self::SORTABLE, 'name');
 
         // Eager-load la dernière lecture pour afficher la fraîcheur en colonne
         $query->with(['latestReading']);

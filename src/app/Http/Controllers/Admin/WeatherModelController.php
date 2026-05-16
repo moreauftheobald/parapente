@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\HasFilterableIndex;
 use App\Http\Controllers\Controller;
 use App\Models\WeatherApi;
 use App\Models\WeatherModel;
@@ -30,33 +31,24 @@ use Illuminate\Http\JsonResponse;
  */
 class WeatherModelController extends Controller
 {
+    use HasFilterableIndex;
+
+    private const SORTABLE = [
+        'name', 'code', 'provider', 'resolution_km', 'max_horizon_h',
+        'weight_short', 'weight_medium', 'refresh_frequency_minutes', 'active',
+    ];
+
     public function index(Request $request): View
     {
         $query = WeatherModel::query();
 
-        if ($search = trim((string) $request->input('search', ''))) {
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('code', 'like', "%{$search}%")
-                  ->orWhere('provider', 'like', "%{$search}%");
-            });
-        }
+        $this->applySearch($query, $request->input('search'), ['name', 'code', 'provider']);
         if ($provider = $request->input('provider')) {
             $query->where('provider', $provider);
         }
-        $activeRaw = $request->input('active');
-        if ($activeRaw === '1' || $activeRaw === '0') {
-            $query->where('active', (int) $activeRaw);
-        }
+        $this->applyTriStateFilter($query, $request->input('active'), 'active');
 
-        $sort = $request->input('sort', 'name');
-        $allowed = ['name', 'code', 'provider', 'resolution_km', 'max_horizon_h',
-                    'weight_short', 'weight_medium', 'refresh_frequency_minutes', 'active'];
-        if (! in_array($sort, $allowed, true)) {
-            $sort = 'name';
-        }
-        $dir = $request->input('dir', 'asc') === 'desc' ? 'desc' : 'asc';
-        $query->orderBy($sort, $dir);
+        [$sort, $dir] = $this->applySorting($query, $request, self::SORTABLE, 'name');
 
         $models    = $query->get();
         $providers = WeatherModel::query()->distinct()->orderBy('provider')->pluck('provider');
