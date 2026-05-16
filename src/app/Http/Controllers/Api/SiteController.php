@@ -10,6 +10,7 @@ use App\Models\Site;
 use App\Models\SiteScore;
 use App\Models\UserSiteCondition;
 use App\Models\WeatherModel;
+use App\Services\Map\SiteDetailCache;
 use App\Services\Settings;
 use App\Services\Weather\UserScoringService;
 use Illuminate\Http\JsonResponse;
@@ -20,6 +21,7 @@ class SiteController extends Controller
     public function __construct(
         private Settings $settings,
         private UserScoringService $userScoring,
+        private SiteDetailCache $detailCache,
     ) {
     }
 
@@ -58,17 +60,55 @@ class SiteController extends Controller
         return response()->json($sites);
     }
 
+    /**
+     * Scores horaires + sun windows + day quality d'un site.
+     *
+     * Le payload "global" (sans rescore perso) est mis en cache Redis
+     * via SiteDetailCache (TTL 90 min, invalidé par ScoreSiteJob). Si
+     * l'utilisateur a un scoring perso ACTIF sur ce site, on lit le
+     * cache puis on applique le rescore par-dessus (status, couleurs,
+     * day_quality). Sinon on renvoie le cache tel quel — cas dominant.
+     */
     public function scores(int $id, Request $request): JsonResponse
     {
-        $site      = Site::active()->findOrFail($id);
-        $allScores = SiteScore::where('site_id', $id)->upcoming()->orderBy('forecast_at')->get();
+        $site = Site::active()->findOrFail($id);
 
-        // Re-scoring perso : map forecast_at(Y-m-d H:i:s) => ['status', 'colors']
-        // ou null si l'user n'a pas de scoring perso actif sur ce site.
+        // Récupère/construit la version "global" depuis le cache.
+        // Le builder fait toutes les queries SQL et la mise en forme.
+        $payload = $this->detailCache->rememberScores(
+            $site->id,
+            fn () => $this->buildGlobalScoresPayload($site),
+        );
+
+        // Si user authentifié avec scoring perso ACTIF sur ce site,
+        // applique le rescore. Le rescore est lui-même cached 1 h par
+        // UserScoringService (très rapide en cache hit).
         $userId       = $request->user()?->id;
         $userRescored = $userId !== null
             ? $this->userScoring->rescoreForUserSite($userId, $site->id)
             : null;
+
+        if ($userRescored !== null) {
+            $payload = $this->applyUserRescoreToPayload($payload, $userRescored, $site);
+        }
+
+        return response()->json($payload);
+    }
+
+    /**
+     * Construit le payload "global" (sans rescore perso) des scores
+     * d'un site. Appelé par le cache miss de scores() — doit donc
+     * être pur (pas de Request, pas d'user-state) et retourner des
+     * arrays/primitives uniquement (pas d'Eloquent).
+     *
+     * @return array<string,mixed>
+     */
+    private function buildGlobalScoresPayload(Site $site): array
+    {
+        $allScores = SiteScore::where('site_id', $site->id)
+            ->upcoming()
+            ->orderBy('forecast_at')
+            ->get();
 
         $grouped    = $allScores->groupBy(fn ($s) => $s->forecast_at->format('d/m'));
         $scores     = collect();
@@ -83,35 +123,21 @@ class SiteController extends Controller
                 $h = (int) $score->forecast_at->format('G');
                 if ($h >= $window['start_hour'] && $h <= $window['end_hour']) {
                     $scores->push($score);
-                    // La viabilité du jour utilise le scoring **effectif**
-                    // (perso si applicable, global sinon) — c'est la
-                    // couleur du marqueur côté carte.
-                    $rkey = $score->forecast_at->format('Y-m-d H:i:s');
-                    $byHour[$h] = $userRescored[$rkey]['status'] ?? $score->status;
+                    $byHour[$h] = $score->status;
                 }
             }
             $dayQuality[$day] = $this->computeDayQuality($byHour, $window);
         }
 
-        $scoringSource = $userRescored !== null ? 'user' : 'global';
-
-        return response()->json([
+        return [
             'site'           => ['id' => $site->id, 'name' => $site->name, 'altitude' => $site->altitude_m, 'level' => $site->level],
-            'scoring_source' => $scoringSource,
-            'scores'         => $scores->map(function ($s) use ($userRescored) {
-                $rkey   = $s->forecast_at->format('Y-m-d H:i:s');
-                $perso  = $userRescored[$rkey] ?? null;
-                // Si l'user a un scoring perso, on remplace `status` et les
-                // `detail.*.color`. On conserve TOUJOURS la version globale
-                // dans `detail.*.color_global` + `status_global` pour
-                // alimenter l'onglet de comparaison (cellules split
-                // diagonale, ligne "Statut global" incluse).
-                $detail = $this->trimScoreDetail($s->detail, $perso['colors'] ?? null);
-                $row = [
+            'scoring_source' => 'global',
+            'scores'         => $scores->map(function ($s) {
+                return [
                     'forecast_at'  => $s->forecast_at->format('Y-m-d H:i'),
                     'day'          => $s->forecast_at->format('d/m'),
                     'hour'         => $s->forecast_at->format('H:i'),
-                    'status'       => $perso['status']    ?? $s->status,
+                    'status'       => $s->status,
                     'confidence'   => $s->confidence_pct,
                     'wind_dir'     => $s->wind_dir_consensus,
                     'wind_speed'   => $s->wind_speed_consensus,
@@ -120,26 +146,108 @@ class SiteController extends Controller
                     'cloud_base'   => $s->cloud_base_consensus,
                     'models_count' => $s->models_count,
                     'models_conv'  => $s->models_converging,
-                    'detail'       => $detail,
+                    'detail'       => $this->trimScoreDetail($s->detail, null),
                 ];
-                if ($perso !== null) {
-                    $row['status_global'] = $s->status;
-                }
-                return $row;
-            })->values(),
+            })->values()->all(),
             'sun_windows' => $sunWindows,
             'day_quality' => $dayQuality,
-        ]);
+        ];
+    }
+
+    /**
+     * Applique le rescore perso d'un utilisateur sur un payload global
+     * (issu du cache). Modifie : `scoring_source`, `status` + couleurs
+     * par créneau, `status_global` (préservé), et recalcule
+     * `day_quality` avec les nouveaux statuses.
+     *
+     * @param array<string,mixed> $payload
+     * @param array<string,array{status:string,colors:array<string,string>}> $userRescored
+     * @return array<string,mixed>
+     */
+    private function applyUserRescoreToPayload(array $payload, array $userRescored, Site $site): array
+    {
+        $payload['scoring_source'] = 'user';
+
+        // 1. Reconstruit la map by-day des statuses pour recalculer day_quality.
+        // Le payload cached n'a pas les forecast_at H:i:s — on les reconstruit
+        // depuis day (d/m) + hour (H:i) en assumant l'année courante.
+        $byDay = [];
+        $now   = new \DateTimeImmutable('now', new \DateTimeZone('Europe/Paris'));
+
+        // 2. Met à jour chaque score : status user + status_global + couleurs.
+        foreach ($payload['scores'] as &$score) {
+            // Reconstitue le forecast_at Y-m-d H:i:s à partir de day d/m + hour H:i
+            // (le payload a forecast_at en Y-m-d H:i, on le complète).
+            $rkey  = $score['forecast_at'] . ':00';
+            $perso = $userRescored[$rkey] ?? null;
+            if ($perso === null) {
+                continue;
+            }
+            $score['status_global'] = $score['status'];
+            $score['status']        = $perso['status'];
+
+            // Met à jour les couleurs dans le `detail.<param>.color`
+            // (préserve color_global = ancienne couleur globale).
+            if (isset($score['detail']) && is_array($score['detail'])) {
+                foreach ($score['detail'] as $param => &$info) {
+                    if (! is_array($info)) {
+                        continue;
+                    }
+                    $userColor = $perso['colors'][$param] ?? null;
+                    if ($userColor !== null) {
+                        $info['color_global'] = $info['color'] ?? null;
+                        $info['color']        = $userColor;
+                    }
+                }
+                unset($info);
+            }
+
+            // Indexe par jour pour recalcul day_quality
+            $day = $score['day'];
+            $h   = (int) explode(':', $score['hour'])[0];
+            $byDay[$day][$h] = $perso['status'];
+        }
+        unset($score);
+
+        // 3. Recalcule day_quality avec les statuses user.
+        foreach ($payload['sun_windows'] as $day => $window) {
+            $statuses = $byDay[$day] ?? [];
+            if (empty($statuses)) {
+                // Pas d'override sur ce jour → conserver le day_quality global.
+                continue;
+            }
+            $payload['day_quality'][$day] = $this->computeDayQuality($statuses, $window);
+        }
+
+        return $payload;
     }
 
     /**
      * Données horaires agrégées pour le popup graphique :
      * vent min/moy/max, couverture nuageuse haute/moy/basse, direction.
+     *
+     * Mis en cache transparent (TTL 90 min, invalidé par ScoreSiteJob).
      */
     public function chart(int $id): JsonResponse
     {
         $site = Site::active()->with('conditions')->findOrFail($id);
 
+        $payload = $this->detailCache->rememberChart(
+            $site->id,
+            fn () => $this->buildChartPayload($site),
+        );
+
+        return response()->json($payload);
+    }
+
+    /**
+     * Construction pure du payload chart (réutilisée par le cache miss).
+     *
+     * @return array<string,mixed>
+     */
+    private function buildChartPayload(Site $site): array
+    {
+        $id   = $site->id;
         // Fenêtre temporelle : du début de la journée courante (pour exposer
         // toute la fenêtre solaire du jour, y compris les heures déjà passées)
         // jusqu'à l'horizon de prévision (5 jours).
@@ -202,7 +310,7 @@ class SiteController extends Controller
             if (!empty($dayData)) $days[$day] = $dayData;
         }
 
-        return response()->json([
+        return [
             'site' => [
                 'id'             => $site->id,
                 'name'           => $site->name,
@@ -215,7 +323,7 @@ class SiteController extends Controller
             ],
             'days'        => $days,
             'sun_windows' => $sunWindows,
-        ]);
+        ];
     }
 
     /**
@@ -243,6 +351,27 @@ class SiteController extends Controller
             $period = 'daylight';
         }
 
+        // Cache transparent : pas de logique user-spec, on stocke
+        // directement le payload complet (TTL 90 min, invalidé à la fin
+        // du ScoreSiteJob via SiteDetailCache::forgetSite).
+        $payload = $this->detailCache->rememberMultimodel(
+            $site->id,
+            $day,
+            $period,
+            fn () => $this->buildMultimodelPayload($site, $day, $period),
+        );
+
+        return response()->json($payload);
+    }
+
+    /**
+     * Construction pure du payload multimodel (réutilisée par le cache miss).
+     *
+     * @return array<string,mixed>
+     */
+    private function buildMultimodelPayload(Site $site, string $day, string $period): array
+    {
+        $id       = $site->id;
         $tz       = new \DateTimeZone('Europe/Paris');
         $dayStart = \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', $day . ' 00:00:00', $tz);
         $dayEnd   = (clone $dayStart)->endOfDay();
@@ -253,6 +382,8 @@ class SiteController extends Controller
             ? range(0, 23)
             : range($sunWindow['start_hour'], $sunWindow['end_hour']);
 
+        // Toujours un array natif (pas une Collection) : on cache le payload
+        // et on évite de sérialiser des objets Eloquent (cf. point 11 CLAUDE.md).
         $models = WeatherModel::where('active', true)
             ->orderBy('id')
             ->get()
@@ -263,7 +394,8 @@ class SiteController extends Controller
                 'provider' => $m->provider,
                 'color'    => self::MODEL_COLORS[$m->code] ?? '#9ca3af',
             ])
-            ->values();
+            ->values()
+            ->all();
 
         $forecasts = Forecast::where('site_id', $id)
             ->whereBetween('forecast_at', [$dayStart, $dayEnd])
@@ -312,7 +444,7 @@ class SiteController extends Controller
             ? (int) round(array_sum($confidences) / count($confidences))
             : null;
 
-        return response()->json([
+        return [
             'site' => [
                 'id'             => $site->id,
                 'name'           => $site->name,
@@ -333,7 +465,7 @@ class SiteController extends Controller
             'data'           => $data,
             'consensus'      => $consensus,
             'conformity_pct' => $conformityPct,
-        ]);
+        ];
     }
 
     // ── Helpers ──────────────────────────────────────────────

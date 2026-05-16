@@ -6,6 +6,7 @@ namespace App\Jobs;
 
 use App\Models\Site;
 use App\Models\WeatherModel;
+use App\Services\Map\SiteDetailCache;
 use App\Services\Weather\ScoringService;
 use App\Services\Weather\UserScoringService;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -31,8 +32,11 @@ class FetchSiteForecastsJob implements ShouldQueue
         private readonly int $siteId
     ) {}
 
-    public function handle(ScoringService $scoring, UserScoringService $userScoring): void
-    {
+    public function handle(
+        ScoringService $scoring,
+        UserScoringService $userScoring,
+        SiteDetailCache $detailCache,
+    ): void {
         $site = Site::with('conditions')->find($this->siteId);
         if (! $site) {
             Log::error("FetchSiteForecastsJob: site {$this->siteId} introuvable.");
@@ -50,8 +54,10 @@ class FetchSiteForecastsJob implements ShouldQueue
         // Scoring unique en fin de salve (évite N rescoring redondants)
         $scoring->computeScoresForSite($site);
 
-        // Les consensus du site ont changé : on purge les caches user-scoring
-        // calés dessus. Sera reconstruit à la prochaine consultation.
+        // Les consensus du site ont changé : on purge les caches qui en
+        // dépendent — détail volet droit (scores/chart/multimodel) +
+        // user-scoring perso. Cf. FF_map_bundle_cache.md (phase 2).
+        $detailCache->forgetSite($site->id);
         $userScoring->invalidateSite($site->id);
 
         // Régénérer le map bundle pour que `/api/map-bundle` reflète les
