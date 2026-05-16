@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* Font Awesome auto-hébergé : évite la dépendance au CDN cloudflare
+   qui est bloqué par certains opérateurs mobiles / DNS publics, ce
+   qui rendait la navbar mobile (où tout est icônes) totalement vide
+   sur certains téléphones. */
+@import "@fortawesome/fontawesome-free/css/fontawesome.css";
+@import "@fortawesome/fontawesome-free/css/solid.css";
+@import "@fortawesome/fontawesome-free/css/regular.css";
+@import "@fortawesome/fontawesome-free/css/brands.css";
+
 /* Évite le flash des éléments Alpine (x-show / x-transition) avant l'init JS */
 [x-cloak] {
     display: none !important;
