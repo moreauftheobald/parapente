@@ -7,6 +7,7 @@ namespace App\Services\Balises;
 use App\Models\Balise;
 use App\Services\Settings;
 use Carbon\Carbon;
+use Illuminate\Http\Client\Pool;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -56,6 +57,14 @@ class WindyOpenDataProvider implements BaliseProviderInterface
 {
     private const BASE_URL  = 'https://stations.windy.com';
     private const TIMEOUT_S = 30;
+
+    /**
+     * Concurrence des appels observation. Windy n'a pas de quota visible
+     * sur l'opendata mais on reste courtois — 10 requêtes simultanées
+     * est un compromis raisonnable (50 balises → ~5 batches en parallèle
+     * au lieu de 50 séquentiels = ~80 % de temps gagné).
+     */
+    private const POOL_CONCURRENCY = 10;
 
     /** Garde-fou pagination : 200 pages × 100 stations = 20 000 max
      *  (le catalogue mondial fait ~14 300 stations à la mise en service
@@ -168,8 +177,8 @@ class WindyOpenDataProvider implements BaliseProviderInterface
     }
 
     /**
-     * GET /api/v2/opendata/station/{id}/observation pour chaque
-     * balise Windy active connue en base.
+     * GET /api/v2/opendata/station/{id}/observation pour chaque balise
+     * Windy active connue en base, en batches parallèles (Http::pool).
      */
     public function fetchLatestReadings(): array
     {
@@ -179,23 +188,54 @@ class WindyOpenDataProvider implements BaliseProviderInterface
             return [];
         }
 
-        $balises = Balise::query()
+        $externalIds = Balise::query()
             ->where('source', $this->source())
             ->where('active', true)
-            ->get(['id', 'external_id']);
+            ->pluck('external_id')
+            ->filter(fn ($id) => (string) $id !== '')
+            ->values()
+            ->all();
 
-        if ($balises->isEmpty()) return [];
+        if (empty($externalIds)) return [];
 
-        $client = $this->client($key);
-        $out = [];
+        $headers = ['windy-api-key' => $key];
+        $out     = [];
 
-        foreach ($balises as $b) {
-            $extId = (string) $b->external_id;
-            if ($extId === '') continue;
+        foreach (array_chunk($externalIds, self::POOL_CONCURRENCY) as $batch) {
+            $responses = Http::pool(function (Pool $pool) use ($batch, $headers) {
+                return array_map(
+                    fn (string $extId) => $pool
+                        ->as($extId)
+                        ->timeout(self::TIMEOUT_S)
+                        ->withHeaders($headers)
+                        ->acceptJson()
+                        ->get(self::BASE_URL . '/api/v2/opendata/station/' . urlencode($extId) . '/observation'),
+                    array_map('strval', $batch),
+                );
+            });
 
-            $reading = $this->fetchOneObservation($client, $extId);
-            if ($reading !== null) {
-                $out[$extId] = $reading;
+            foreach ($batch as $extId) {
+                $extId    = (string) $extId;
+                $response = $responses[$extId] ?? null;
+                if ($response === null) {
+                    continue;
+                }
+
+                // Exceptions de connexion : Http::pool retourne l'exception
+                // dans la position du résultat — on log et on skip cette
+                // station sans casser le reste du batch.
+                if ($response instanceof \Throwable) {
+                    Log::info('WindyOpenDataProvider observation pool exception', [
+                        'station' => $extId,
+                        'error'   => $response->getMessage(),
+                    ]);
+                    continue;
+                }
+
+                $reading = $this->parseObservation($response, $extId);
+                if ($reading !== null) {
+                    $out[$extId] = $reading;
+                }
             }
         }
 
@@ -344,10 +384,8 @@ class WindyOpenDataProvider implements BaliseProviderInterface
      *   humidity: ?int,
      * }|null
      */
-    private function fetchOneObservation(\Illuminate\Http\Client\PendingRequest $client, string $externalId): ?array
+    private function parseObservation(\Illuminate\Http\Client\Response $resp, string $externalId): ?array
     {
-        $resp = $client->get('/api/v2/opendata/station/' . urlencode($externalId) . '/observation');
-
         if (! $resp->ok()) {
             Log::info('WindyOpenDataProvider observation HTTP non-OK', [
                 'station' => $externalId,

@@ -12,6 +12,7 @@ use App\Services\Map\BalisesBundleCache;
 use Carbon\Carbon;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -37,6 +38,13 @@ abstract class FetchBaliseReadingsJob implements ShouldQueue
     use Queueable;
 
     public int $tries = 2;
+
+    /**
+     * TTL du cache `last_reading_by_balise:{source}` (en secondes).
+     * On évite ainsi un `GROUP BY MAX(read_at)` SQL à chaque tick — le
+     * cache est de toute façon réécrit par ce même job à la fin du run.
+     */
+    private const LAST_READING_CACHE_TTL = 3600;
 
     /**
      * Code source (`pioupiou`, `metar`, `windy`…). Stocké dans
@@ -77,10 +85,18 @@ abstract class FetchBaliseReadingsJob implements ShouldQueue
             ->keyBy('external_id');
 
         // Dernière read_at par balise pour éviter de re-insérer des doublons.
-        $latestPerBalise = BaliseReading::whereIn('balise_id', $balises->pluck('id'))
-            ->select('balise_id', DB::raw('MAX(read_at) as latest'))
-            ->groupBy('balise_id')
-            ->pluck('latest', 'balise_id');
+        // Cache Redis (clé par source) : à chaque cycle, on hydrate depuis
+        // le cache si possible et on réécrit le map mis à jour. Évite un
+        // `GROUP BY MAX(read_at)` SQL par tick.
+        $cacheKey         = $this->lastReadingCacheKey();
+        $latestPerBalise  = Cache::get($cacheKey);
+        if (! is_array($latestPerBalise)) {
+            $latestPerBalise = BaliseReading::whereIn('balise_id', $balises->pluck('id'))
+                ->select('balise_id', DB::raw('MAX(read_at) as latest'))
+                ->groupBy('balise_id')
+                ->pluck('latest', 'balise_id')
+                ->all();
+        }
 
         $inserted = 0;
         foreach ($balises as $extId => $balise) {
@@ -106,7 +122,12 @@ abstract class FetchBaliseReadingsJob implements ShouldQueue
                 'humidity'       => $r['humidity'],
             ]);
             $inserted++;
+            $latestPerBalise[$balise->id] = $r['read_at']->toDateTimeString();
         }
+
+        // On réécrit le cache même si $inserted=0 (toutes les balises connues
+        // sont incluses, ce qui hydrate la clé pour le prochain tick).
+        Cache::put($cacheKey, $latestPerBalise, self::LAST_READING_CACHE_TTL);
 
         // Désactivation des balises mortes : actives depuis > N jours
         // et sans aucune lecture récente sur la même période.
@@ -126,5 +147,10 @@ abstract class FetchBaliseReadingsJob implements ShouldQueue
             'balises_deactivated' => $deactivated,
             'balises_polled'      => $balises->count(),
         ]);
+    }
+
+    private function lastReadingCacheKey(): string
+    {
+        return 'balises.last_reading_by_balise:' . $this->source();
     }
 }

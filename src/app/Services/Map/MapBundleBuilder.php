@@ -98,10 +98,22 @@ final class MapBundleBuilder
 
         $sites = Site::active()->with('conditions')->orderBy('id')->get();
 
+        // Précharge TOUS les SiteScore upcoming en 1 seule query, puis
+        // groupe par site_id en PHP — évite le N+1 (1 query/site → 1 query
+        // pour tous les sites). À 14 sites c'est anecdotique, à 100+ c'est
+        // décisif.
+        $scoresBySite = $sites->isEmpty()
+            ? collect()
+            : SiteScore::whereIn('site_id', $sites->pluck('id'))
+                ->upcoming()
+                ->orderBy('forecast_at')
+                ->get()
+                ->groupBy('site_id');
+
         // 1ère passe : construire le payload de chaque site.
         $sitesPayload = [];
         foreach ($sites as $site) {
-            $sitesPayload[] = $this->buildSitePayload($site);
+            $sitesPayload[] = $this->buildSitePayload($site, $scoresBySite->get($site->id, collect()));
         }
 
         // 2e passe : agrégat global jour-par-jour (alimente le sélecteur
@@ -135,17 +147,12 @@ final class MapBundleBuilder
      *
      * @return array<string,mixed>
      */
-    private function buildSitePayload(Site $site): array
+    private function buildSitePayload(Site $site, \Illuminate\Support\Collection $siteScores): array
     {
         $lat = (float) $site->latitude;
         $lng = (float) $site->longitude;
 
-        $allScores = SiteScore::where('site_id', $site->id)
-            ->upcoming()
-            ->orderBy('forecast_at')
-            ->get();
-
-        $grouped    = $allScores->groupBy(fn (SiteScore $s) => $s->forecast_at->format('d/m'));
+        $grouped    = $siteScores->groupBy(fn (SiteScore $s) => $s->forecast_at->format('d/m'));
         $sunWindows = [];
         $days       = [];
         $greenHoursPerDay = []; // day => [hour, hour, ...] pour agrégat global

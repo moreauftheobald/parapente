@@ -18,6 +18,10 @@ class OpenMeteoApi implements WeatherApiInterface
     private const BATCH_TIMEOUT_S = 60;
     private const BATCH_CHUNK     = 40;
 
+    /**
+     * Variables horaires nécessaires au scoring d'un site (voting logic
+     * complète : vent + précip + nuages + plafond via dew_point).
+     */
     private const HOURLY_VARS = [
         'wind_speed_10m',
         'wind_gusts_10m',
@@ -30,6 +34,19 @@ class OpenMeteoApi implements WeatherApiInterface
         'temperature_2m',
         'relative_humidity_2m',
         'dew_point_2m',
+    ];
+
+    /**
+     * Sous-ensemble utilisé pour le batch balises (4 variables suffisent :
+     * pas de scoring complet, juste les paramètres affichés).
+     * Garder ce subset minimal — agrandir = plus de bytes/balise sur le
+     * batch (parfois 40 points/chunk × N variables).
+     */
+    private const HOURLY_VARS_BALISES = [
+        'wind_speed_10m',
+        'wind_gusts_10m',
+        'wind_direction_10m',
+        'temperature_2m',
     ];
 
     // Variables journalières — agrégées à la volée par Open-Meteo.
@@ -198,7 +215,7 @@ class OpenMeteoApi implements WeatherApiInterface
                 ->get($this->baseUrl . '/forecast', [
                     'latitude'        => implode(',', $lats),
                     'longitude'       => implode(',', $lngs),
-                    'hourly'          => 'wind_speed_10m,wind_gusts_10m,wind_direction_10m,temperature_2m',
+                    'hourly'          => implode(',', self::HOURLY_VARS_BALISES),
                     'models'          => $model->code,
                     'forecast_days'   => self::DAYS,
                     'wind_speed_unit' => self::WIND_UNIT,

@@ -34,6 +34,12 @@ function mapApp(){return{
     chartData:null, chartLoading:false, chartSite:null,   // onglet « Synthèse » (= ancienne popup)
     multimodelData:null,  multimodelLoading:false,        // onglet « Modèles du jour »
     multimodel5Data:null, multimodel5Loading:false,       // onglet « Modèles 5 jours »
+    // Cache mémoire des payloads /api/sites/{id}/multimodel par YYYY-MM-DD.
+    // Permet d'éviter de re-fetcher les jours déjà chargés quand l'utilisateur
+    // navigue entre les onglets « Modèles du jour » / « 5 jours » et entre
+    // les jours sélectionnés. Reset à chaque changement de site (pickSite,
+    // closeRightPanel).
+    _multimodelByDay:{},
     chartCollapsed:{}, chartCollapsed5:{},                // état replié de chaque section graphe
     tooltip:{visible:false, x:0, y:0, hour:'', consensus:null, rows:[]},  // tooltip flottant des graphes
     // Tooltip dédié aux cellules de l'onglet « Détail scoring » — utile
@@ -53,6 +59,7 @@ function mapApp(){return{
     _balisesLayers:{},        // { source: L.layerGroup() }
     _balisesMarkers:{},       // { baliseId: L.marker } (toutes sources confondues)
     _balisesTimer:null,
+    _balisesAbort:null,       // AbortController du fetch /api/balises en cours (dédup polling)
     // Volet droit (balise) : relevés + historique du jour
     baliseData:null, baliseLoading:false, _baliseObj:null,
 
@@ -132,6 +139,7 @@ function mapApp(){return{
         this.selectedFeature=null;
         this.chartData=null; this.chartSite=null;
         this.multimodelData=null; this.multimodel5Data=null;
+        this._multimodelByDay={};
         this.baliseData=null; this._baliseObj=null;
         Object.values(this.markers).forEach(m=>m.getElement()?.querySelector('.pg-site-marker')?.classList.remove('selected'));
     },
@@ -343,6 +351,7 @@ function mapApp(){return{
         this.rpTab='synthese';
         this.chartData=null; this.chartSite=null;
         this.multimodelData=null; this.multimodel5Data=null;
+        this._multimodelByDay={};
         this.openRightPanel();
         // Chargements lazy en parallèle :
         //  - loadSiteScores : pour l'onglet « Détail scoring » (allScores[id])
@@ -557,18 +566,26 @@ function mapApp(){return{
         const day=this.days[this.selectedDayIdx]?.raw;
         if(!day) return;
         const ymd=this._dayRawToYmd(day);
+        // Cache mémoire : si on a déjà ce jour, on bypass le fetch.
+        if(this._multimodelByDay[ymd]){
+            this.multimodelData=this._multimodelByDay[ymd];
+            this.$nextTick(()=>this.renderCharts());
+            return;
+        }
         this.multimodelData=null;
         this.multimodelLoading=true;
         try{
             const r=await fetch(`/api/sites/${this.site.id}/multimodel?day=${ymd}&period=24h`);
             if(!r.ok) throw new Error('HTTP '+r.status);
-            this.multimodelData=await r.json();
+            const payload=await r.json();
+            this._multimodelByDay[ymd]=payload;
+            this.multimodelData=payload;
         }catch(e){console.error('multimodel load failed',e);}
         this.multimodelLoading=false;
         this.$nextTick(()=>this.renderCharts());
     },
-    // Charge les 5 jours en parallèle et fusionne en une structure
-    // unique avec hours = [0..119] (5 jours × 24h).
+    // Charge les 5 jours en parallèle (en sautant ceux déjà en cache) et
+    // fusionne en une structure unique avec hours = [0..119] (5 jours × 24h).
     async loadFiveDays(){
         if(!this.site?.id || !this.days.length) return;
         this.multimodel5Loading=true;
@@ -576,13 +593,21 @@ function mapApp(){return{
         try{
             const slice=this.days.slice(0,5);
             const ymds=slice.map(d=>this._dayRawToYmd(d.raw));
-            const reqs=ymds.map(ymd=>
-                fetch(`/api/sites/${this.site.id}/multimodel?day=${ymd}&period=24h`).then(r=>{
-                    if(!r.ok) throw new Error('HTTP '+r.status);
-                    return r.json();
-                })
-            );
-            const responses=await Promise.all(reqs);
+            // Ne fetch que les jours manquants du cache.
+            const missing=ymds.filter(ymd=>!this._multimodelByDay[ymd]);
+            if(missing.length){
+                const reqs=missing.map(ymd=>
+                    fetch(`/api/sites/${this.site.id}/multimodel?day=${ymd}&period=24h`).then(r=>{
+                        if(!r.ok) throw new Error('HTTP '+r.status);
+                        return r.json().then(payload=>{
+                            this._multimodelByDay[ymd]=payload;
+                            return payload;
+                        });
+                    })
+                );
+                await Promise.all(reqs);
+            }
+            const responses=ymds.map(ymd=>this._multimodelByDay[ymd]);
             const merged={
                 viewMode:'fivedays',
                 site:responses[0].site,
@@ -653,12 +678,19 @@ function mapApp(){return{
 
     // ── Balises météo ────────────────────────────────────────────
     async loadBalises(){
+        // Dédup : si une requête est déjà en vol (réseau lent), on l'annule
+        // pour éviter une race condition (réponse 2 qui arrive avant la 1
+        // → données périmées affichées).
+        if(this._balisesAbort) this._balisesAbort.abort();
+        this._balisesAbort=new AbortController();
         try{
-            const r=await fetch('/api/balises');
+            const r=await fetch('/api/balises',{signal:this._balisesAbort.signal});
             if(!r.ok) throw new Error('HTTP '+r.status);
             this.balises=await r.json();
             this.renderBalises();
-        }catch(e){console.warn('loadBalises failed',e);}
+        }catch(e){
+            if(e.name!=='AbortError') console.warn('loadBalises failed',e);
+        }
     },
     /** Source d'une balise, normalisée vers une clé connue de
      *  BALISE_NETWORKS. Un fournisseur inattendu (ex. holfuy à venir)
