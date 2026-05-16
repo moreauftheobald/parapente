@@ -8,6 +8,35 @@ function svgMk(svg, tag, attrs, parent) {
     return e;
 }
 
+/**
+ * Factory qui retourne des helpers SVG `mk` et `txt` "bound" à un SVG
+ * racine. Évite d'avoir à passer `svgEl` à chaque appel — utilisé par
+ * les graphes de la popup (popup-chart, balise-chart) qui construisent
+ * 100+ éléments SVG par graphe.
+ *
+ * Usage :
+ *   const { mk, txt } = svgHelpers(svgEl);
+ *   mk('rect', {x:0, y:0, width:10, height:10, fill:'#fff'});
+ *   txt(20, 30, 'Bonjour', 12, '#cbd5e1', 'middle');
+ */
+function svgHelpers(svg) {
+    const mk = (tag, attrs, parent) => {
+        const e = document.createElementNS(NS, tag);
+        for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+        (parent || svg).appendChild(e);
+        return e;
+    };
+    const txt = (x, y, s, sz, fill, anchor, baseline) => {
+        const attrs = { x, y, 'font-family': 'DM Mono,monospace', 'font-size': sz, fill };
+        if (anchor)   attrs['text-anchor']       = anchor;
+        if (baseline) attrs['dominant-baseline'] = baseline;
+        const t = mk('text', attrs);
+        t.textContent = s;
+        return t;
+    };
+    return { mk, txt };
+}
+
 function computeYDomain(cfg, data) {
     const vals = [];
     data.hours.forEach(h => {

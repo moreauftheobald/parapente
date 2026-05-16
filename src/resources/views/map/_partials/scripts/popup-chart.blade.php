@@ -29,16 +29,7 @@ function buildChartSVG(dayData, siteInfo) {
     const maxWind = Math.max(...dayData.map(d => d.wind_max || 0)) || 30;
     const scale   = WIND_H / maxWind;
 
-    function mk(tag, attrs, parent) {
-        const e = document.createElementNS(NS, tag);
-        for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-        (parent || svgEl).appendChild(e);
-        return e;
-    }
-    function txt(x, y, s, sz, fill, anchor) {
-        const t = mk('text', {x, y, 'font-family':'DM Mono,monospace', 'font-size':sz, fill, ...(anchor?{'text-anchor':anchor}:{})});
-        t.textContent = s;
-    }
+    const { mk, txt } = svgHelpers(svgEl);
 
     // ── Couverture nuageuse ──────────────────────────────────
     txt(10, 10, 'Couverture nuageuse', FS_LBL, '#e5e7eb');
@@ -160,17 +151,8 @@ function buildCeilingSVG(dayData, siteInfo) {
     const C_MIN = '#3b82f6';               // min modèles
     const C_LOW = 'rgba(239,68,68,.8)';    // consensus sous le décollage
 
-    function mk(tag, attrs, parent) {
-        const e = document.createElementNS(NS, tag);
-        for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-        (parent || svgEl).appendChild(e);
-        return e;
-    }
-    function txt(x, y, s, sz, fill, anchor) {
-        const t = mk('text', {x, y, 'font-family':'DM Mono,monospace', 'font-size':sz, fill, ...(anchor?{'text-anchor':anchor}:{})});
-        t.textContent = s;
-    }
-    function barTop(v) { return BASE_Y - Math.max(1, Math.min(v, scaleMax) * scale); }
+    const { mk, txt } = svgHelpers(svgEl);
+    const barTop = v => BASE_Y - Math.max(1, Math.min(v, scaleMax) * scale);
 
     // Titre + légende
     txt(10, 10, 'Plafond de vol estimé (m)', FS_LBL, '#e5e7eb');

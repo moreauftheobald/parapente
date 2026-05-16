@@ -45,20 +45,7 @@ function buildBaliseRoseSVG(data) {
         return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
     };
 
-    function mk(tag, attrs, parent) {
-        const e = document.createElementNS(NS, tag);
-        for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-        (parent || svg).appendChild(e);
-        return e;
-    }
-    function txt(x, y, s, sz, fill, anchor, baseline) {
-        const t = mk('text', {
-            x, y, 'font-family': 'DM Mono,monospace', 'font-size': sz, fill,
-            ...(anchor ? { 'text-anchor': anchor } : {}),
-            ...(baseline ? { 'dominant-baseline': baseline } : {}),
-        });
-        t.textContent = s;
-    }
+    const { mk, txt } = svgHelpers(svg);
 
     // Anneaux concentriques (échelle vitesse)
     [vmax / 2, vmax].forEach(v => {
@@ -121,22 +108,18 @@ function highlightBaliseRoseAt(reading) {
     const speed = Math.max(reading.wind_speed_avg ?? 0, vmax * 0.10);
     const [px, py] = toXY(reading.wind_direction, rScale(speed));
 
-    const add = (tag, attrs) => {
-        const e = document.createElementNS(NS, tag);
-        for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-        g.appendChild(e);
-        return e;
-    };
-    add('line', { x1: cx, y1: cy, x2: px.toFixed(1), y2: py.toFixed(1), stroke: '#fff', 'stroke-width': 3, 'stroke-linecap': 'round' });
-    add('circle', { cx: px.toFixed(1), cy: py.toFixed(1), r: 5.5, fill: '#fff' });
+    // svgHelpers crée par défaut dans le svg racine — ici on veut tout
+    // pousser dans le groupe `rose-hl`, donc on passe `g` comme parent.
+    const { mk, txt } = svgHelpers(g);
+    mk('line', { x1: cx, y1: cy, x2: px.toFixed(1), y2: py.toFixed(1), stroke: '#fff', 'stroke-width': 3, 'stroke-linecap': 'round' });
+    mk('circle', { cx: px.toFixed(1), cy: py.toFixed(1), r: 5.5, fill: '#fff' });
 
     const compass = (typeof degToCompass === 'function') ? degToCompass(reading.wind_direction) : '';
     const label   = `${reading.time ?? ''} · ${Math.round(reading.wind_speed_avg ?? 0)} km/h · ${compass}`;
     const anchor  = px >= cx ? 'start' : 'end';
     const lx = px + (px >= cx ? 6 : -6);
     const ly = py + (py >= cy ? 12 : -5);
-    const t = add('text', { x: lx.toFixed(1), y: ly.toFixed(1), 'font-family': 'DM Mono,monospace', 'font-size': 9, fill: '#fff', 'text-anchor': anchor });
-    t.textContent = label;
+    txt(lx.toFixed(1), ly.toFixed(1), label, 9, '#fff', anchor);
 }
 
 function buildBaliseChartSVG(data) {
@@ -171,16 +154,7 @@ function buildBaliseChartSVG(data) {
     ymax = Math.max(15, Math.ceil(ymax * 1.1));
     const yScale = v => baseY - Math.min(v, ymax) / ymax * innerH;
 
-    function mk(tag, attrs, parent) {
-        const e = document.createElementNS(NS, tag);
-        for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-        (parent || svg).appendChild(e);
-        return e;
-    }
-    function txt(x, y, s, sz, fill, anchor) {
-        const t = mk('text', { x, y, 'font-family': 'DM Mono,monospace', 'font-size': sz, fill, ...(anchor ? { 'text-anchor': anchor } : {}) });
-        t.textContent = s;
-    }
+    const { mk, txt } = svgHelpers(svg);
 
     // ── Grille Y ─────────────────────────────────────────────
     [0, Math.round(ymax / 2), ymax].forEach(v => {
@@ -237,7 +211,7 @@ function buildBaliseChartSVG(data) {
 
     // ── Curseur interactif → pilote le rayon de la rose des vents ─
     const cursorG = mk('g', {});
-    const mkc = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); cursorG.appendChild(e); return e; };
+    const { mk: mkc } = svgHelpers(cursorG);
     const clearCursor = () => { while (cursorG.firstChild) cursorG.removeChild(cursorG.firstChild); };
     const overlay = mk('rect', { x: PAD_L, y: PAD_T, width: innerW, height: innerH, fill: 'transparent', 'pointer-events': 'all', style: 'cursor:crosshair;' });
 
