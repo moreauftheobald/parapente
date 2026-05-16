@@ -10,6 +10,7 @@ use App\Models\WeatherFetchLog;
 use App\Models\WeatherModel;
 use App\Services\Weather\ForecastFetcher;
 use App\Services\Weather\ScoringService;
+use Illuminate\Bus\Batchable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -23,7 +24,7 @@ use Illuminate\Support\Facades\Log;
  */
 class FetchSiteModelJob implements ShouldQueue
 {
-    use Queueable;
+    use Batchable, Queueable;
 
     public int $timeout = 60;
     public int $tries   = 1; // single-shot

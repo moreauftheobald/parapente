@@ -8,6 +8,7 @@ use App\Models\Site;
 use App\Services\Map\SiteDetailCache;
 use App\Services\Weather\ScoringService;
 use App\Services\Weather\UserScoringService;
+use Illuminate\Bus\Batchable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -25,7 +26,7 @@ use Illuminate\Support\Facades\Log;
  */
 class ScoreSiteJob implements ShouldQueue
 {
-    use Queueable;
+    use Batchable, Queueable;
 
     public int $timeout = 120;
     public int $tries   = 1;
