@@ -73,10 +73,21 @@
            rétracte en portrait. --}}
     <style>
         [x-cloak] { display: none !important; }
-        html, body { background-color: #030712; height: 100dvh; min-height: 100dvh; }
-        @supports not (height: 100dvh) {
-            html, body { height: 100vh; min-height: 100vh; }
-        }
+        /* Reset minimal html/body : aucune hauteur imposée — le shell
+           prend en charge l'ancrage via position:fixed. Cela évite
+           toute dépendance à une chaîne `height:100% / 100dvh` qui
+           est instable sur Chrome Android et Safari iOS (navbar du
+           navigateur qui apparait/disparait, safe areas, etc.). */
+        html, body { background-color: #030712; margin: 0; min-height: 100dvh; min-height: 100vh; }
+        /* Shell racine : position:fixed pour s'ancrer SUR la viewport
+           visuelle, indépendamment de toute hauteur de parent. Cela
+           résout les glitches mobiles signalés (navbar qui disparait,
+           volet qui dépasse au-dessus, bande grise en haut). */
+        .app-shell-root { position: fixed; top: 0; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; overflow: hidden; }
+        /* will-change sur les volets : pré-réserve une couche GPU pour
+           les transitions transform, supprime les artefacts de
+           compositing (volet « fantôme » semi-transparent qui freeze)
+           sur Safari iOS / Chrome Android. */
         aside { will-change: transform; }
     </style>
 
@@ -90,7 +101,7 @@
 </head>
 <body class="bg-gray-950 text-gray-100">
 
-<div class="h-full flex flex-col overflow-hidden {{ $rootClass }}"
+<div class="app-shell-root {{ $rootClass }}"
      x-data="{{ $xDataExpr }}"
      @keydown.escape.window="leftOpen = false; rightOpen = false">
 
