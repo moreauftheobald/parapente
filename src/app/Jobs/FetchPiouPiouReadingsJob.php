@@ -40,8 +40,10 @@ class FetchPiouPiouReadingsJob implements ShouldQueue
     private const DEAD_AFTER_DAYS = 7;
     private const SOURCE          = 'pioupiou';
 
-    public function handle(PiouPiouProvider $provider): void
-    {
+    public function handle(
+        PiouPiouProvider $provider,
+        \App\Services\Map\BalisesBundleCache $cache,
+    ): void {
         $readings = $provider->fetchLatestReadings();
         if (empty($readings)) {
             Log::warning('FetchPiouPiouReadingsJob: empty readings batch');
@@ -94,6 +96,11 @@ class FetchPiouPiouReadingsJob implements ShouldQueue
             ->where('created_at', '<', $deadCutoff)
             ->whereDoesntHave('readings', fn ($q) => $q->where('read_at', '>=', $deadCutoff))
             ->update(['active' => false]);
+
+        // Le bundle balises servi par /api/balises est désormais obsolète :
+        // on purge la clé Redis. Au prochain accès, le BaliseController
+        // reconstruira avec les nouveaux readings.
+        $cache->forgetBundle();
 
         Log::info('FetchPiouPiouReadingsJob completed', [
             'readings_inserted'   => $inserted,

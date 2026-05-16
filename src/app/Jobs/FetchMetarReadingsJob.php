@@ -41,8 +41,10 @@ class FetchMetarReadingsJob implements ShouldQueue
     private const DEAD_AFTER_DAYS = 7;
     private const SOURCE          = 'metar';
 
-    public function handle(MetarProvider $provider): void
-    {
+    public function handle(
+        MetarProvider $provider,
+        \App\Services\Map\BalisesBundleCache $cache,
+    ): void {
         $readings = $provider->fetchLatestReadings();
         if (empty($readings)) {
             Log::warning('FetchMetarReadingsJob: empty readings batch');
@@ -92,6 +94,9 @@ class FetchMetarReadingsJob implements ShouldQueue
             ->where('created_at', '<', $deadCutoff)
             ->whereDoesntHave('readings', fn ($q) => $q->where('read_at', '>=', $deadCutoff))
             ->update(['active' => false]);
+
+        // Le bundle balises est obsolète : purge la clé Redis.
+        $cache->forgetBundle();
 
         Log::info('FetchMetarReadingsJob completed', [
             'readings_inserted'   => $inserted,

@@ -42,8 +42,10 @@ class FetchWindyReadingsJob implements ShouldQueue
     private const DEAD_AFTER_DAYS = 7;
     private const SOURCE          = 'windy';
 
-    public function handle(WindyOpenDataProvider $provider): void
-    {
+    public function handle(
+        WindyOpenDataProvider $provider,
+        \App\Services\Map\BalisesBundleCache $cache,
+    ): void {
         $readings = $provider->fetchLatestReadings();
         if (empty($readings)) {
             // Cas légitime : pas de clé API, ou pas encore de balise
@@ -94,6 +96,9 @@ class FetchWindyReadingsJob implements ShouldQueue
             ->where('created_at', '<', $deadCutoff)
             ->whereDoesntHave('readings', fn ($q) => $q->where('read_at', '>=', $deadCutoff))
             ->update(['active' => false]);
+
+        // Le bundle balises est obsolète : purge la clé Redis.
+        $cache->forgetBundle();
 
         Log::info('FetchWindyReadingsJob completed', [
             'readings_inserted'   => $inserted,

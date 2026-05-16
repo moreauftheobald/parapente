@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Balise;
 use App\Models\BaliseReading;
+use App\Services\Map\BalisesBundleCache;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 
@@ -20,6 +21,10 @@ use Illuminate\Http\JsonResponse;
  * et une tendance pré-calculée sur ~30 minutes (-2 à +2). Les balises
  * sans lecture < 7 jours ne sont pas exposées (déjà filtrées par
  * active=false en base, désactivation auto par FetchPiouPiouReadingsJob).
+ *
+ * Les deux endpoints sont cachés via BalisesBundleCache (TTL 5 min pour
+ * le bundle global, 2 min pour l'historique). Cf. FF_map_bundle_cache.md
+ * (phase 3) — invalidation poussée par les jobs Fetch{PiouPiou,Metar,Windy}.
  */
 class BaliseController extends Controller
 {
@@ -32,7 +37,24 @@ class BaliseController extends Controller
     /** Seuil "marqué" (km/h) */
     private const TREND_HIGH_THRESHOLD = 5.0;
 
+    public function __construct(
+        private readonly BalisesBundleCache $cache,
+    ) {}
+
     public function index(): JsonResponse
+    {
+        $payload = $this->cache->rememberBundle(fn () => $this->buildBundle());
+        return response()->json($payload);
+    }
+
+    /**
+     * Construction pure du bundle balises (cache miss). Retourne un
+     * array natif PHP — pas d'objets Eloquent dans le cache
+     * (cf. point 11 CLAUDE.md).
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private function buildBundle(): array
     {
         // Eager-load la dernière heure de lectures par balise pour
         // permettre le calcul de tendance sans N+1.
@@ -43,7 +65,7 @@ class BaliseController extends Controller
             }])
             ->get();
 
-        $payload = $balises->map(function (Balise $b) {
+        return $balises->map(function (Balise $b) {
             $readings = $b->readings;
             $latest   = $readings->first();
             $reading  = null;
@@ -76,9 +98,7 @@ class BaliseController extends Controller
                 'altitude_m'  => $b->altitude_m,
                 'reading'     => $reading,
             ];
-        })->values();
-
-        return response()->json($payload);
+        })->values()->all();
     }
 
     /**
@@ -90,11 +110,29 @@ class BaliseController extends Controller
      * série des relevés depuis minuit (heure de Paris). Si la balise
      * n'a rien émis aujourd'hui, on remonte jusqu'à 24 h en arrière
      * pour avoir tout de même quelque chose à afficher.
+     *
+     * Caché 2 min (TTL court car les graphes doivent refléter les
+     * nouveaux relevés rapidement).
      */
     public function history(int $id): JsonResponse
     {
         $balise = Balise::active()->findOrFail($id);
 
+        $payload = $this->cache->rememberHistory(
+            $balise->id,
+            fn () => $this->buildHistoryPayload($balise),
+        );
+
+        return response()->json($payload);
+    }
+
+    /**
+     * Construction pure du payload d'historique d'une balise.
+     *
+     * @return array<string,mixed>
+     */
+    private function buildHistoryPayload(Balise $balise): array
+    {
         $tz       = new \DateTimeZone('Europe/Paris');
         $dayStart = Carbon::now($tz)->startOfDay();
 
@@ -129,7 +167,7 @@ class BaliseController extends Controller
             'humidity'       => $r->humidity,
         ];
 
-        return response()->json([
+        return [
             'balise' => [
                 'id'          => $balise->id,
                 'name'        => $balise->name,
@@ -140,10 +178,10 @@ class BaliseController extends Controller
                 'altitude_m'  => $balise->altitude_m,
             ],
             'latest'   => $latest ? $serialize($latest) : null,
-            'readings' => $readings->map($serialize)->values(),
+            'readings' => $readings->map($serialize)->values()->all(),
             'day'      => $dayStart->format('Y-m-d'),
-            'fallback' => $fallback, // true = pas de relevé aujourd'hui, série = dernières 24 h
-        ]);
+            'fallback' => $fallback,
+        ];
     }
 
     /**
