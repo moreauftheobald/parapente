@@ -77,7 +77,11 @@ src/                        ← Racine Laravel
 │   ├── Http/
 │   │   ├── Controllers/
 │   │   │   ├── Api/
-│   │   │   │   └── SiteController.php   ← API JSON sites/scores/chart
+│   │   │   │   ├── SiteController.php       ← API JSON sites/scores/chart/multimodel
+│   │   │   │   ├── BaliseController.php     ← API JSON balises + history
+│   │   │   │   ├── MapBundleController.php  ← Bundle pré-calculé pour boot carte
+│   │   │   │   ├── MeScoringController.php  ← Overrides scoring perso (auth)
+│   │   │   │   └── UserScoringController.php ← CRUD scorings perso utilisateur
 │   │   │   ├── Admin/                   ← BackOffice (sites, balises, modèles,
 │   │   │   │   │                            APIs, users, sync, logs,
 │   │   │   │   │                            ArticleController, ModuleController…)
@@ -92,10 +96,17 @@ src/                        ← Racine Laravel
 │   ├── Support/
 │   │   └── Navigation.php                ← Liste des modules visibles (navbar)
 │   ├── Services/
-│   │   └── Weather/ …                    ← OpenMeteoApi, ForecastFetcher, ScoringService
+│   │   ├── Weather/ …                    ← OpenMeteoApi, ForecastFetcher, ScoringService
+│   │   └── Map/                          ← Cache pré-calculé des données carte
+│   │       ├── MapBundleBuilder.php          (bundle markers, /api/map-bundle)
+│   │       ├── SiteDetailCache.php           (cache /scores /chart /multimodel)
+│   │       ├── BalisesBundleCache.php        (cache /api/balises + /history)
+│   │       ├── DayQualityCalculator.php      (helper viabilité jour)
+│   │       └── SunWindowCalculator.php       (helper fenêtre solaire)
 │   └── Jobs/
-│       ├── FetchForecastsJob.php         ← Orchestre par site
-│       └── FetchSiteForecastsJob.php     ← Fetch + score 1 site
+│       ├── FetchForecastsJob.php         ← Orchestre par site (Bus::batch)
+│       ├── FetchSiteForecastsJob.php     ← Fetch + score 1 site
+│       └── RebuildMapBundleJob.php       ← Régénère le map bundle après scoring
 ├── database/
 │   ├── migrations/
 │   └── seeders/
@@ -175,23 +186,45 @@ Coo Ouest, Algrange, Fumay, Coo Sud, Revin Fallières, Klusserath, Markstein.
 ## API REST
 
 ```
-GET /api/sites              → Liste tous les sites actifs (métadonnées)
+GET /api/map-bundle         → Bundle pré-calculé : tous les sites + statuts
+                              journaliers + fenêtres solaires + agrégat global
+                              par jour. Boot de la carte = 1 seul appel
+                              (avant : 1 + N appels). Cache Redis partagé,
+                              régénéré à la fin de chaque cycle de scoring.
+GET /api/me/scoring-overrides → (auth) Sur-couche utilisateur du bundle :
+                              flag user_scoring + statuts journaliers
+                              recalculés pour les sites avec scoring perso
+                              actif. Fusionné côté client avec le bundle global.
+GET /api/sites              → Liste tous les sites actifs (métadonnées).
+                              Conservé pour rétrocompat — la carte utilise
+                              désormais /api/map-bundle.
 GET /api/sites/{id}/scores  → Scores filtrés fenêtre solaire + sun_windows
                               + day_quality + detail allégé par créneau
                               (consensus/convergence/color des 5 paramètres
-                              de la voting logic ; sans les `values` brutes)
+                              de la voting logic ; sans les `values` brutes).
+                              Cache Redis transparent (version global) +
+                              overlay scoring perso si user authentifié.
 GET /api/sites/{id}/chart   → Données horaires pour popup graphique
-                              (vent min/moy/max, nuages H/M/B, direction)
+                              (vent min/moy/max, nuages H/M/B, direction).
+                              Cache Redis transparent.
 GET /api/sites/{id}/multimodel?day=YYYY-MM-DD&period=24h|daylight
                             → Détail multi-modèles d'une journée (vent,
                               direction, précip, humidité, température,
-                              plafond) + consensus par heure
+                              plafond) + consensus par heure.
+                              Cache Redis transparent (par day × period).
+GET /api/balises            → Liste des balises actives + dernière lecture
+                              + tendance 30 min. Cache Redis transparent
+                              (TTL 5 min, invalidé par les jobs Fetch*Readings).
+GET /api/balises/{id}/history → Historique du jour (graphes volet droit).
+                              Cache Redis transparent (TTL 2 min).
 ```
 
 ### Fenêtre de vol solaire (appliquée dans `SiteController`)
 - Début : lever du soleil − 30min → **floor** à l'heure (ex: 06:40 → 6h)
 - Fin   : coucher du soleil + 30min → **ceil** à l'heure (ex: 18:50 → 19h)
 - Calculé via `date_sunrise` / `date_sunset` PHP natif, timezone Europe/Paris
+- Logique extraite dans `App\Services\Map\SunWindowCalculator` (statique,
+  réutilisé par `SiteController` et `MapBundleBuilder`).
 
 ---
 
@@ -376,6 +409,53 @@ seuils — injection automatique par DI Laravel) :
 > Tous les paramètres (pic / σ / valeurs green/orange / run base/step /
 > seuils) sont éditables depuis `/admin/settings` (clés `viability.*`).
 
+### Cache des données carte — `App\Services\Map\*`
+
+Tous les endpoints alimentant la vue carte sont **pré-calculés** en cache
+Redis pour soulager la DB et accélérer le boot mobile :
+
+- **`MapBundleBuilder`** (`map.bundle.v1`, TTL 90 min)
+  - Construit le bundle global servi à `/api/map-bundle` : tous les sites
+    actifs avec leurs statuts journaliers (issus de `site_scores`), les
+    fenêtres solaires, et l'agrégat global par jour (best_status,
+    green_slots cumulés).
+  - Régénéré par `RebuildMapBundleJob`, dispatché à la fin du `Bus::batch`
+    orchestré par `FetchForecastsJob` (toutes les chaînes de scoring ont
+    fini) — et aussi à la fin de `FetchSiteForecastsJob` (manuel).
+  - Fallback lazy : si la clé est absente (TTL expiré, flush), reconstruction
+    à la volée avec lock Redis anti-thundering-herd.
+  - Commande : `php artisan map:rebuild-bundle` (force la régénération).
+
+- **`SiteDetailCache`** (`map.site_{scores|chart|multimodel}.{id}.{...}.v1`, TTL 90 min)
+  - Cache transparent des endpoints `/api/sites/{id}/{scores,chart,multimodel}`.
+  - `scores` : version "global" cachée ; si l'utilisateur a un scoring perso
+    ACTIF sur ce site, le contrôleur applique le rescore par-dessus
+    (status + couleurs + recalc day_quality) — sinon le cache est servi tel
+    quel (cas dominant).
+  - `chart` et `multimodel` : cache complet (pas de logique user-spec).
+    `multimodel` est caché par couple `(day, period)`.
+  - Invalidation : `ScoreSiteJob::handle` et `FetchSiteForecastsJob::handle`
+    appellent `forgetSite($siteId)` à la fin du scoring.
+
+- **`BalisesBundleCache`** (`map.balises.bundle.v1` + `map.balises.history.{id}.v1`)
+  - `/api/balises` : TTL 5 min (les readings bougent vite). Invalidé par
+    les 3 jobs `Fetch{PiouPiou,Metar,Windy}ReadingsJob` à la fin de leur cycle.
+  - `/api/balises/{id}/history` : TTL 2 min, par balise. Pas d'invalidation
+    push (le TTL court suffit, on évite un scan Redis).
+
+Helpers partagés :
+- `SunWindowCalculator::compute($lat, $lng, $day)` — fenêtres solaires
+  (extrait de `SiteController::getSunWindow`).
+- `DayQualityCalculator::compute($byHour, $window)` — viabilité d'une
+  journée (extrait de `SiteController::computeDayQuality`, dépend de
+  `Settings`).
+
+> **CACHE_VERSION** : chaque service Map expose une constante
+> `CACHE_VERSION` intégrée dans la clé Redis. Toute modification de la
+> structure du payload (ajout/retrait de champ, changement de type)
+> DOIT s'accompagner d'un bump de cette constante — sinon les vieilles
+> entrées Redis peuvent casser la vue (cf. point 11 plus bas).
+
 ### Paramètres globaux — `App\Services\Settings`
 
 Tous les seuils du scoring (précipitations, rafales, viabilité du jour)
@@ -394,8 +474,21 @@ Seeder : `php artisan db:seed --class=SettingsSeeder --force` (idempotent).
 - Dans `buildChartSVG` : flèche = `rotate(wind_dir + 180)` pour montrer où le vent VA
 
 ### Jobs
-- `FetchForecastsJob` : dispatche 1 job par site sur queue `meteo`
-- `FetchSiteForecastsJob` : fetch tous modèles → upsert par lots 500 → calcul scores. Timeout 300s.
+- `FetchForecastsJob` : cron horaire. Construit une chaîne par site
+  (`FetchSiteModelJob×N → ScoreSiteJob`) et les enveloppe dans un
+  `Bus::batch()` (`allowFailures`). Le callback `finally` du batch
+  dispatch `RebuildMapBundleJob` pour reconstruire le cache map quand
+  tous les sites ont fini de scorer.
+- `FetchSiteForecastsJob` : fetch tous modèles d'un site (sync) →
+  upsert par lots 500 → calcul scores → invalide `SiteDetailCache` du
+  site → dispatch `RebuildMapBundleJob`. Timeout 300s.
+- `ScoreSiteJob` : recalcule les scores d'un site, puis invalide
+  `SiteDetailCache::forgetSite($id)` et `UserScoringService::invalidateSite($id)`.
+- `RebuildMapBundleJob` : régénère le map bundle global et l'écrit en
+  cache Redis. Idempotent.
+- `FetchPiouPiouReadingsJob`, `FetchMetarReadingsJob`,
+  `FetchWindyReadingsJob` : fetch des balises en temps quasi-réel.
+  Invalide `BalisesBundleCache::forgetBundle()` à la fin.
 
 ---
 
@@ -541,6 +634,15 @@ docker logs parapente_worker -f
     `@keyframes` dans un fichier CSS Blade : encapsuler dans
     `@verbatim ... @endverbatim` (sauf à la racine du fichier où
     `@keyframes` est laissé tranquille).
+14. **Cache des données carte** — toutes les données de la vue carte
+    sont cachées en Redis via `App\Services\Map\*` (cf. section dédiée
+    du Module 1). Toute modif d'un payload exposé sur `/api/map-bundle`,
+    `/api/sites/{id}/{scores,chart,multimodel}`, `/api/balises` ou
+    `/api/balises/{id}/history` doit s'accompagner d'un bump de la
+    `CACHE_VERSION` du service correspondant (sinon les vieilles entrées
+    Redis casseront la vue). L'invalidation est **push** (jobs de
+    scoring / fetch readings) + **lazy fallback** (TTL backup). En dev,
+    vider le cache : `php artisan cache:clear` ou `php artisan map:rebuild-bundle --clear`.
 
 ---
 

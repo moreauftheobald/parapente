@@ -11,6 +11,88 @@ Conventions :
 
 ---
 
+## 2026-05-16 — Cache pré-calculé des données carte (`App\Services\Map\*`)
+
+Tous les endpoints alimentant la vue carte sont désormais cachés en
+Redis : boot de `/carte` accéléré drastiquement (passage de 15+ requêtes
+HTTP à 1-2 ; latence DB transformée en lecture Redis).
+
+### Ajouté
+- **Endpoint `GET /api/map-bundle`** : bundle pré-calculé pour le boot
+  de la carte. Contient tous les sites actifs + statuts journaliers
+  agrégés + fenêtres solaires + agrégat global par jour. Cache Redis
+  partagé entre tous les utilisateurs, régénéré à la fin de chaque
+  cycle de scoring. Cache-Control public + ETag.
+- **Endpoint `GET /api/me/scoring-overrides`** (auth) : sur-couche
+  utilisateur du bundle global — renvoie les overrides scoring perso
+  (badge actif/inactif + statuts journaliers recalculés). Léger
+  (1-3 sites max en pratique), fusionné côté client.
+- **Service `App\Services\Map\MapBundleBuilder`** : construit le map
+  bundle global, cache Redis versionné (`map.bundle.v1`, TTL 90 min)
+  avec fallback lazy et lock anti-thundering-herd.
+- **Service `App\Services\Map\SiteDetailCache`** : cache transparent
+  des endpoints `/api/sites/{id}/{scores,chart,multimodel}`. `scores`
+  cache la version « global » avec overlay scoring perso appliqué par
+  le contrôleur si user authentifié.
+- **Service `App\Services\Map\BalisesBundleCache`** : cache transparent
+  de `/api/balises` (TTL 5 min) et `/api/balises/{id}/history` (TTL 2 min).
+- **Services helpers** : `SunWindowCalculator` (fenêtre solaire) et
+  `DayQualityCalculator` (viabilité d'un jour) — extraits de
+  `SiteController` pour être partagés avec `MapBundleBuilder`.
+- **Job `RebuildMapBundleJob`** : régénère le map bundle et l'écrit
+  en cache Redis. Idempotent.
+- **Commande `php artisan map:rebuild-bundle [--clear]`** : force la
+  régénération (ou le vidage) du cache map en dev/prod.
+- Tests : 16 nouveaux tests Feature couvrant la structure du bundle,
+  le cache hit/miss, l'invalidation par les jobs, l'overlay scoring
+  perso, et le 404 sur balise inactive.
+
+### Modifié
+- **`FetchForecastsJob`** refactoré : utilise `Bus::batch()` autour des
+  chaînes de fetch+score (1 par site) avec `allowFailures()`. Le
+  callback `finally` du batch dispatch `RebuildMapBundleJob` quand
+  toutes les chaînes ont terminé — garantit la cohérence du cache map
+  avec les scores fraîchement calculés.
+- **`ScoreSiteJob`** : à la fin du scoring, invalide `SiteDetailCache`
+  du site et les caches user-scoring qui en dépendent.
+- **`FetchSiteForecastsJob`** : invalide aussi `SiteDetailCache` +
+  dispatch `RebuildMapBundleJob` à la fin (opérations manuelles).
+- **`FetchPiouPiouReadingsJob`, `FetchMetarReadingsJob`,
+  `FetchWindyReadingsJob`** : invalident `BalisesBundleCache` à la
+  fin de leur cycle d'ingestion.
+- **`SiteController`** refactoré : chaque endpoint extrait sa logique
+  pure dans une méthode `buildXxxPayload(): array` (compatible cache),
+  le contrôleur ne fait plus que `cache->remember()` + transformations
+  user-spec éventuelles. Sortie JSON identique à l'existant.
+- **`BaliseController`** refactoré dans le même esprit.
+- **Vue carte (`map._partials.scripts.app.blade.php`)** : `loadSites()`
+  fait 1 fetch `/api/map-bundle` (au lieu de 15+ appels en cascade) +
+  optionnellement 1 fetch `/api/me/scoring-overrides` si user
+  authentifié. `loadSiteScores()` devient lazy (appelé au clic sur un
+  marker, pour l'onglet « Détail scoring »). `buildDays()` supprimé,
+  l'agrégat global est pré-calculé côté serveur.
+
+### Performance (mesures locales sqlite — gains supérieurs en prod)
+| Endpoint | Cache miss | Cache hit | Gain |
+|---|---|---|---|
+| `/api/sites/{id}/scores` | 272 ms | 24 ms | ×11 |
+| `/api/sites/{id}/chart` | 31 ms | 17 ms | ×2 |
+| `/api/sites/{id}/multimodel` | 111 ms | 18 ms | ×6 |
+| `/api/balises` | 364 ms | 17 ms | ×21 |
+
+### Points d'attention
+- Toute évolution du payload d'un endpoint caché doit s'accompagner
+  d'un **bump de `CACHE_VERSION`** dans le service correspondant
+  (sinon les vieilles entrées Redis cassent la vue).
+- En cas de migration / changement de schéma touchant `site_scores`
+  ou `balise_readings` : penser à `php artisan cache:clear` au
+  déploiement (le TTL backup couvre 90 min max).
+- L'invalidation push (jobs → cache forget) est doublée d'un TTL
+  backup (90 min pour les sites, 5 min pour les balises) — robustesse
+  même si un hook est oublié.
+
+---
+
 ## 2026-05-15 — Refonte mobile de la vue carte
 
 ### Modifié
