@@ -75,12 +75,18 @@
         [x-cloak] { display: none !important; }
         /* Hauteur via CSS variable --app-height, calculée en JS depuis
            window.innerHeight. Les unités CSS `vh`/`dvh`/`lvh` sont
-           bugguées sur Chrome Android (`flex-grow:1` ne consomme pas
-           correctement l'espace restant en portrait quand le parent
-           utilise ces unités). Mesurer window.innerHeight et l'injecter
-           en --app-height contourne ces bugs. */
+           bugguées sur Chrome Android. */
         html, body { margin: 0; background-color: #030712; height: var(--app-height, 100vh); overflow: hidden; }
-        .app-shell-root { height: var(--app-height, 100vh); display: flex; flex-direction: column; overflow: hidden; }
+        /* Shell racine en position:relative (containing block des enfants
+           absolute). On abandonne flex-grow pour la hauteur car bugué sur
+           Chrome Android (le wrapper body restait à ~200px de haut au
+           lieu de remplir l'espace restant). On positionne tout
+           manuellement en absolute. */
+        .app-shell-root { position: relative; height: var(--app-height, 100vh); overflow: hidden; }
+        /* Navbar : ancrée en haut sur toute la largeur, hauteur 56px. */
+        .app-shell-root > nav { position: absolute; top: 0; left: 0; right: 0; }
+        /* Wrapper body : ancré sous la navbar (56px), occupe tout le reste. */
+        .app-shell-body { position: absolute; top: 56px; left: 0; right: 0; bottom: 0; display: flex; overflow: hidden; }
     </style>
 
     {{-- Script inline (avant le bundle Vite) qui injecte --app-height au plus tôt
@@ -117,7 +123,9 @@
     ])
 
     {{-- ═══ Corps : panneau gauche · contenu · panneau droit ═══════ --}}
-    <div class="flex-1 flex overflow-hidden relative">
+    {{-- app-shell-body est en position:absolute (top:56px, bottom:0)
+         pour éviter le bug Chrome Android avec flex-grow:1. --}}
+    <div class="app-shell-body relative">
 
         {{-- Panneau latéral GAUCHE — détail --}}
         @if ($hasDetail)
