@@ -3,7 +3,7 @@
            le shell global. Ici on ne fait que styler le contenu interne. */
         #left-panel { display:flex; flex-direction:column; height:100%; overflow:hidden; }
         .lp-body { flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
-        .lp-tabs { display:flex; flex-shrink:0; border-bottom:1px solid rgba(55,65,81,.5); }
+        .lp-tabs { display:flex; flex-shrink:0; border-bottom:1px solid var(--c-border-5); }
         .lp-tab { flex:1; padding:10px 8px; background:transparent; border:none; border-bottom:2px solid transparent; color:#6b7280; font-size:13px; font-weight:500; cursor:pointer; transition:color .15s, border-color .15s; }
         .lp-tab:hover:not(.active) { color:#9ca3af; }
         .lp-tab.active { color:#fff; border-bottom-color:#38bdf8; }
@@ -44,14 +44,14 @@
         .rp-wrap { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; }
 
         /* Titre sur une seule ligne */
-        .rp-head { display:flex; align-items:center; gap:12px; padding:13px 16px; border-bottom:1px solid rgba(55,65,81,.5); flex-shrink:0; }
+        .rp-head { display:flex; align-items:center; gap:12px; padding:13px 16px; border-bottom:1px solid var(--c-border-5); flex-shrink:0; }
         .rp-headline { flex:1; min-width:0; display:flex; align-items:center; gap:8px; white-space:nowrap; overflow:hidden; }
         .rp-name { font-size:16px; font-weight:600; color:#fff; flex-shrink:0; }
         .rp-meta { display:inline-flex; align-items:center; gap:6px; font-size:13px; color:#cbd5e1; flex-shrink:0; }
         .rp-dot { color:#475569; }
         .rp-sun-ico { color:#fbbf24; font-size:15px; line-height:1; }
         .rp-arrow { color:#64748b; }
-        .rp-meta .mono { color:#fff; font-family:'DM Mono',monospace; }
+        .rp-meta .mono { color:#fff; font-family:var(--font-mono); }
         .rp-kind { font-size:9px; text-transform:uppercase; letter-spacing:.08em; font-weight:600; color:#4b5563; flex-shrink:0; }
         .rp-close { width:28px; height:28px; border-radius:50%; border:none; background:transparent; color:#6b7280; cursor:pointer; font-size:14px; flex-shrink:0; transition:background .15s, color .15s; }
         .rp-close:hover { background:rgba(55,65,81,.7); color:#fff; }
@@ -63,7 +63,7 @@
         .rp-user-banner-link { margin-left:auto; color:#7dd3fc; text-decoration:none; font-size:11px; transition:color .15s; }
         .rp-user-banner-link:hover { color:#fff; text-decoration:underline; }
 
-        .rp-tabs { display:flex; flex-shrink:0; overflow-x:auto; border-bottom:1px solid rgba(55,65,81,.5); padding:0 8px; gap:2px; }
+        .rp-tabs { display:flex; flex-shrink:0; overflow-x:auto; border-bottom:1px solid var(--c-border-5); padding:0 8px; gap:2px; }
         .rp-tab { padding:11px 14px; background:transparent; border:none; border-bottom:2px solid transparent; color:#6b7280; font-size:13px; font-weight:500; cursor:pointer; white-space:nowrap; transition:color .15s, border-color .15s; }
         .rp-tab:hover:not(.active) { color:#9ca3af; }
         .rp-tab.active { color:#fff; border-bottom-color:#38bdf8; }
@@ -76,7 +76,7 @@
         .rp-placeholder { padding:48px 24px; text-align:center; font-size:13px; color:#4b5563; line-height:1.6; }
 
         .rp-confidence { margin-bottom:12px; }
-        .rp-chart-box { background:rgba(13,27,38,.5); border:1px solid rgba(55,65,81,.4); border-radius:14px; padding:16px; }
+        .rp-chart-box { background:rgba(13,27,38,.5); border:1px solid var(--c-border-4); border-radius:14px; padding:16px; }
         .rp-chart-legend { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-top:10px; font-size:12px; color:#cbd5e1; }
         .rp-chart-foot { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-top:12px; padding-top:10px; border-top:1px solid rgba(55,65,81,.3); font-size:12px; color:#9ca3af; }
 
@@ -89,14 +89,14 @@
         .rp-voting-day { margin-bottom:18px; }
         .rp-voting-day:last-of-type { margin-bottom:8px; }
         .rp-voting-daylabel { display:flex; align-items:baseline; gap:8px; font-size:13px; font-weight:600; color:#e5e7eb; margin-bottom:6px; padding:0 2px; }
-        .rp-voting-dayhint  { font-size:11px; color:#6b7280; font-weight:400; font-family:'DM Mono',monospace; }
+        .rp-voting-dayhint  { font-size:11px; color:#6b7280; font-weight:400; font-family:var(--font-mono); }
         /* Wrapper scrollable du tableau de scoring : sur mobile le tableau
            dépasse facilement la largeur du volet (13 colonnes d'heures +
            colonne paramètre + white-space:nowrap). On rend la scrollbar
            horizontale clairement visible (couleur sky) au lieu des 3px
            génériques quasi invisibles, pour que l'utilisateur sache
            qu'il peut scroller. */
-        .rp-voting-tablewrap { overflow-x:auto; background:rgba(13,27,38,.4); border:1px solid rgba(55,65,81,.4); border-radius:10px;
+        .rp-voting-tablewrap { overflow-x:auto; background:rgba(13,27,38,.4); border:1px solid var(--c-border-4); border-radius:10px;
             scrollbar-color:#38bdf8 rgba(55,65,81,.3);
             scrollbar-width:thin; }
         .rp-voting-tablewrap::-webkit-scrollbar { height:8px; width:8px; }
@@ -105,10 +105,10 @@
         .rp-voting-tablewrap::-webkit-scrollbar-thumb:hover { background:#0ea5e9; }
         .rp-voting-table { border-collapse:separate; border-spacing:0; width:100%; font-size:11px; }
         .rp-voting-table th, .rp-voting-table td { padding:5px 4px; text-align:center; white-space:nowrap; }
-        .rp-voting-th-param { text-align:left !important; padding-left:12px !important; color:#9ca3af; font-weight:500; font-size:11px; border-bottom:1px solid rgba(55,65,81,.5); background:rgba(17,24,39,.6); }
-        .rp-voting-th-hour  { font-family:'DM Mono',monospace; color:#9ca3af; font-weight:500; border-bottom:1px solid rgba(55,65,81,.5); background:rgba(17,24,39,.6); }
-        .rp-voting-td-param { text-align:left !important; padding-left:12px !important; color:#cbd5e1; font-weight:500; border-bottom:1px solid rgba(55,65,81,.25); }
-        .rp-voting-cell     { border-bottom:1px solid rgba(55,65,81,.25); }
+        .rp-voting-th-param { text-align:left !important; padding-left:12px !important; color:#9ca3af; font-weight:500; font-size:11px; border-bottom:1px solid var(--c-border-5); background:rgba(17,24,39,.6); }
+        .rp-voting-th-hour  { font-family:var(--font-mono); color:#9ca3af; font-weight:500; border-bottom:1px solid var(--c-border-5); background:rgba(17,24,39,.6); }
+        .rp-voting-td-param { text-align:left !important; padding-left:12px !important; color:#cbd5e1; font-weight:500; border-bottom:1px solid var(--c-border-25); }
+        .rp-voting-cell     { border-bottom:1px solid var(--c-border-25); }
         .rp-voting-table tbody tr:last-child td { border-bottom:none; }
         .rp-voting-status td { background:rgba(17,24,39,.5); font-weight:600; color:#e5e7eb; }
         /* Variables des couleurs voting — réutilisées par les cellules split
@@ -127,11 +127,11 @@
            Petit liseré pour distinguer la diagonale même quand les couleurs
            sont proches. */
         .rp-voting-split { box-shadow:inset 0 0 0 1px rgba(15,23,42,.6); }
-        .rp-voting-legend { display:flex; flex-wrap:wrap; gap:14px; padding:10px 16px; border-top:1px solid rgba(55,65,81,.4); font-size:11px; color:#9ca3af; }
+        .rp-voting-legend { display:flex; flex-wrap:wrap; gap:14px; padding:10px 16px; border-top:1px solid var(--c-border-4); font-size:11px; color:#9ca3af; }
 
         /* Tooltip flottant pour les cellules de l'onglet « Détail scoring ».
            Position en pixels absolus (calculée depuis le viewport). */
-        .rp-voting-tip { position:fixed; transform:translate(-50%, -100%); z-index:80; background:#0f172a; border:1px solid #334155; color:#e5e7eb; font-size:11px; line-height:1.5; padding:6px 10px; border-radius:6px; box-shadow:0 8px 20px rgba(0,0,0,.5); pointer-events:none; white-space:nowrap; font-family:'DM Sans',sans-serif; }
+        .rp-voting-tip { position:fixed; transform:translate(-50%, -100%); z-index:80; background:var(--c-bg-dark); border:1px solid #334155; color:#e5e7eb; font-size:11px; line-height:1.5; padding:6px 10px; border-radius:6px; box-shadow:0 8px 20px rgba(0,0,0,.5); pointer-events:none; white-space:nowrap; font-family:'DM Sans',sans-serif; }
         .rp-voting-tip > div + div { margin-top:2px; padding-top:2px; border-top:1px dashed rgba(148,163,184,.25); }
         .rp-voting-legend span { display:inline-flex; align-items:center; gap:6px; }
 

@@ -20,7 +20,7 @@ function mapApp(){return{
     // sélectionne un site/balise (cf. openRightPanel/closeRightPanel).
     // Le volet gauche est ouvert d'emblée en desktop (≥1024px) — c'est le
     // comportement historique de la vue carte ; sur mobile il reste fermé.
-    leftOpen: typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches,
+    leftOpen: window.AppShell.isDesktop(),
     lpTab:'params', rightOpen:false, selectedFeature:null,
     // Filtres d'affichage des sites par statut météo
     showGreen:true, showOrange:true, showRed:true,

@@ -37,8 +37,8 @@
     // mais peut être vide à l'exécution : on teste le contenu réel.
     $hasDetail = isset($detail) && trim((string) $detail) !== '';
     $hasHelp   = isset($help)   && trim((string) $help)   !== '';
-    $leftInit  = $hasDetail && $leftDefault  ? "window.matchMedia('(min-width: 1024px)').matches" : 'false';
-    $rightInit = $hasHelp   && $rightDefault ? "window.matchMedia('(min-width: 1024px)').matches" : 'false';
+    $leftInit  = $hasDetail && $leftDefault  ? 'window.AppShell.isDesktop()' : 'false';
+    $rightInit = $hasHelp   && $rightDefault ? 'window.AppShell.isDesktop()' : 'false';
     $xDataExpr = $xData ?? "{ leftOpen: {$leftInit}, rightOpen: {$rightInit} }";
 @endphp
 
@@ -91,9 +91,18 @@
 
     {{-- Script inline (avant le bundle Vite) qui injecte --app-height au plus tôt
          pour éviter le FOUC de hauteur. Le bundle re-attache les listeners
-         après. --}}
+         après.
+
+         Définit aussi `window.AppShell.isDesktop()` — single source of truth
+         pour le breakpoint « volets latéraux ouverts d'emblée » (≥ 1024 px,
+         aligné sur le `lg:` de Tailwind). Réutilisé par le `x-data` du shell
+         lui-même et par mapApp() de la carte. --}}
     <script>
         (function() {
+            window.AppShell = window.AppShell || {};
+            window.AppShell.isDesktop = function() {
+                return typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches;
+            };
             function setAppHeight() {
                 document.documentElement.style.setProperty('--app-height', window.innerHeight + 'px');
             }

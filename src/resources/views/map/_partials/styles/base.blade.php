@@ -1,6 +1,20 @@
 /* Layout & marqueurs */
+
+/* Variables partagées par tous les fichiers de style de la carte —
+   centralisent les valeurs récurrentes pour éviter la dérive
+   (cf. point 12 CLAUDE.md). Limité aux valeurs vraiment répétées
+   plusieurs fois : ajouter une nouvelle var ici uniquement si elle
+   apparaît dans 3+ endroits. */
+:root {
+    --font-mono:       'DM Mono', monospace;
+    --c-bg-dark:       #0f172a;
+    --c-border-25:     rgba(55, 65, 81, .25);
+    --c-border-4:      rgba(55, 65, 81, .4);
+    --c-border-5:      rgba(55, 65, 81, .5);
+}
+
 body { font-family:'DM Sans',sans-serif; }
-.mono { font-family:'DM Mono',monospace; }
+.mono { font-family:var(--font-mono); }
 /* Conteneur de la carte : le <main> du shell occupe tout l'espace dispo
    moins la navbar (h-14). #map-area occupe ensuite tout le <main>.
    `isolation: isolate` est CRITIQUE : sans ça, les z-index élevés
@@ -62,7 +76,7 @@ body { font-family:'DM Sans',sans-serif; }
 
 ::-webkit-scrollbar { width:3px; }
 ::-webkit-scrollbar-thumb { background:#2d3748; border-radius:2px; }
-.leaflet-tooltip { background:#0f172a !important; border:1px solid #1e293b !important; color:#cbd5e1 !important; font-family:'DM Sans',sans-serif !important; font-size:12px !important; padding:5px 10px !important; border-radius:8px !important; box-shadow:0 4px 16px rgba(0,0,0,.5) !important; }
+.leaflet-tooltip { background:var(--c-bg-dark) !important; border:1px solid #1e293b !important; color:#cbd5e1 !important; font-family:'DM Sans',sans-serif !important; font-size:12px !important; padding:5px 10px !important; border-radius:8px !important; box-shadow:0 4px 16px rgba(0,0,0,.5) !important; }
 .leaflet-tooltip-top:before { border-top-color:#1e293b !important; }
 .leaflet-control-zoom a { background:#1e293b !important; color:#64748b !important; border-color:#334155 !important; }
 .leaflet-control-zoom a:hover { background:#334155 !important; color:white !important; }
