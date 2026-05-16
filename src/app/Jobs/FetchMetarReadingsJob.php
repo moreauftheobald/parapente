@@ -6,6 +6,7 @@ namespace App\Jobs;
 
 use App\Models\Balise;
 use App\Models\BaliseReading;
+use App\Services\Balises\BaliseConstants;
 use App\Services\Balises\MetarProvider;
 use Carbon\Carbon;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -38,8 +39,7 @@ class FetchMetarReadingsJob implements ShouldQueue
     public int $timeout = 90;
     public int $tries   = 2;
 
-    private const DEAD_AFTER_DAYS = 7;
-    private const SOURCE          = 'metar';
+    private const SOURCE = 'metar';
 
     public function handle(
         MetarProvider $provider,
@@ -88,7 +88,7 @@ class FetchMetarReadingsJob implements ShouldQueue
         }
 
         // Désactivation des balises mortes (cf. FetchPiouPiouReadingsJob)
-        $deadCutoff = Carbon::now()->subDays(self::DEAD_AFTER_DAYS);
+        $deadCutoff = Carbon::now()->subDays(BaliseConstants::DEAD_AFTER_DAYS);
         $deactivated = Balise::source(self::SOURCE)
             ->where('active', true)
             ->where('created_at', '<', $deadCutoff)

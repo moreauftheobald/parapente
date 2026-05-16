@@ -6,6 +6,7 @@ namespace App\Jobs;
 
 use App\Models\Balise;
 use App\Models\BaliseReading;
+use App\Services\Balises\BaliseConstants;
 use App\Services\Balises\WindyOpenDataProvider;
 use Carbon\Carbon;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -39,8 +40,7 @@ class FetchWindyReadingsJob implements ShouldQueue
     public int $timeout = 300;
     public int $tries   = 2;
 
-    private const DEAD_AFTER_DAYS = 7;
-    private const SOURCE          = 'windy';
+    private const SOURCE = 'windy';
 
     public function handle(
         WindyOpenDataProvider $provider,
@@ -89,7 +89,7 @@ class FetchWindyReadingsJob implements ShouldQueue
             $inserted++;
         }
 
-        $deadCutoff = Carbon::now()->subDays(self::DEAD_AFTER_DAYS);
+        $deadCutoff = Carbon::now()->subDays(BaliseConstants::DEAD_AFTER_DAYS);
         $deactivated = Balise::query()
             ->where('source', self::SOURCE)
             ->where('active', true)

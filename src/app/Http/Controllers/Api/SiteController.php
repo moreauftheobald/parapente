@@ -384,7 +384,9 @@ class SiteController extends Controller
 
         // Toujours un array natif (pas une Collection) : on cache le payload
         // et on évite de sérialiser des objets Eloquent (cf. point 11 CLAUDE.md).
-        $models = WeatherModel::where('active', true)
+        $modelColors    = config('weather.model_colors', []);
+        $fallbackColor  = $modelColors['fallback'] ?? '#9ca3af';
+        $models         = WeatherModel::where('active', true)
             ->orderBy('id')
             ->get()
             ->map(fn (WeatherModel $m) => [
@@ -392,7 +394,7 @@ class SiteController extends Controller
                 'code'     => $m->code,
                 'name'     => $m->name,
                 'provider' => $m->provider,
-                'color'    => self::MODEL_COLORS[$m->code] ?? '#9ca3af',
+                'color'    => $modelColors[$m->code] ?? $fallbackColor,
             ])
             ->values()
             ->all();
@@ -547,23 +549,6 @@ class SiteController extends Controller
 
         return ['viability' => $viability, 'status' => $status, 'green_hours' => $greenHours];
     }
-
-    /**
-     * Couleurs des 10 modèles météo (palette HCL distincte).
-     * Code modèle Open-Meteo => couleur hex.
-     */
-    private const MODEL_COLORS = [
-        'meteofrance_arome_france'   => '#ef4444',
-        'icon_d2'                    => '#a855f7',
-        'knmi_harmonie_arome_europe' => '#06b6d4',
-        'meteofrance_arpege_europe'  => '#f59e0b',
-        'icon_eu'                    => '#3b82f6',
-        'ecmwf_ifs025'               => '#8b5cf6',
-        'ecmwf_aifs025'              => '#ec4899',
-        'icon_seamless'              => '#84cc16',
-        'gem_seamless'               => '#10b981',
-        'gfs_seamless'               => '#f97316',
-    ];
 
     /**
      * Allège le JSON `detail` d'un SiteScore : on conserve consensus,

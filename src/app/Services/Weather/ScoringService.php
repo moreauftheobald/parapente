@@ -21,22 +21,31 @@ class ScoringService
     private const PRECIP_RAIN_THRESHOLD    = 0.1;   // mm/h — seuil "trace de pluie" (convergence)
     private const EPSILON                  = 0.001; // évite division par zéro
 
+    // Seuils globaux préchargés à la construction (au lieu d'appeler
+    // Settings::get() N fois par scoring — typiquement 120 créneaux × 6 lookups).
+    private float $precipOrangeMmh;
+    private float $precipRedMmh;
+    private float $gustOrangeDefault;
+    private float $gustRedDefault;
+
     public function __construct(private Settings $settings)
     {
+        $this->precipOrangeMmh   = (float) $settings->get('scoring.precip_orange_mmh');
+        $this->precipRedMmh      = (float) $settings->get('scoring.precip_red_mmh');
+        $this->gustOrangeDefault = (float) $settings->get('scoring.gust_orange_kmh');
+        $this->gustRedDefault    = (float) $settings->get('scoring.gust_red_kmh');
     }
 
     /** Seuil rafale orange applicable à un set de conditions (override ou défaut global). */
     private function gustOrangeFor(FlyingConditions $conditions): float
     {
-        return $conditions->getWindGustOrangeKmh()
-            ?? (float) $this->settings->get('scoring.gust_orange_kmh');
+        return $conditions->getWindGustOrangeKmh() ?? $this->gustOrangeDefault;
     }
 
     /** Seuil rafale rouge applicable à un set de conditions (override ou défaut global). */
     private function gustRedFor(FlyingConditions $conditions): float
     {
-        return $conditions->getWindGustRedKmh()
-            ?? (float) $this->settings->get('scoring.gust_red_kmh');
+        return $conditions->getWindGustRedKmh() ?? $this->gustRedDefault;
     }
 
     /**
@@ -220,13 +229,11 @@ class ScoringService
         float $windGust,
         float $precip
     ): string {
-        $precipOrange = (float) $this->settings->get('scoring.precip_orange_mmh');
-        $precipRed    = (float) $this->settings->get('scoring.precip_red_mmh');
-        $gustOrange   = $this->gustOrangeFor($conditions);
-        $gustRed      = $this->gustRedFor($conditions);
+        $gustOrange = $this->gustOrangeFor($conditions);
+        $gustRed    = $this->gustRedFor($conditions);
 
         // ── Rouges (éliminatoires) ──────────────────────────────
-        if ($precip > $precipRed) {
+        if ($precip > $this->precipRedMmh) {
             return 'red';
         }
         if ($windGust > $gustRed) {
@@ -240,7 +247,7 @@ class ScoringService
         }
 
         // ── Oranges (prudence) ──────────────────────────────────
-        if ($precip > $precipOrange) {
+        if ($precip > $this->precipOrangeMmh) {
             return 'orange';
         }
         if ($windGust > $gustOrange) {
@@ -315,12 +322,10 @@ class ScoringService
         };
 
         // Précipitations : seuils globaux sur le consensus seulement
-        $precipOrange = (float) $this->settings->get('scoring.precip_orange_mmh');
-        $precipRed    = (float) $this->settings->get('scoring.precip_red_mmh');
-        $precipColor  = match (true) {
-            $precip > $precipRed    => 'red',
-            $precip > $precipOrange => 'orange',
-            default                 => 'green',
+        $precipColor = match (true) {
+            $precip > $this->precipRedMmh    => 'red',
+            $precip > $this->precipOrangeMmh => 'orange',
+            default                          => 'green',
         };
 
         // Plafond : informatif (pas éliminatoire). Vert si > cloud_base_min_m,

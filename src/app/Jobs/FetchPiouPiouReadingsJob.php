@@ -6,6 +6,7 @@ namespace App\Jobs;
 
 use App\Models\Balise;
 use App\Models\BaliseReading;
+use App\Services\Balises\BaliseConstants;
 use App\Services\Balises\PiouPiouProvider;
 use Carbon\Carbon;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -37,8 +38,7 @@ class FetchPiouPiouReadingsJob implements ShouldQueue
     public int $timeout = 60;
     public int $tries   = 2;
 
-    private const DEAD_AFTER_DAYS = 7;
-    private const SOURCE          = 'pioupiou';
+    private const SOURCE = 'pioupiou';
 
     public function handle(
         PiouPiouProvider $provider,
@@ -90,7 +90,7 @@ class FetchPiouPiouReadingsJob implements ShouldQueue
         // Désactivation des balises mortes (> 7 jours sans lecture
         // ET découvertes depuis > 7 jours pour éviter de désactiver
         // une balise tout juste ajoutée).
-        $deadCutoff = Carbon::now()->subDays(self::DEAD_AFTER_DAYS);
+        $deadCutoff = Carbon::now()->subDays(BaliseConstants::DEAD_AFTER_DAYS);
         $deactivated = Balise::source(self::SOURCE)
             ->where('active', true)
             ->where('created_at', '<', $deadCutoff)
