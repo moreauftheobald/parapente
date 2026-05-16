@@ -11,6 +11,118 @@ Conventions :
 
 ---
 
+## 2026-05-16 — Passe de refactoring et d'optimisation (6 phases)
+
+Passe complète de refactoring et d'optimisation du code, découpée en
+6 phases successives — chacune commitée, poussée, testée en local et
+en prod (desktop + mobile) indépendamment. Aucun changement fonctionnel
+observable. Net : **~ -900 LOC**, structure projet plus testable, perfs
+ciblées sur les hot paths.
+
+### Ajouté
+- **`App\Services\Balises\BaliseConstants`** : centralise les
+  constantes partagées entre fournisseurs/jobs balises (`DEAD_AFTER_DAYS`).
+- **`config/weather.php`** : palette des modèles NWP (`MODEL_COLORS`)
+  extraite du controller, avec entrée `fallback` pour le gris neutre.
+- **`App\Jobs\FetchBaliseReadingsJob`** (abstrait) : factorise les
+  3 jobs `Fetch{PiouPiou,Metar,Windy}ReadingsJob` (90 % du code
+  partagé : fetch → insert → désactivation des balises mortes →
+  invalidation cache). Les sous-classes ne déclarent plus que la
+  source, le provider et leur timeout.
+- **`App\Services\Weather\SiteScoresPayloadBuilder` / `SiteChartPayloadBuilder` / `SiteMultimodelPayloadBuilder`** :
+  3 services dédiés aux 3 endpoints de `/api/sites/{id}/*`. Logique
+  métier extraite du controller (250+ LOC) → testable et réutilisable.
+- **`App\Services\Balises\BaliseReadingFormatter`** : sérialisation
+  centralisée des lectures balises (`meteorology()` + `floatOrNull()`),
+  élimine les 10 occurrences de `$x !== null ? (float) $x : null`.
+- **`App\Http\Requests\Api\ScoringRules::flyingConditions()`** :
+  catalogue des règles de validation partagé entre `Store/UpdateUserScoringRequest`.
+- **`App\Http\Controllers\Concerns\HasFilterableIndex`** (trait) :
+  helpers `applySearch` / `applyTriStateFilter` / `applySorting` (avec
+  whitelist anti-injection) utilisés par les controllers admin Site,
+  Balise, WeatherModel, User.
+- **Composant Blade `<x-admin.button>`** : bouton standardisé pour le
+  BackOffice avec variants `primary|secondary|danger|ghost` et tailles
+  `sm|md`. Migration progressive des ~50 boutons admin existants.
+- **Helper JS `window.AppShell.isDesktop()`** : single source of truth
+  pour le breakpoint `min-width:1024px` (volets latéraux ouverts
+  d'emblée en desktop), exposé dans `app-shell.blade.php`.
+- **CSS custom properties** dans `map/_partials/styles/base.blade.php` :
+  `--font-mono`, `--c-bg-dark`, `--c-border-25/4/5`. Centralisent les
+  valeurs hex/rgba répétées ≥ 3 fois dans les fichiers de styles map.
+- **`svgHelpers(svg)`** factory dans `geometry.blade.php` : retourne
+  `{ mk, txt }` bound au SVG racine. Remplace les 4 définitions
+  locales `mk`/`txt` dupliquées dans popup-chart et balise-chart.
+- **Dépendance npm `@floating-ui/dom`** : installée et exposée via
+  `window.FloatingUI = { computePosition, offset, flip, shift, autoUpdate }`.
+  Disponible pour migration progressive des dropdowns / tooltips qui
+  utilisent encore le calcul manuel `position:fixed`.
+- **Migration additive `2026_05_16_*_add_balises_source_active_index`** :
+  index composite `balises(source, active)`, idempotent
+  (`CREATE INDEX IF NOT EXISTS`). Filtre utilisé par les 3 jobs balises
+  + le bundle `/api/balises`.
+
+### Modifié
+- **`Api/SiteController`** : passe de **627 → 142 LOC** (-77 %).
+  Devient un fin orchestrateur ; toute la logique métier est dans les
+  3 payload builders + `SunWindowCalculator` + `DayQualityCalculator`
+  (services qui existaient déjà mais étaient dupliqués inline).
+- **`Api/BaliseController`** : utilise `BaliseReadingFormatter::meteorology()`
+  pour la sérialisation des lectures (PiouPiou + METAR + Windy).
+- **`ScoringService`** : précharge les 4 seuils globaux (`precip_orange/red`,
+  `gust_orange/red`) au constructor. Évite ~6 lookups `Settings::get()`
+  par créneau × 120 créneaux/site (les valeurs sont identiques pendant
+  toute la durée d'un scoring).
+- **`WindyOpenDataProvider::fetchLatestReadings()`** : parallélisé via
+  `Http::pool()` (chunks de 10 simultanés). Pour 50 balises : ~80 % de
+  latence en moins (5 batches parallèles vs 50 séquentiels). Réduit
+  drastiquement le risque de timeout du job.
+- **`MapBundleBuilder::build()`** : élimine le N+1 SQL (1 query
+  `whereIn('site_id')->upcoming()` pour TOUS les sites, puis `groupBy`
+  PHP). À 14 sites c'est anecdotique, à 100+ c'est décisif.
+- **`FetchBaliseReadingsJob` (base)** : cache Redis
+  `balises.last_reading_by_balise:{source}` (TTL 1 h, réécrit à chaque
+  cycle) — évite un `GROUP BY MAX(read_at)` SQL à chaque tick × 3 sources.
+- **`OpenMeteoApi`** : constante `HOURLY_VARS_BALISES` (4 variables au
+  lieu d'une string en dur déconnectée de `HOURLY_VARS` côté sites).
+- **Vue carte (`app.blade.php`)** :
+  - Cache mémoire Alpine `_multimodelByDay` : re-navigation entre jours
+    déjà chargés = 0 fetch (vs 1 par jour avant). Reset à `pickSite`/`closeRightPanel`.
+  - `AbortController` sur `/api/balises` : élimine la race condition
+    entre 2 polls qui se chevauchent (réponse en retard qui écrase la
+    fraîche en cas de réseau lent).
+- **`SiteSeeder`** : `insertGetId()` / `insert()` bruts →
+  `Eloquent::updateOrCreate` (matching par `slug` + `site_id`). Idempotent
+  en redéploiement.
+
+### Performance
+- **API externes** : Windy `fetchLatestReadings()` ~80 % plus rapide
+  (parallélisation pool).
+- **DB** : N+1 SQL éliminé sur `MapBundleBuilder` ; index composite
+  sur `balises(source, active)` ; cache Redis `last_reading_by_balise`
+  qui évite un GROUP BY par tick × 3 sources.
+- **Client** : cache mémoire `multimodel5ByDay` (navigation entre
+  jours sans refetch) ; dédup polling balises (`AbortController`).
+
+### Supprimé / nettoyé
+- Méthodes privées dupliquées `SiteController::getSunWindow()` et
+  `SiteController::computeDayQuality()` (réutilisent désormais les
+  services existants `SunWindowCalculator`/`DayQualityCalculator`).
+- Constante `MODEL_COLORS` privée du `SiteController` (déplacée en
+  config).
+- 3 occurrences de `private const DEAD_AFTER_DAYS = 7` dans les jobs
+  balises (centralisées dans `BaliseConstants`).
+- Définitions locales de `mk()` / `txt()` dans 4 fonctions SVG
+  (popup-chart × 2, balise-chart × 3).
+
+### Déploiement
+- Cette passe ajoute une dépendance npm (`@floating-ui/dom`) → étape
+  `npm install && npm run build` standard du déploiement.
+- Nouvelle migration additive (idempotente via `CREATE INDEX IF NOT EXISTS`)
+  → `php artisan migrate --force` standard.
+
+---
+
 ## 2026-05-16 — Cache pré-calculé des données carte (`App\Services\Map\*`)
 
 Tous les endpoints alimentant la vue carte sont désormais cachés en

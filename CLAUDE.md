@@ -58,8 +58,9 @@ Exemple : `FF_personnal_scoring.md` — scoring personnalisé par utilisateur.
 | Backend         | PHP 8.4 / Laravel 13                |
 | Base de données | MariaDB 10.11                       |
 | Cache / Queue   | Redis 7                             |
-| Frontend        | CSS inline + Alpine.js              |
+| Frontend        | Tailwind 4 + Alpine.js (CSS inline pour la carte) |
 | Carte           | Leaflet.js                          |
+| Positionnement flottant | `@floating-ui/dom` (dispo, migration progressive) |
 | Build assets    | Vite                                |
 | Conteneurs      | Docker / Docker Compose             |
 
@@ -77,17 +78,20 @@ src/                        ← Racine Laravel
 │   ├── Http/
 │   │   ├── Controllers/
 │   │   │   ├── Api/
-│   │   │   │   ├── SiteController.php       ← API JSON sites/scores/chart/multimodel
+│   │   │   │   ├── SiteController.php       ← Fin orchestrateur ; délègue aux payload builders
 │   │   │   │   ├── BaliseController.php     ← API JSON balises + history
 │   │   │   │   ├── MapBundleController.php  ← Bundle pré-calculé pour boot carte
 │   │   │   │   ├── MeScoringController.php  ← Overrides scoring perso (auth)
 │   │   │   │   └── UserScoringController.php ← CRUD scorings perso utilisateur
-│   │   │   ├── Admin/                   ← BackOffice (sites, balises, modèles,
-│   │   │   │   │                            APIs, users, sync, logs,
-│   │   │   │   │                            ArticleController, ModuleController…)
+│   │   │   ├── Admin/                   ← BackOffice (sites, balises, modèles, APIs,
+│   │   │   │                                users, sync, logs, articles, modules…)
 │   │   │   ├── HomeController.php        ← Page d'accueil (articles)
 │   │   │   └── MapController.php         ← Vue carte
-│   │   └── Livewire/
+│   │   ├── Requests/Api/
+│   │   │   ├── ScoringRules.php           ← Catalogue de règles validation partagé
+│   │   │   └── ValidatesScoringCoherence  ← Invariants relationnels (min ≤ max, etc.)
+│   │   └── Controllers/Concerns/
+│   │       └── HasFilterableIndex.php     ← Trait search/sort whitelist pour admin
 │   ├── Models/
 │   │   ├── Site.php, SiteCondition.php, WeatherModel.php, Forecast.php,
 │   │   ├── SiteScore.php, Balise.php, BaliseReading.php
@@ -96,7 +100,18 @@ src/                        ← Racine Laravel
 │   ├── Support/
 │   │   └── Navigation.php                ← Liste des modules visibles (navbar)
 │   ├── Services/
-│   │   ├── Weather/ …                    ← OpenMeteoApi, ForecastFetcher, ScoringService
+│   │   ├── Weather/
+│   │   │   ├── Apis/OpenMeteoApi.php         (fetch sites + batch balises)
+│   │   │   ├── ScoringService.php            (voting logic)
+│   │   │   ├── SiteScoresPayloadBuilder.php  (build `/api/sites/{id}/scores`)
+│   │   │   ├── SiteChartPayloadBuilder.php   (build `/api/sites/{id}/chart`)
+│   │   │   ├── SiteMultimodelPayloadBuilder.php (build `/api/sites/{id}/multimodel`)
+│   │   │   └── UserScoringService.php        (overrides scoring perso)
+│   │   ├── Balises/
+│   │   │   ├── BaliseProviderInterface.php
+│   │   │   ├── BaliseConstants.php           (DEAD_AFTER_DAYS, etc.)
+│   │   │   ├── BaliseReadingFormatter.php    (sérialisation JSON)
+│   │   │   ├── PiouPiouProvider.php, MetarProvider.php, WindyOpenDataProvider.php
 │   │   └── Map/                          ← Cache pré-calculé des données carte
 │   │       ├── MapBundleBuilder.php          (bundle markers, /api/map-bundle)
 │   │       ├── SiteDetailCache.php           (cache /scores /chart /multimodel)
@@ -106,7 +121,13 @@ src/                        ← Racine Laravel
 │   └── Jobs/
 │       ├── FetchForecastsJob.php         ← Orchestre par site (Bus::batch)
 │       ├── FetchSiteForecastsJob.php     ← Fetch + score 1 site
+│       ├── FetchBaliseReadingsJob.php    ← Base ABSTRAITE des 3 jobs balises
+│       ├── FetchPiouPiouReadingsJob.php  ← Étend FetchBaliseReadingsJob
+│       ├── FetchMetarReadingsJob.php     ← Étend FetchBaliseReadingsJob
+│       ├── FetchWindyReadingsJob.php     ← Étend FetchBaliseReadingsJob
 │       └── RebuildMapBundleJob.php       ← Régénère le map bundle après scoring
+├── config/
+│   └── weather.php                       ← Palette MODEL_COLORS des modèles NWP
 ├── database/
 │   ├── migrations/
 │   └── seeders/
@@ -114,7 +135,8 @@ src/                        ← Racine Laravel
 │       ├── WeatherModelSeeder.php, SiteSeeder.php, GrandEstSitesSeeder.php
 ├── resources/views/
 │   ├── components/
-│   │   └── app-shell.blade.php           ← Shell global <x-app-shell> (commun à tous les écrans)
+│   │   ├── app-shell.blade.php           ← Shell global <x-app-shell>
+│   │   └── admin/button.blade.php        ← Bouton standardisé BackOffice
 │   ├── partials/
 │   │   └── app-shell-navbar.blade.php    ← Barre de menu supérieure
 │   ├── layouts/
@@ -124,7 +146,7 @@ src/                        ← Racine Laravel
 │   └── map/index.blade.php               ← Vue carte (/carte)
 └── routes/
     ├── web.php
-    └── api.php                           ← 3 endpoints REST
+    └── api.php                           ← Endpoints REST publics + auth
 ```
 
 ---
@@ -138,7 +160,7 @@ src/                        ← Racine Laravel
 | `users`           | Utilisateurs + rôle admin/user                          |
 | `sites`           | Sites de vol (nom, coords, altitude, niveau, région)    |
 | `site_conditions` | Conditions idéales par site (vent dir/vitesse, nuages)  |
-| `weather_models`  | 10 modèles météo avec poids short/medium                |
+| `weather_models`  | Catalogue des modèles NWP (~20 connus, palette dans `config/weather.php`) |
 | `weather_apis`    | Sources API météo (Open-Meteo…)                         |
 | `forecasts`       | Prévisions brutes Open-Meteo (nullable)                 |
 | `site_scores`     | Scores calculés par site/heure (green/orange/red)       |
@@ -219,12 +241,12 @@ GET /api/balises/{id}/history → Historique du jour (graphes volet droit).
                               Cache Redis transparent (TTL 2 min).
 ```
 
-### Fenêtre de vol solaire (appliquée dans `SiteController`)
+### Fenêtre de vol solaire
 - Début : lever du soleil − 30min → **floor** à l'heure (ex: 06:40 → 6h)
 - Fin   : coucher du soleil + 30min → **ceil** à l'heure (ex: 18:50 → 19h)
 - Calculé via `date_sunrise` / `date_sunset` PHP natif, timezone Europe/Paris
-- Logique extraite dans `App\Services\Map\SunWindowCalculator` (statique,
-  réutilisé par `SiteController` et `MapBundleBuilder`).
+- Implémenté dans `App\Services\Map\SunWindowCalculator::compute()` (statique,
+  utilisé par les 3 payload builders et `MapBundleBuilder`).
 
 ---
 
@@ -358,8 +380,11 @@ parapente. Les modèles hémisphère sud/Asie (BOM, CMA, JMA) restent
 inactifs car peu pertinents pour des sites France/Bénélux.
 
 **`OpenMeteoApi`** (`app/Services/Weather/Apis/`) :
-- `fetchForSiteAndModel()` : 1 appel par (site, modèle)
-- `fetchBatchForBalises()` : appel batch multi-coordonnées (40 points/chunk)
+- `fetchForSiteAndModel()` : 1 appel par (site, modèle), variables `HOURLY_VARS`
+  (11 variables complètes pour le scoring + variables journalières).
+- `fetchBatchForBalises()` : appel batch multi-coordonnées (40 points/chunk),
+  variables `HOURLY_VARS_BALISES` (4 variables — subset minimal pour
+  l'affichage, pas de scoring complet).
 - Pas de pause entre appels (serveur dédié, pas de rate limit)
 - Plafond (base des cumulus) — règle d'Espy avec température de déclenchement,
   en **altitude absolue (ASL)** : `cloud_base_m = elevation_modèle + 125 × (T₂ₘ_max_jour − Td₂ₘ)`
@@ -370,7 +395,9 @@ inactifs car peu pertinents pour des sites France/Bénélux.
 - Format datetime `Y-m-d H:i:s` pour MariaDB (pas ISO avec `T`)
 
 **`ScoringService`** (dépend de `App\Services\Settings` pour lire les
-seuils — injection automatique par DI Laravel) :
+seuils — injection automatique par DI Laravel ; les 4 seuils globaux
+sont préchargés au constructor une fois pour la durée du scoring,
+évite ~6 lookups par créneau × 120 créneaux/site) :
 - Voting logic complète
 - Moyenne circulaire pour direction vent (évite le problème 359°/1°)
 - Moyenne inverse carré pour isoler les outliers
@@ -398,9 +425,10 @@ seuils — injection automatique par DI Laravel) :
   logique de couleurs (sinon les couleurs s'actualiseront au prochain fetch
   horaire).
 
-> **Qualité d'une journée** — calculée à la lecture dans `SiteController::computeDayQuality`
-> (pas en base) : viabilité 0-100 = Σ(poids horaire × valeur du statut ×
-> facteur de continuité) / Σ(poids horaire) sur la fenêtre solaire. Le poids
+> **Qualité d'une journée** — calculée à la lecture par
+> `App\Services\Map\DayQualityCalculator::compute()` (pas en base) :
+> viabilité 0-100 = Σ(poids horaire × valeur du statut × facteur de
+> continuité) / Σ(poids horaire) sur la fenêtre solaire. Le poids
 > horaire est une cloche centrée ~13h30 (créneaux du milieu de journée >
 > très tôt/tard) ; le facteur de continuité pénalise les créneaux volables
 > isolés (1 h → 40 %, ≥3 h consécutives → 100 %). Statut du jour dérivé :
@@ -445,10 +473,9 @@ Redis pour soulager la DB et accélérer le boot mobile :
 
 Helpers partagés :
 - `SunWindowCalculator::compute($lat, $lng, $day)` — fenêtres solaires
-  (extrait de `SiteController::getSunWindow`).
+  (statique, sans dépendance).
 - `DayQualityCalculator::compute($byHour, $window)` — viabilité d'une
-  journée (extrait de `SiteController::computeDayQuality`, dépend de
-  `Settings`).
+  journée (dépend de `Settings` via DI).
 
 > **CACHE_VERSION** : chaque service Map expose une constante
 > `CACHE_VERSION` intégrée dans la clé Redis. Toute modification de la
@@ -486,9 +513,15 @@ Seeder : `php artisan db:seed --class=SettingsSeeder --force` (idempotent).
   `SiteDetailCache::forgetSite($id)` et `UserScoringService::invalidateSite($id)`.
 - `RebuildMapBundleJob` : régénère le map bundle global et l'écrit en
   cache Redis. Idempotent.
+- **`FetchBaliseReadingsJob`** (abstrait) : base mutualisée des 3 jobs
+  balises. Les sous-classes ne déclarent que `source()`, `provider()` et
+  leur timeout. La logique commune (fetch → insert sans doublon →
+  désactivation des balises mortes → invalidation du bundle) vit dans
+  la base. Cache Redis `balises.last_reading_by_balise:{source}` (TTL 1 h)
+  pour éviter un `GROUP BY MAX(read_at)` SQL à chaque tick.
 - `FetchPiouPiouReadingsJob`, `FetchMetarReadingsJob`,
-  `FetchWindyReadingsJob` : fetch des balises en temps quasi-réel.
-  Invalide `BalisesBundleCache::forgetBundle()` à la fin.
+  `FetchWindyReadingsJob` : étendent `FetchBaliseReadingsJob`. Windy
+  parallélise ses appels HTTP via `Http::pool()` (chunks de 10 simultanés).
 
 ---
 
@@ -500,8 +533,8 @@ Carnet de vol numérique par utilisateur. Nécessite authentification.
 ### Module 3 — Comparatif voiles & sellettes
 Base de données équipements avec comparaison et notation communautaire.
 
-### Balises PiouPiou/FFVL
-Intégration API temps réel pour validation des prévisions.
+> Les balises (PiouPiou, METAR, Windy) sont **implémentées** depuis
+> V2.x — cf. la section *Jobs* plus haut.
 
 ---
 
@@ -529,8 +562,27 @@ Intégration API temps réel pour validation des prévisions.
 - **Pas de classes Tailwind dans la vue carte** — CSS inline uniquement (évite dépendance build)
 - Alpine.js sans composants imbriqués dans la vue carte
 - Leaflet.js pour tout ce qui est cartographique
-- Les dropdowns au-dessus de la carte : `position:fixed` + `getBoundingClientRect()`
-- Le SVG du popup est généré dynamiquement par `buildChartSVG(dayData, siteInfo)` en JS pur
+- Les dropdowns au-dessus de la carte : `position:fixed` + `getBoundingClientRect()`.
+  `@floating-ui/dom` est installé (exposé via `window.FloatingUI = { computePosition, offset, flip, shift, autoUpdate }`)
+  pour les migrations futures vers un positionnement automatique (flip/shift sur les bords).
+- Le SVG du popup est généré dynamiquement par `buildChartSVG(dayData, siteInfo)` en JS pur.
+  Les éléments SVG sont créés via `svgHelpers(svg).mk` / `svgHelpers(svg).txt` (helper
+  partagé dans `geometry.blade.php`).
+- **CSS custom properties** dans `map/_partials/styles/base.blade.php` (`:root`) pour les
+  valeurs très répétées : `--font-mono`, `--c-bg-dark`, `--c-border-25/4/5`. Toute nouvelle
+  valeur répétée ≥ 3 fois → l'ajouter en var plutôt que la dupliquer.
+- **Helper global JS** : `window.AppShell.isDesktop()` (≥ 1024 px, aligné sur le `lg:`
+  Tailwind) — utilisé par le `<x-app-shell>` lui-même et par `mapApp()` pour piloter
+  l'ouverture par défaut des volets latéraux. Single source of truth pour ce breakpoint.
+
+### BackOffice (admin)
+- **Composant `<x-admin.button>`** (variants `primary|secondary|danger|ghost`, sizes `sm|md`)
+  pour les boutons standardisés. Voir `resources/views/components/admin/button.blade.php`
+  pour la doc inline.
+- **Trait `HasFilterableIndex`** (`app/Http/Controllers/Concerns/`) pour les controllers
+  admin de listing : `applySearch(query, term, columns)`, `applyTriStateFilter(query, raw, column)`,
+  `applySorting(query, request, allowed, defaultSort, defaultDir)` (whitelist anti-injection
+  sur `orderBy`).
 
 ### Base de données
 - Toujours migrations Laravel, jamais de modif manuelle
@@ -566,6 +618,10 @@ docker exec -it parapente_php php artisan queue:work --queue=meteo
 
 # Voir les logs du worker
 docker logs parapente_worker -f
+
+# Régénérer manuellement le bundle map Redis (force) ou le vider
+docker exec -it parapente_php php artisan map:rebuild-bundle
+docker exec -it parapente_php php artisan map:rebuild-bundle --clear
 
 # Vérifier les données en base
 # >>> \App\Models\SiteScore::where('site_id',1)->where('forecast_at','like','2026-05-08%')->get(['forecast_at','wind_dir_consensus','status']);
