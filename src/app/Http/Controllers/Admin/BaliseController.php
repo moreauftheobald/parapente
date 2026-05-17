@@ -31,7 +31,8 @@ class BaliseController extends Controller
     use HasFilterableIndex;
 
     private const SORTABLE = [
-        'name', 'source', 'external_id', 'active', 'created_at',
+        'name', 'source', 'external_id', 'active',
+        'country_code', 'admin_region', 'department', 'created_at',
     ];
 
     public function index(Request $request): View
@@ -43,6 +44,15 @@ class BaliseController extends Controller
             $query->where('source', $source);
         }
         $this->applyTriStateFilter($query, $request->input('active'), 'active');
+        if ($countryCode = $request->input('country_code')) {
+            $query->where('country_code', $countryCode);
+        }
+        if ($adminRegion = $request->input('admin_region')) {
+            $query->where('admin_region', $adminRegion);
+        }
+        if ($department = $request->input('department')) {
+            $query->where('department', $department);
+        }
 
         [$sort, $dir] = $this->applySorting($query, $request, self::SORTABLE, 'name');
 
@@ -51,14 +61,20 @@ class BaliseController extends Controller
 
         $balises = $query->paginate(50)->withQueryString();
 
-        $sources = Balise::query()->distinct()->orderBy('source')->pluck('source');
+        $sources       = Balise::query()->distinct()->orderBy('source')->pluck('source');
+        $countryCodes  = Balise::query()->whereNotNull('country_code')->distinct()->orderBy('country_code')->pluck('country_code');
+        $adminRegions  = Balise::query()->whereNotNull('admin_region')->distinct()->orderBy('admin_region')->pluck('admin_region');
+        $departments   = Balise::query()->whereNotNull('department')->distinct()->orderBy('department')->pluck('department');
 
         return view('admin.balises.index', [
-            'balises'    => $balises,
-            'sources'    => $sources,
-            'sort'       => $sort,
-            'dir'        => $dir,
-            'totalCount' => Balise::count(),
+            'balises'       => $balises,
+            'sources'       => $sources,
+            'countryCodes'  => $countryCodes,
+            'adminRegions'  => $adminRegions,
+            'departments'   => $departments,
+            'sort'          => $sort,
+            'dir'           => $dir,
+            'totalCount'    => Balise::count(),
         ]);
     }
 

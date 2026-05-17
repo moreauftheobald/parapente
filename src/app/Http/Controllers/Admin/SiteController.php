@@ -29,7 +29,8 @@ class SiteController extends Controller
 
     /** Champs autorisés au tri (whitelist, anti-injection) */
     private const SORTABLE = [
-        'name', 'source', 'level', 'altitude_m', 'active', 'region', 'created_at',
+        'name', 'source', 'level', 'altitude_m', 'active', 'region',
+        'country_code', 'admin_region', 'department', 'created_at',
     ];
 
     public function index(Request $request): View
@@ -47,6 +48,15 @@ class SiteController extends Controller
         if ($region = $request->input('region')) {
             $query->where('region', $region);
         }
+        if ($countryCode = $request->input('country_code')) {
+            $query->where('country_code', $countryCode);
+        }
+        if ($adminRegion = $request->input('admin_region')) {
+            $query->where('admin_region', $adminRegion);
+        }
+        if ($department = $request->input('department')) {
+            $query->where('department', $department);
+        }
 
         [$sort, $dir] = $this->applySorting($query, $request, self::SORTABLE, 'name');
         // Ordre stable secondaire
@@ -55,16 +65,22 @@ class SiteController extends Controller
         $sites = $query->paginate(50)->withQueryString();
 
         // Listes d'options pour les selects
-        $sources = Site::query()->distinct()->orderBy('source')->pluck('source');
-        $regions = Site::query()->whereNotNull('region')->distinct()->orderBy('region')->pluck('region');
+        $sources       = Site::query()->distinct()->orderBy('source')->pluck('source');
+        $regions       = Site::query()->whereNotNull('region')->distinct()->orderBy('region')->pluck('region');
+        $countryCodes  = Site::query()->whereNotNull('country_code')->distinct()->orderBy('country_code')->pluck('country_code');
+        $adminRegions  = Site::query()->whereNotNull('admin_region')->distinct()->orderBy('admin_region')->pluck('admin_region');
+        $departments   = Site::query()->whereNotNull('department')->distinct()->orderBy('department')->pluck('department');
 
         return view('admin.sites.index', [
-            'sites'      => $sites,
-            'sources'    => $sources,
-            'regions'    => $regions,
-            'sort'       => $sort,
-            'dir'        => $dir,
-            'totalCount' => Site::count(),
+            'sites'         => $sites,
+            'sources'       => $sources,
+            'regions'       => $regions,
+            'countryCodes'  => $countryCodes,
+            'adminRegions'  => $adminRegions,
+            'departments'   => $departments,
+            'sort'          => $sort,
+            'dir'           => $dir,
+            'totalCount'    => Site::count(),
         ]);
     }
 

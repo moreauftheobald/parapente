@@ -78,6 +78,36 @@
                             @endforeach
                         </select>
                     </th>
+                    <th class="px-4 py-3 text-left align-top w-24">
+                        {!! $sortLink('country_code', 'Pays') !!}
+                        <select form="filters-form" name="country_code" class="{{ $selectCls }}"
+                                onchange="this.form.submit()">
+                            <option value="">— tous —</option>
+                            @foreach ($countryCodes as $cc)
+                                <option value="{{ $cc }}" @selected(request('country_code') === $cc)>{{ $cc }}</option>
+                            @endforeach
+                        </select>
+                    </th>
+                    <th class="px-4 py-3 text-left align-top w-44">
+                        {!! $sortLink('admin_region', 'Région admin.') !!}
+                        <select form="filters-form" name="admin_region" class="{{ $selectCls }}"
+                                onchange="this.form.submit()">
+                            <option value="">— toutes —</option>
+                            @foreach ($adminRegions as $ar)
+                                <option value="{{ $ar }}" @selected(request('admin_region') === $ar)>{{ $ar }}</option>
+                            @endforeach
+                        </select>
+                    </th>
+                    <th class="px-4 py-3 text-left align-top w-44">
+                        {!! $sortLink('department', 'Département') !!}
+                        <select form="filters-form" name="department" class="{{ $selectCls }}"
+                                onchange="this.form.submit()">
+                            <option value="">— tous —</option>
+                            @foreach ($departments as $d)
+                                <option value="{{ $d }}" @selected(request('department') === $d)>{{ $d }}</option>
+                            @endforeach
+                        </select>
+                    </th>
                     <th class="px-4 py-3 text-left align-top w-40">
                         {!! $sortLink('level', 'Niveau') !!}
                         <select form="filters-form" name="level" class="{{ $selectCls }}"
@@ -121,6 +151,15 @@
                             </span>
                         </td>
                         <td class="px-4 py-3 text-gray-400">{{ $site->region ?? '—' }}</td>
+                        <td class="px-4 py-3 text-gray-400">
+                            @if ($site->country_code)
+                                <span class="font-mono text-xs px-1.5 py-0.5 rounded bg-gray-800 text-gray-300">{{ $site->country_code }}</span>
+                            @else
+                                <span class="text-gray-600">—</span>
+                            @endif
+                        </td>
+                        <td class="px-4 py-3 text-gray-400 truncate" title="{{ $site->admin_region }}">{{ $site->admin_region ?? '—' }}</td>
+                        <td class="px-4 py-3 text-gray-400 truncate" title="{{ $site->department }}">{{ $site->department ?? '—' }}</td>
                         <td class="px-4 py-3 text-gray-400">{{ ucfirst($site->level ?? '—') }}</td>
                         <td class="px-4 py-3 text-right font-mono text-gray-400">
                             {{ $site->altitude_m !== null ? $site->altitude_m . ' m' : '—' }}
@@ -156,7 +195,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="7" class="px-0 py-0">
+                        <td colspan="10" class="px-0 py-0">
                             <x-admin.empty-state icon="fa-solid fa-mountain-sun" message="Aucun site ne correspond aux critères." class="border-0 rounded-none" />
                         </td>
                     </tr>

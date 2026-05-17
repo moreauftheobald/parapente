@@ -35,4 +35,19 @@ return [
         ],
     ],
 
+    'geocoding' => [
+        'ban' => [
+            'base_url'  => env('BAN_BASE_URL', 'https://api-adresse.data.gouv.fr'),
+            'min_score' => (float) env('BAN_MIN_SCORE', 0.3),
+            'timeout'   => (int) env('BAN_TIMEOUT', 15),
+        ],
+        'nominatim' => [
+            'base_url'           => env('NOMINATIM_BASE_URL', 'https://nominatim.openstreetmap.org'),
+            'user_agent'         => env('NOMINATIM_USER_AGENT', 'qui-vole.fr'),
+            'contact_email'      => env('NOMINATIM_CONTACT_EMAIL', ''),
+            'timeout'            => (int) env('NOMINATIM_TIMEOUT', 15),
+            'rate_limit_seconds' => (int) env('NOMINATIM_RATE_LIMIT', 1),
+        ],
+    ],
+
 ];

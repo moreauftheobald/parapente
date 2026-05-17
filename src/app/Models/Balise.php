@@ -27,6 +27,12 @@ class Balise extends Model
         'altitude_m',
         'height_agl_m',
         'active',
+        'country_code',
+        'country',
+        'admin_region',
+        'department',
+        'geocoded_provider',
+        'geocoded_at',
     ];
 
     protected $casts = [
@@ -35,6 +41,7 @@ class Balise extends Model
         'altitude_m'   => 'integer',
         'height_agl_m' => 'integer',
         'active'       => 'boolean',
+        'geocoded_at'  => 'datetime',
     ];
 
     // ── Relations ───────────────────────────────────────────────

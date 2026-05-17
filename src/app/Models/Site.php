@@ -25,6 +25,12 @@ class Site extends Model
         'level',
         'created_by',
         'active',
+        'country_code',
+        'country',
+        'admin_region',
+        'department',
+        'geocoded_provider',
+        'geocoded_at',
     ];
 
     protected $casts = [
@@ -34,6 +40,7 @@ class Site extends Model
         'landing_lng' => 'decimal:7',
         'altitude_m'  => 'integer',
         'active'      => 'boolean',
+        'geocoded_at' => 'datetime',
     ];
 
     // ── Boot ────────────────────────────────────────────────────
