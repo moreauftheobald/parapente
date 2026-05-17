@@ -11,6 +11,48 @@ Conventions :
 
 ---
 
+## 2026-05-17 — Tampon disque pour les icônes SpotAir
+
+Mise en place d'un tampon sur disque pour toutes les icônes SVG
+servies par l'API SpotAir (sites + balises). Les icônes ne sont plus
+chargées directement depuis `spotair.mobi` par les navigateurs ; elles
+transitent par `public/icons-cache/{site|balise}/.../*.svg`, peuplé à
+la demande au premier hit puis servi en statique par Nginx.
+
+### Ajouté
+- **`App\Http\Controllers\IconCacheController`** : 2 méthodes
+  `site()` / `balise()`, fetch SpotAir + écriture atomique
+  (`tmp + rename`), validation des paramètres, garde-fous
+  anti-réponse vide / SpotAir injoignable.
+- **Routes** `GET /icons-cache/site/{p}/{t}/{n}/{o}.svg` et
+  `GET /icons-cache/balise/{d}/{v}/{t}/{bg}/{c}.svg` (contraintes
+  regex strictes sur tous les paramètres).
+- **Bloc Nginx dédié** `location ^~ /icons-cache/` (dev + prod) :
+  prend la priorité sur la regex statique `\.svg$`, sert le fichier
+  s'il existe sinon fallback Laravel pour génération lazy.
+
+### Modifié
+- `siteIconUrl()` et `baliseIconUrl()` (vue carte) : pointent vers
+  les URLs du tampon au lieu de `spotair.mobi`.
+- Légende de la carte (`map/_partials/html/left-panel.blade.php`) :
+  les 10 icônes-exemples passent aussi par le tampon.
+- `.gitignore` : exclusion de `/public/icons-cache`.
+
+### Notes
+- Reset complet du tampon : `rm -rf src/public/icons-cache/`. Reset
+  partiel par type : `rm -rf src/public/icons-cache/site/` ou
+  `.../balise/`.
+- Premier hit après reset : `chown -R www-data:www-data` sur
+  `public/icons-cache/` peut être nécessaire selon les permissions du
+  mount Docker.
+- Volume en régime stable estimé à ~250 SVG / ~4 Mo (mesuré en prod
+  avec 149 sites + 228 balises actives). Plafond théorique à 1000+1000
+  : ~1500 SVG / ~15 Mo.
+- Discussion future : rotation lente du tampon (refresh sur changement
+  de charte SpotAir) — cf. `FF_icon_cache_rotation.md`.
+
+---
+
 ## 2026-05-16 — Passe de refactoring et d'optimisation (6 phases)
 
 Passe complète de refactoring et d'optimisation du code, découpée en

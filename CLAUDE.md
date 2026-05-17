@@ -86,6 +86,7 @@ src/                        ← Racine Laravel
 │   │   │   ├── Admin/                   ← BackOffice (sites, balises, modèles, APIs,
 │   │   │   │                                users, sync, logs, articles, modules…)
 │   │   │   ├── HomeController.php        ← Page d'accueil (articles)
+│   │   │   ├── IconCacheController.php   ← Tampon disque icônes SpotAir
 │   │   │   └── MapController.php         ← Vue carte
 │   │   ├── Requests/Api/
 │   │   │   ├── ScoringRules.php           ← Catalogue de règles validation partagé
@@ -482,6 +483,37 @@ Helpers partagés :
 > structure du payload (ajout/retrait de champ, changement de type)
 > DOIT s'accompagner d'un bump de cette constante — sinon les vieilles
 > entrées Redis peuvent casser la vue (cf. point 11 plus bas).
+
+### Tampon d'icônes SpotAir — `App\Http\Controllers\IconCacheController`
+
+Les icônes des marqueurs (sites + balises) sont fournies par l'API
+SpotAir (`https://www.spotair.mobi/icones/...`), qui génère un SVG
+unique par combinaison de paramètres. Pour éviter de hammer leur
+API à chaque visite et accélérer le boot carte, toutes les icônes
+transitent par un **tampon disque** côté serveur :
+
+- URLs publiques : `/icons-cache/site/{p}/{t}/{n}/{o}.svg` et
+  `/icons-cache/balise/{d}/{v}/{t}/{bg}/{c}.svg`.
+- Stockage : `public/icons-cache/{site|balise}/.../*.svg` (gitignored).
+- **Nginx sert le fichier directement** dès le second hit grâce au
+  bloc `location ^~ /icons-cache/` qui prend la priorité sur la regex
+  statique `\.svg$` et fait un `try_files` avec fallback Laravel.
+- Au premier hit pour une combinaison, le contrôleur fetch SpotAir,
+  écrit le SVG sur disque (atomique : `tmp + rename`), puis renvoie
+  le corps. PHP n'est jamais rappelé pour cette combinaison ensuite.
+- Reset : `rm -rf public/icons-cache/` (ou un sous-dossier précis).
+  Pas de cache Redis impliqué, pas de commande artisan dédiée — c'est
+  voulu (le système de fichiers EST la source de vérité).
+
+> **Permissions** — `public/icons-cache/` est créé à la volée par
+> PHP-FPM (`www-data`). Si Docker monte `src/` avec un autre
+> propriétaire (cas fréquent en dev), prévoir un
+> `chown -R www-data:www-data public/icons-cache/` après le premier
+> déploiement, sinon le contrôleur renvoie 500 sur le `mkdir`.
+
+> **Rotation** — le tampon est aujourd'hui *write-once*. Une rotation
+> lente et plafonnée (pour absorber les changements de charte SpotAir)
+> est cadrée dans `FF_icon_cache_rotation.md`, à implémenter plus tard.
 
 ### Paramètres globaux — `App\Services\Settings`
 
