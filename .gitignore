@@ -49,3 +49,8 @@ Thumbs.db
 .Trashes
 ehthumbs.db
 /deploy.sh
+
+# ──────────────────────────────────────────
+# Dumps de prod (cf. scripts/sync-prod-to-local.sh)
+# ──────────────────────────────────────────
+var/dumps/
