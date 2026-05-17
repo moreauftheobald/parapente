@@ -33,11 +33,13 @@ class PiouPiouProvider implements BaliseProviderInterface
 
     /**
      * Convention de cap de vent du réseau.
-     * OpenWindMap renvoie `wind_heading` = direction VERS LAQUELLE souffle
-     * le vent (TO). Le contrat de BaliseProviderInterface impose la
-     * convention FROM (météo standard) → on ajoute 180° à l'ingestion.
+     * Vérification du 2026-05-17 (balise 806 Meteo Hinchen) : l'API
+     * `https://api.pioupiou.fr/v1/live/{id}` renvoie `wind_heading` en
+     * convention FROM (direction D'OÙ vient le vent), aligné sur la
+     * convention météo standard et sur ce que SpotAir affiche.
+     * Pas de conversion nécessaire à l'ingestion.
      */
-    private const WIND_HEADING_IS_TOWARD = true;
+    private const WIND_HEADING_IS_TOWARD = false;
 
     /** Au-delà, on considère que la station n'a pas émis récemment et on ne la retient pas à la découverte */
     private const DISCOVERY_FRESHNESS_HOURS = 24;
