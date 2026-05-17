@@ -21,9 +21,11 @@ use Illuminate\Support\Facades\Hash;
  */
 class DbScrub extends Command
 {
-    protected $signature = 'db:scrub {--force : Skip confirmation prompt}';
+    protected $signature = 'db:scrub
+                            {--force : Skip confirmation prompt}
+                            {--scrub-admins : Anonymiser AUSSI les admins (par défaut on les préserve pour pouvoir se logger en local avec ses identifiants habituels)}';
 
-    protected $description = 'Anonymise les données sensibles (emails, passwords, secrets chiffrés) après import d\'un dump prod.';
+    protected $description = 'Anonymise les données sensibles (emails, passwords, secrets chiffrés) après import d\'un dump prod. Préserve les admins par défaut.';
 
     public function handle(): int
     {
@@ -38,12 +40,20 @@ class DbScrub extends Command
             return self::SUCCESS;
         }
 
+        $scrubAdmins = (bool) $this->option('scrub-admins');
+
         // 1. Users : anonymiser emails + reset password.
         // On hashe une seule fois pour partager le hash entre tous les users
         // (Hash::make coûte ~100ms par appel, ça compte si on a 100+ users).
         $defaultPassword = Hash::make('password');
-        $count = 0;
-        User::query()->orderBy('id')->chunkById(100, function ($users) use ($defaultPassword, &$count) {
+        $count           = 0;
+        $skipped         = 0;
+
+        $query = User::query()->orderBy('id');
+        if (! $scrubAdmins) {
+            $query->where('role', '!=', 'admin');
+        }
+        $query->chunkById(100, function ($users) use ($defaultPassword, &$count) {
             foreach ($users as $user) {
                 $user->email             = "user{$user->id}@local.test";
                 $user->password          = $defaultPassword;
@@ -53,7 +63,15 @@ class DbScrub extends Command
                 $count++;
             }
         });
+
+        if (! $scrubAdmins) {
+            $skipped = User::where('role', 'admin')->count();
+        }
+
         $this->info("✓ {$count} utilisateur(s) anonymisé(s) (email + password='password').");
+        if ($skipped > 0) {
+            $this->line("  ↳ {$skipped} admin(s) préservé(s) (email + mot de passe d'origine conservés). Utilise --scrub-admins pour les anonymiser aussi.");
+        }
 
         // 2. weather_apis : api_key + oauth chiffrés (cast 'encrypted' inopérant
         // en local car APP_KEY différent → les valeurs sont des chaînes opaques).

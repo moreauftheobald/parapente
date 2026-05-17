@@ -54,3 +54,9 @@ ehthumbs.db
 # Dumps de prod (cf. scripts/sync-prod-to-local.sh)
 # ──────────────────────────────────────────
 var/dumps/
+
+# ──────────────────────────────────────────
+# Scripts de sync prod→local (perso, non partagés)
+# ──────────────────────────────────────────
+/scripts/sync-prod-to-local.sh
+/scripts/load-dump.sh
