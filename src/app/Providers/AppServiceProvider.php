@@ -5,6 +5,8 @@ namespace App\Providers;
 use App\Models\Balise;
 use App\Models\Site;
 use App\Observers\GeocodableObserver;
+use App\Observers\MapBundleInvalidationObserver;
+use App\Observers\SiteActivationObserver;
 use App\Services\Geocoding\GeoApiGouvReverseGeocoder;
 use App\Services\Geocoding\HybridReverseGeocoder;
 use App\Services\Geocoding\NominatimReverseGeocoder;
@@ -61,5 +63,16 @@ class AppServiceProvider extends ServiceProvider
         // la mise à jour des coordonnées (cf. FF_location_enrichment.md).
         Site::observe(GeocodableObserver::class);
         Balise::observe(GeocodableObserver::class);
+
+        // Invalidation du map bundle quand un site/balise change
+        // (activation, déplacement, suppression…). Debounce 5s + job
+        // unique 30s pour absorber les toggles en rafale.
+        Site::observe(MapBundleInvalidationObserver::class);
+        Balise::observe(MapBundleInvalidationObserver::class);
+
+        // Fetch météo + scoring immédiat quand un site devient actif
+        // (sinon il faut attendre jusqu'à 12h le prochain cycle cron
+        // pour avoir tous les modèles).
+        Site::observe(SiteActivationObserver::class);
     }
 }

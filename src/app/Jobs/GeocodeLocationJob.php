@@ -72,6 +72,6 @@ class GeocodeLocationJob implements ShouldQueue
             'department'        => $result->department,
             'geocoded_provider' => $result->provider,
             'geocoded_at'       => now(),
-        ])->save();
+        ])->saveQuietly(); // saveQuietly → pas de boucle observer (geocoding + map bundle)
     }
 }

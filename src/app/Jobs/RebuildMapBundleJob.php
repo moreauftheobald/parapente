@@ -6,6 +6,7 @@ namespace App\Jobs;
 
 use App\Services\Map\MapBundleBuilder;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -13,22 +14,36 @@ use Illuminate\Support\Facades\Log;
 /**
  * Régénère le map bundle et le stocke en cache Redis.
  *
- * Dispatché à la fin du cycle horaire de scoring (cf.
- * FetchForecastsJob ou ScoreSiteJob) pour que le bundle servi à
- * `/api/map-bundle` reflète toujours les derniers scores.
+ * Dispatché :
+ *  - à la fin du cycle horaire de scoring (FetchForecastsJob,
+ *    ScoreSiteJob) → bundle reflète les derniers scores
+ *  - lors d'un changement de Site/Balise (activation, suppression,
+ *    déplacement…) via MapBundleInvalidationObserver
  *
- * Idempotent : si plusieurs jobs sont dispatchés (compteur Redis qui
- * atteint 0 deux fois pour une raison X), le 2e écrase juste le
- * cache avec le même contenu.
+ * Idempotent : plusieurs dispatches concurrents → le dernier écrase
+ * juste le cache avec le contenu le plus récent.
+ *
+ * `ShouldBeUnique` avec uniqueFor=30s : si 100 toggles se font en
+ * quelques secondes, un seul job est créé (les suivants sont
+ * rejetés par le lock unique). Combiné avec un delay() côté
+ * observer, ça donne un effet de debounce naturel.
  *
  * Cf. FF_map_bundle_cache.md.
  */
-class RebuildMapBundleJob implements ShouldQueue
+class RebuildMapBundleJob implements ShouldQueue, ShouldBeUnique
 {
     use Queueable;
 
     public int $timeout = 60;
     public int $tries   = 2;
+
+    /** Lock TTL pour le ShouldBeUnique (secondes). */
+    public int $uniqueFor = 30;
+
+    public function uniqueId(): string
+    {
+        return 'rebuild-map-bundle';
+    }
 
     public function handle(MapBundleBuilder $builder, CacheRepository $cache): void
     {
