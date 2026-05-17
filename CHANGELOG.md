@@ -11,6 +11,90 @@ Conventions :
 
 ---
 
+## 2026-05-17 — Géolocalisation administrative + cycle d'activation accéléré
+
+Trois améliorations interdépendantes : enrichissement des sites et
+balises avec leur découpage administratif (pays / région / département)
+pour permettre les filtres dans l'admin, auto-rafraîchissement du
+cache map au moindre changement, et fetch météo immédiat à l'activation
+d'un site (au lieu d'attendre jusqu'à 12 h le prochain cron).
+
+### Ajouté
+- **Géocodage automatique des sites et balises** (cf. `FF_location_enrichment.md`)
+  - 6 nouvelles colonnes sur `sites` ET `balises` : `country_code`
+    (ISO-2), `country`, `admin_region`, `department`,
+    `geocoded_provider`, `geocoded_at`. Indexes : `country_code`,
+    `department`, `(country_code, admin_region)`.
+  - Service `App\Services\Geocoding\` :
+    - `LocationResult` (DTO readonly)
+    - `ReverseGeocoderInterface` (contrat single-point)
+    - `GeoApiGouvReverseGeocoder` — point-in-polygon sur les communes
+      françaises via `geo.api.gouv.fr/communes`. Couvre 100 % des
+      coords FR, sans rate limit.
+    - `NominatimReverseGeocoder` — fallback monde entier (OSM public),
+      rate-limité 1 req/s via `Cache::lock()` distribué (multi-worker safe).
+    - `HybridReverseGeocoder` — orchestrateur 2 tiers : geo.api.gouv
+      d'abord, Nominatim en fallback. Bindé sur `ReverseGeocoderInterface`.
+  - Job `App\Jobs\GeocodeLocationJob` (tries=3, backoff exponentiel
+    60/300/900s) + Observer `App\Observers\GeocodableObserver` sur Site
+    et Balise → géocodage async à la création et au changement de coords.
+  - Commande artisan `php artisan geocode:locations` :
+    `--sites` / `--balises` / `--force` / `--chunk=200` / `--limit=N`.
+    Idempotente (ne traite que `geocoded_at IS NULL` sans `--force`).
+    ~2 min pour 1100 sites + 270 balises.
+  - Filtres admin sur `/admin/sites` et `/admin/balises` : 3 nouveaux
+    selects (pays / région admin. / département) + colonnes affichées.
+  - Config `services.geocoding.{geo_api_gouv,nominatim}` (env vars
+    `GEO_API_GOUV_BASE_URL`, `NOMINATIM_USER_AGENT`,
+    `NOMINATIM_CONTACT_EMAIL`, `NOMINATIM_RATE_LIMIT`).
+- **Auto-rebuild du map bundle** sur changement Site/Balise
+  - Observer `App\Observers\MapBundleInvalidationObserver` sur Site +
+    Balise → dispatch `RebuildMapBundleJob` (délai 5s) sur
+    `created/updated/deleted`, uniquement si un champ visible carte a
+    changé (`active`, `latitude`, `longitude`, `name`, `altitude_m`,
+    `level`, `landing_lat`, `landing_lng`).
+  - `RebuildMapBundleJob` devient `ShouldBeUnique` (lock 30s,
+    uniqueId fixe) — 100 toggles en rafale → 1 seul rebuild.
+  - `GeocodeLocationJob` passe en `saveQuietly()` pour éviter une
+    boucle observer (geocoding → save → rebuild inutile).
+  - **Limite** : les `Builder::update()` en masse (tinker, SQL)
+    bypassent les events → garder `php artisan map:rebuild-bundle`
+    pour ce cas.
+- **Fetch météo + scoring immédiat à l'activation d'un site**
+  - Observer `App\Observers\SiteActivationObserver` → dispatch
+    `FetchSiteForecastsJob` sur :
+    - création d'un site déjà actif
+    - transition inactif → actif
+  - Le job fetch les ~13 modèles en synchrone (~30-60s), lance le
+    scoring, invalide les caches du site, dispatch `RebuildMapBundleJob`.
+  - Activer 10 sites en rafale → 10 jobs séquentiels (~5-10 min total)
+    au lieu de jusqu'à 12 h pour le prochain cron horaire à couvrir
+    tous les modèles.
+  - Pas appliqué aux balises (leur cycle de fetch est déjà court — 5
+    min via `Fetch*ReadingsJob` qui auto-découvrent les balises actives).
+
+### Base de données
+- Migration `2026_05_17_130000_add_geocoding_to_sites_and_balises` :
+  6 colonnes + 3 indexes sur `sites` et `balises` (cf. ci-dessus).
+
+### Déploiement
+- Après migrate, lancer **une fois** :
+  ```
+  docker exec parapente_php php artisan geocode:locations
+  ```
+  pour enrichir les ~1370 entrées existantes (~2 min).
+- Optionnel : `NOMINATIM_CONTACT_EMAIL` dans `.env` pour l'identification
+  polie auprès de Nominatim (User-Agent complet).
+
+### Notes d'architecture
+- Tentative initiale avec BAN (`api-adresse.data.gouv.fr`) abandonnée :
+  BAN renvoie `not-found` pour la majorité des sites de parapente
+  (loin de toute adresse postale indexée). geo.api.gouv.fr couvre 100 %
+  des coords FR via point-in-polygon. Cf. `FF_location_enrichment.md`
+  pour l'historique complet du diagnostic.
+
+---
+
 ## 2026-05-17 — Article épinglé, pseudo-wiki et harmonisation BackOffice
 
 Trois chantiers esthétiques/fonctionnels regroupés sur une même journée :

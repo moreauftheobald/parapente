@@ -115,20 +115,31 @@ src/                        ← Racine Laravel
 │   │   │   ├── BaliseConstants.php           (DEAD_AFTER_DAYS, etc.)
 │   │   │   ├── BaliseReadingFormatter.php    (sérialisation JSON)
 │   │   │   ├── PiouPiouProvider.php, MetarProvider.php, WindyOpenDataProvider.php
+│   │   ├── Geocoding/                    ← Reverse geocoding admin (FF_location_enrichment.md)
+│   │   │   ├── LocationResult.php            (DTO readonly)
+│   │   │   ├── ReverseGeocoderInterface.php
+│   │   │   ├── GeoApiGouvReverseGeocoder.php (point-in-polygon FR, sans rate limit)
+│   │   │   ├── NominatimReverseGeocoder.php  (fallback monde, 1 req/s)
+│   │   │   └── HybridReverseGeocoder.php     (orchestrateur 2 tiers : geoApiGouv → nominatim)
 │   │   └── Map/                          ← Cache pré-calculé des données carte
 │   │       ├── MapBundleBuilder.php          (bundle markers, /api/map-bundle)
 │   │       ├── SiteDetailCache.php           (cache /scores /chart /multimodel)
 │   │       ├── BalisesBundleCache.php        (cache /api/balises + /history)
 │   │       ├── DayQualityCalculator.php      (helper viabilité jour)
 │   │       └── SunWindowCalculator.php       (helper fenêtre solaire)
-│   └── Jobs/
-│       ├── FetchForecastsJob.php         ← Orchestre par site (Bus::batch)
-│       ├── FetchSiteForecastsJob.php     ← Fetch + score 1 site
-│       ├── FetchBaliseReadingsJob.php    ← Base ABSTRAITE des 3 jobs balises
-│       ├── FetchPiouPiouReadingsJob.php  ← Étend FetchBaliseReadingsJob
-│       ├── FetchMetarReadingsJob.php     ← Étend FetchBaliseReadingsJob
-│       ├── FetchWindyReadingsJob.php     ← Étend FetchBaliseReadingsJob
-│       └── RebuildMapBundleJob.php       ← Régénère le map bundle après scoring
+│   ├── Jobs/
+│   │   ├── FetchForecastsJob.php         ← Orchestre par site (Bus::batch)
+│   │   ├── FetchSiteForecastsJob.php     ← Fetch + score 1 site
+│   │   ├── FetchBaliseReadingsJob.php    ← Base ABSTRAITE des 3 jobs balises
+│   │   ├── FetchPiouPiouReadingsJob.php  ← Étend FetchBaliseReadingsJob
+│   │   ├── FetchMetarReadingsJob.php     ← Étend FetchBaliseReadingsJob
+│   │   ├── FetchWindyReadingsJob.php     ← Étend FetchBaliseReadingsJob
+│   │   ├── GeocodeLocationJob.php        ← Géocode 1 Site/Balise (job async)
+│   │   └── RebuildMapBundleJob.php       ← Régénère le map bundle (ShouldBeUnique 30s)
+│   └── Observers/
+│       ├── GeocodableObserver.php        ← Géocode auto Site/Balise à la création/modif coords
+│       ├── MapBundleInvalidationObserver.php ← Rebuild map bundle sur create/update/delete (debounce 5s)
+│       └── SiteActivationObserver.php    ← Fetch météo + scoring immédiat à l'activation d'un site
 ├── config/
 │   └── weather.php                       ← Palette MODEL_COLORS des modèles NWP
 ├── database/
@@ -173,6 +184,16 @@ src/                        ← Racine Laravel
 | `articles`        | Articles / changelog accueil (titre, body HTML, `author_id`, `is_published`, `is_pinned`, `published_at`) |
 | `wiki_pages`      | Pages du pseudo-wiki (`parent_id` auto-référent, `slug` unique, `title`, `excerpt`, body HTML, `sort_order`, `is_published`, `author_id`) |
 | `settings`        | Paramètres globaux (clé unique, valeur JSON, label, description) — seuils de scoring éditables via `/admin/settings` |
+
+> **Colonnes de géocodage** (sur `sites` et `balises`) :
+> `country_code` (CHAR 2 ISO-2), `country` (libellé FR), `admin_region`
+> (région / Bundesland / canton), `department` (département / province /
+> Landkreis), `geocoded_provider` (`geo-api-gouv` | `nominatim`),
+> `geocoded_at`. Alimentées par `App\Services\Geocoding\*` via la
+> commande `php artisan geocode:locations` (one-shot) ou l'observer
+> `GeocodableObserver` (création / modif coords). Indexes :
+> `country_code`, `department`, `(country_code, admin_region)`.
+> Cf. `FF_location_enrichment.md`.
 
 ### Colonnes clés `site_conditions`
 ```
@@ -532,6 +553,69 @@ transitent par un **tampon disque** côté serveur :
 > lente et plafonnée (pour absorber les changements de charte SpotAir)
 > est cadrée dans `FF_icon_cache_rotation.md`, à implémenter plus tard.
 
+### Géocodage administratif — `App\Services\Geocoding\*`
+
+Les sites et balises sont enrichis (pays / région / département) via
+un orchestrateur 2 tiers :
+1. **geo.api.gouv.fr** — point-in-polygon sur les communes françaises
+   (métropole + DOM). Sans rate limit, couvre 100 % des coords FR.
+2. **Nominatim** (OSM public) — fallback monde entier, rate-limité
+   1 req/s via `Cache::lock()` distribué (multi-worker safe). Sert
+   pour la Belgique, le Luxembourg, l'Allemagne, etc.
+
+Une tentative initiale via BAN (`api-adresse.data.gouv.fr`) a été
+abandonnée : BAN renvoie `not-found` pour la majorité des sites de
+parapente (loin de toute adresse postale indexée). Cf.
+`FF_location_enrichment.md` pour l'historique.
+
+**Déclencheurs** :
+- **À la création / modif de coords** : `GeocodableObserver` (Site et
+  Balise) → dispatch `GeocodeLocationJob` (async, tries=3 backoff
+  exponentiel 60/300/900 s).
+- **En masse** : `php artisan geocode:locations [--sites] [--balises]
+  [--force] [--chunk=200] [--limit=N]`. Idempotente — sans `--force`,
+  ne traite que `geocoded_at IS NULL`. ~2 min pour 1100 sites + 270 balises.
+
+**Filtres admin** : `/admin/sites` et `/admin/balises` exposent les 3
+filtres (pays / région admin. / département) via la trait
+`HasFilterableIndex`.
+
+**Config** (`config/services.php`, bloc `geocoding`) :
+- `GEO_API_GOUV_BASE_URL` (défaut `https://geo.api.gouv.fr`)
+- `NOMINATIM_USER_AGENT` (défaut `qui-vole.fr`)
+- `NOMINATIM_CONTACT_EMAIL` (à renseigner en prod pour identification polie)
+- `NOMINATIM_RATE_LIMIT` (défaut `1` seconde entre appels)
+
+### Invalidation du map bundle et fetch immédiat — observers
+
+Trois observers automatisent l'invalidation et le rafraîchissement
+du cache map sans intervention manuelle :
+
+- **`MapBundleInvalidationObserver`** (Site + Balise) — dispatch
+  `RebuildMapBundleJob` avec un délai de 5 s sur `created/updated/deleted`,
+  uniquement si un champ visible carte a changé (`active`, `latitude`,
+  `longitude`, `name`, `altitude_m`, `level`, `landing_lat`,
+  `landing_lng`). `RebuildMapBundleJob` est `ShouldBeUnique` avec
+  `uniqueFor=30s` et `uniqueId='rebuild-map-bundle'` → 100 toggles en
+  rafale produisent **un seul** rebuild. Combiné au délai 5 s, l'effet
+  est un debounce naturel.
+
+- **`SiteActivationObserver`** (Site uniquement) — dispatch
+  `FetchSiteForecastsJob` sur création d'un site déjà actif OU
+  transition inactif → actif. Sans ça, l'activation d'un site n'a
+  aucun effet visible avant le prochain cycle cron horaire et il faut
+  jusqu'à 12 h pour qu'un nouveau site voie ses ~13 modèles tous
+  récupérés. Le job fetch (sync, ~30-60 s) → score → invalide caches
+  site → dispatch `RebuildMapBundleJob`.
+
+- **`GeocodableObserver`** (Site + Balise) — cf. section géocodage
+  ci-dessus.
+
+**Limite des observers Eloquent** : ils ne se déclenchent **pas** sur
+les `Builder::update()` en masse (tinker, SQL direct via PHPMyAdmin).
+Dans ce cas, lancer manuellement `php artisan map:rebuild-bundle` (et
+au besoin `php artisan geocode:locations`).
+
 ### Paramètres globaux — `App\Services\Settings`
 
 Tous les seuils du scoring (précipitations, rafales, viabilité du jour)
@@ -692,6 +776,11 @@ docker logs parapente_worker -f
 docker exec -it parapente_php php artisan map:rebuild-bundle
 docker exec -it parapente_php php artisan map:rebuild-bundle --clear
 
+# Géocoder en masse les sites/balises (cf. FF_location_enrichment.md)
+docker exec -it parapente_php php artisan geocode:locations
+docker exec -it parapente_php php artisan geocode:locations --sites --force
+docker exec -it parapente_php php artisan geocode:locations --balises --limit=5  # test
+
 # Vérifier les données en base
 # >>> \App\Models\SiteScore::where('site_id',1)->where('forecast_at','like','2026-05-08%')->get(['forecast_at','wind_dir_consensus','status']);
 # >>> \App\Models\SiteCondition::where('site_id',1)->first(['wind_dir_min','wind_dir_max','wind_speed_min','wind_speed_max']);
@@ -766,8 +855,22 @@ docker exec -it parapente_php php artisan map:rebuild-bundle --clear
     `/api/balises/{id}/history` doit s'accompagner d'un bump de la
     `CACHE_VERSION` du service correspondant (sinon les vieilles entrées
     Redis casseront la vue). L'invalidation est **push** (jobs de
-    scoring / fetch readings) + **lazy fallback** (TTL backup). En dev,
-    vider le cache : `php artisan cache:clear` ou `php artisan map:rebuild-bundle --clear`.
+    scoring / fetch readings + observers Site/Balise) + **lazy fallback**
+    (TTL backup). En dev, vider le cache : `php artisan cache:clear` ou
+    `php artisan map:rebuild-bundle --clear`.
+15. **Observers Eloquent et opérations en masse** — les trois
+    observers (`GeocodableObserver`, `MapBundleInvalidationObserver`,
+    `SiteActivationObserver`) ne se déclenchent que sur les
+    `save() / create() / update() / delete()` Eloquent. Les
+    `Builder::update(['active' => true])` en masse (tinker, PHPMyAdmin,
+    SQL direct) **bypassent** ces events. Après une telle opération :
+    `php artisan map:rebuild-bundle` (et `geocode:locations` si
+    nouveaux modèles). Si un import en masse passe par Eloquent
+    (`->each(fn ($m) => $m->save())`), les observers se déclenchent
+    normalement — le `RebuildMapBundleJob` est `ShouldBeUnique` 30s
+    donc pas de raz-de-marée. Idem pour les écritures via
+    `DB::table()->insert()` (utilisé par `SitesImport`) qui contournent
+    Eloquent — `geocode:locations` post-import reste nécessaire.
 
 ---
 
