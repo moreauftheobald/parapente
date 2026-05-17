@@ -11,8 +11,9 @@
 // reading.wind_direction est toujours en convention FROM (les providers
 // normalisent à l'ingestion — cf. PiouPiouProvider::windDirectionFrom),
 // on le transmet donc tel quel au paramètre d=.
-
-const SPOTAIR_BALISE_URL = 'https://www.spotair.mobi/icones/balises/balise.svg.php';
+//
+// Les SVG transitent par le tampon disque public/icons-cache/balise/...
+// (cf. IconCacheController) plutôt que d'attaquer SpotAir directement.
 
 function baliseIconColor(speedKmh) {
     if (speedKmh === null) return 'g';
@@ -35,7 +36,7 @@ function baliseIconBg(readAtIso) {
 }
 
 function baliseIconUrl(reading) {
-    if (!reading) return `${SPOTAIR_BALISE_URL}?bg=d&c=g&v=0&d=0&t=0`;
+    if (!reading) return `/icons-cache/balise/0/0/0/d/g.svg`;
 
     const v  = reading.wind_speed_avg !== null ? Math.round(reading.wind_speed_avg) : 0;
     const d  = reading.wind_direction !== null ? (((reading.wind_direction % 360) + 360) % 360) : 0;
@@ -43,7 +44,7 @@ function baliseIconUrl(reading) {
     const c  = baliseIconColor(reading.wind_speed_avg);
     const bg = baliseIconBg(reading.read_at);
 
-    return `${SPOTAIR_BALISE_URL}?d=${d}&v=${v}&t=${t}&bg=${bg}&c=${c}`;
+    return `/icons-cache/balise/${d}/${v}/${t}/${bg}/${c}.svg`;
 }
 
 // Tooltip au survol : nom + valeurs + horodatage

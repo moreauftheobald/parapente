@@ -15,8 +15,12 @@
 // Le statut météo du jour (vert/orange/rouge) n'est PAS encodable dans
 // l'icône SpotAir → on l'affiche via un halo CSS coloré dans le wrapper
 // (cf. .pg-site-marker.pg-status-* dans styles).
-
-const SPOTAIR_SPOT_URL = 'https://www.spotair.mobi/icones/spots/spot.svg.php';
+//
+// Les SVG ne sont PAS chargés directement depuis SpotAir : ils transitent
+// par notre tampon disque sous public/icons-cache/site/{p}/{t}/{n}/{o}.svg
+// (cf. IconCacheController). Au premier hit pour une combinaison donnée,
+// PHP fetch SpotAir et persiste le SVG ; ensuite Nginx sert le fichier
+// statique directement.
 
 const SITE_LEVEL_TO_SPOTAIR = {
     debutant:      3,  // Vert  (IPPI 3)
@@ -41,12 +45,10 @@ function dirsToBitmask(min, max) {
 }
 
 function siteIconUrl(site, type = 1) {
-    const params = ['p=1', `t=${type}`];
-    const n = SITE_LEVEL_TO_SPOTAIR[site.level];
-    if (n) params.push(`n=${n}`);
+    const p = 1;
+    const n = SITE_LEVEL_TO_SPOTAIR[site.level] ?? 0;
     const o = dirsToBitmask(site.wind_dir_min, site.wind_dir_max);
-    if (o > 0) params.push(`o=${o}`);
-    return `${SPOTAIR_SPOT_URL}?${params.join('&')}`;
+    return `/icons-cache/site/${p}/${type}/${n}/${o}.svg`;
 }
 
 // Badge user_scoring : pastille en bas-droite du marker quand

@@ -104,19 +104,19 @@
                             <div class="lp-title">Sites de vol</div>
                             <div class="lp-legend-icons">
                                 <div class="lp-li">
-                                    <span class="lp-icon-ex"><span class="pg-site-marker pg-status-green"><img src="https://www.spotair.mobi/icones/spots/spot.svg.php?p=1&amp;t=1" alt=""></span></span>
+                                    <span class="lp-icon-ex"><span class="pg-site-marker pg-status-green"><img src="/icons-cache/site/1/1/0/0.svg" alt=""></span></span>
                                     <span>Conditions favorables</span>
                                 </div>
                                 <div class="lp-li">
-                                    <span class="lp-icon-ex"><span class="pg-site-marker pg-status-orange"><img src="https://www.spotair.mobi/icones/spots/spot.svg.php?p=1&amp;t=1" alt=""></span></span>
+                                    <span class="lp-icon-ex"><span class="pg-site-marker pg-status-orange"><img src="/icons-cache/site/1/1/0/0.svg" alt=""></span></span>
                                     <span>Conditions incertaines</span>
                                 </div>
                                 <div class="lp-li">
-                                    <span class="lp-icon-ex"><span class="pg-site-marker pg-status-red"><img src="https://www.spotair.mobi/icones/spots/spot.svg.php?p=1&amp;t=1" alt=""></span></span>
+                                    <span class="lp-icon-ex"><span class="pg-site-marker pg-status-red"><img src="/icons-cache/site/1/1/0/0.svg" alt=""></span></span>
                                     <span>Conditions défavorables</span>
                                 </div>
                                 <div class="lp-li">
-                                    <span class="lp-icon-ex"><span class="pg-site-marker pg-status-unknown"><img src="https://www.spotair.mobi/icones/spots/spot.svg.php?p=1&amp;t=1" alt=""></span></span>
+                                    <span class="lp-icon-ex"><span class="pg-site-marker pg-status-unknown"><img src="/icons-cache/site/1/1/0/0.svg" alt=""></span></span>
                                     <span>Données indisponibles</span>
                                 </div>
                             </div>
@@ -130,7 +130,7 @@
                                     <div class="lp-li">
                                         <span class="lp-icon-ex" style="position:relative;">
                                             <span class="pg-site-marker pg-status-unknown">
-                                                <img src="https://www.spotair.mobi/icones/spots/spot.svg.php?p=1&amp;t=1" alt="">
+                                                <img src="/icons-cache/site/1/1/0/0.svg" alt="">
                                                 <span class="pg-user-badge pg-user-badge-active"></span>
                                             </span>
                                         </span>
@@ -139,7 +139,7 @@
                                     <div class="lp-li">
                                         <span class="lp-icon-ex" style="position:relative;">
                                             <span class="pg-site-marker pg-status-unknown">
-                                                <img src="https://www.spotair.mobi/icones/spots/spot.svg.php?p=1&amp;t=1" alt="">
+                                                <img src="/icons-cache/site/1/1/0/0.svg" alt="">
                                                 <span class="pg-user-badge pg-user-badge-inactive"></span>
                                             </span>
                                         </span>
@@ -154,15 +154,15 @@
                             <div class="lp-title">Balises météo — vent</div>
                             <div class="lp-legend-icons">
                                 <div class="lp-li">
-                                    <img class="lp-balise-ex" src="https://www.spotair.mobi/icones/balises/balise.svg.php?d=90&amp;v=3&amp;t=0&amp;bg=w&amp;c=b" alt="">
+                                    <img class="lp-balise-ex" src="/icons-cache/balise/90/3/0/w/b.svg" alt="">
                                     <span>Vent faible (&lt; 5 km/h)</span>
                                 </div>
                                 <div class="lp-li">
-                                    <img class="lp-balise-ex" src="https://www.spotair.mobi/icones/balises/balise.svg.php?d=90&amp;v=12&amp;t=0&amp;bg=w&amp;c=g" alt="">
+                                    <img class="lp-balise-ex" src="/icons-cache/balise/90/12/0/w/g.svg" alt="">
                                     <span>Vent modéré (5–20 km/h)</span>
                                 </div>
                                 <div class="lp-li">
-                                    <img class="lp-balise-ex" src="https://www.spotair.mobi/icones/balises/balise.svg.php?d=90&amp;v=25&amp;t=0&amp;bg=w&amp;c=o" alt="">
+                                    <img class="lp-balise-ex" src="/icons-cache/balise/90/25/0/w/o.svg" alt="">
                                     <span>Vent fort (&gt; 20 km/h)</span>
                                 </div>
                             </div>
@@ -173,15 +173,15 @@
                             <div class="lp-title">Balises météo — fraîcheur</div>
                             <div class="lp-legend-icons">
                                 <div class="lp-li">
-                                    <img class="lp-balise-ex" src="https://www.spotair.mobi/icones/balises/balise.svg.php?d=90&amp;v=12&amp;t=0&amp;bg=w&amp;c=g" alt="">
+                                    <img class="lp-balise-ex" src="/icons-cache/balise/90/12/0/w/g.svg" alt="">
                                     <span>Relevé récent (&lt; 30 min)</span>
                                 </div>
                                 <div class="lp-li">
-                                    <img class="lp-balise-ex" src="https://www.spotair.mobi/icones/balises/balise.svg.php?d=90&amp;v=12&amp;t=0&amp;bg=l&amp;c=g" alt="">
+                                    <img class="lp-balise-ex" src="/icons-cache/balise/90/12/0/l/g.svg" alt="">
                                     <span>Relevé en retard</span>
                                 </div>
                                 <div class="lp-li">
-                                    <img class="lp-balise-ex" src="https://www.spotair.mobi/icones/balises/balise.svg.php?d=0&amp;v=0&amp;t=0&amp;bg=d&amp;c=g" alt="">
+                                    <img class="lp-balise-ex" src="/icons-cache/balise/0/0/0/d/g.svg" alt="">
                                     <span>Balise hors service</span>
                                 </div>
                             </div>

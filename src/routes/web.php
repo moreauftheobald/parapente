@@ -18,6 +18,7 @@ use App\Http\Controllers\Admin\WeatherModelController as AdminModelController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\HomeController;
+use App\Http\Controllers\IconCacheController;
 use App\Http\Controllers\MapController;
 use App\Http\Controllers\User\ProfileController;
 use App\Http\Controllers\User\ScoringPageController;
@@ -28,6 +29,14 @@ Route::get('/', [HomeController::class, 'index'])->name('home');
 
 // Carte météo (module 1)
 Route::get('/carte', [MapController::class, 'index'])->name('map');
+
+// Tampon d'icônes SpotAir : Nginx sert les fichiers déjà présents
+// dans public/icons-cache/ via try_files. PHP n'est appelé qu'au
+// premier hit pour chaque combinaison de paramètres.
+Route::get('/icons-cache/site/{p}/{t}/{n}/{o}.svg', [IconCacheController::class, 'site'])
+    ->where(['p' => '[0-9]+', 't' => '[0-9]+', 'n' => '[0-9]+', 'o' => '[0-9]+']);
+Route::get('/icons-cache/balise/{d}/{v}/{t}/{bg}/{c}.svg', [IconCacheController::class, 'balise'])
+    ->where(['d' => '[0-9]+', 'v' => '[0-9]+', 't' => '-?[0-9]+', 'bg' => '[wld]', 'c' => '[gbo]']);
 
 // ───────────────────────────────────────────────────────────────
 // Auth front (compte « user »)
