@@ -3,11 +3,8 @@
 
 @section('content')
 <div class="max-w-4xl">
-    <h1 class="text-2xl font-semibold text-white">Modules du menu</h1>
-    <p class="text-sm text-gray-500 mt-1 mb-6">
-        L'affichage de chaque module dans la barre de menu supérieure dépend de ces réglages :
-        module actif, niveau de droit requis, et compte utilisateur obligatoire ou non.
-    </p>
+    <x-admin.page-title title="Modules du menu"
+        subtitle="L'affichage de chaque module dans la barre de menu supérieure dépend de ces réglages : module actif, niveau de droit requis, et compte utilisateur obligatoire ou non." />
 
     <div class="space-y-3">
         @foreach ($modules as $module)
@@ -54,10 +51,9 @@
                     </label>
                 </div>
 
-                <button type="submit"
-                        class="px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-white text-xs font-medium rounded-md transition shrink-0 self-start sm:self-auto">
+                <x-admin.button type="submit" variant="primary" size="sm" class="shrink-0 self-start sm:self-auto">
                     Enregistrer
-                </button>
+                </x-admin.button>
             </form>
         @endforeach
     </div>

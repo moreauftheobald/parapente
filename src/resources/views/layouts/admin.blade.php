@@ -78,6 +78,16 @@
     <x-slot:help>@yield('help')</x-slot:help>
 
     <div class="p-4 sm:p-6">
+        @if (session('status'))
+            <x-admin.alert type="success">{{ session('status') }}</x-admin.alert>
+        @endif
+        @if (session('error'))
+            <x-admin.alert type="error">{{ session('error') }}</x-admin.alert>
+        @endif
+        @if (session('warning'))
+            <x-admin.alert type="warning">{{ session('warning') }}</x-admin.alert>
+        @endif
+
         @yield('content')
     </div>
 

@@ -47,26 +47,17 @@
 @endphp
 
 <div class="max-w-4xl">
-    <h1 class="text-2xl font-semibold text-white">Paramètres généraux</h1>
-    <p class="text-sm text-gray-500 mt-1 mb-6">
-        Seuils globaux du scoring : précipitations, rafales, viabilité du jour.
-    </p>
-
-    @if (session('status'))
-        <div class="mb-4 px-4 py-3 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-sm">
-            <i class="fa-solid fa-circle-check"></i> {{ session('status') }}
-        </div>
-    @endif
+    <x-admin.page-title
+        title="Paramètres généraux"
+        subtitle="Seuils globaux du scoring : précipitations, rafales, viabilité du jour." />
 
     @if ($errors->any())
-        <div class="mb-4 px-4 py-3 rounded bg-red-500/15 border border-red-500/30 text-red-300 text-sm">
-            <strong><i class="fa-solid fa-triangle-exclamation"></i> Quelques erreurs :</strong>
+        <x-admin.alert type="error">
+            <strong>Quelques erreurs :</strong>
             <ul class="list-disc list-inside mt-1">
-                @foreach ($errors->all() as $err)
-                    <li>{{ $err }}</li>
-                @endforeach
+                @foreach ($errors->all() as $err)<li>{{ $err }}</li>@endforeach
             </ul>
-        </div>
+        </x-admin.alert>
     @endif
 
     <form method="POST" action="{{ route('admin.settings.update') }}" class="space-y-6">
@@ -154,10 +145,9 @@
         @endforeach
 
         <div class="flex items-center justify-between">
-            <button type="submit"
-                    class="px-4 py-2 bg-sky-500 hover:bg-sky-400 text-white text-sm font-medium rounded-md transition">
-                <i class="fa-solid fa-floppy-disk"></i> Enregistrer tous les paramètres
-            </button>
+            <x-admin.button type="submit" variant="primary" icon="fa-solid fa-floppy-disk">
+                Enregistrer tous les paramètres
+            </x-admin.button>
             <a href="{{ route('admin.dashboard') }}" class="text-sm text-gray-400 hover:text-white transition">
                 Retour au dashboard
             </a>

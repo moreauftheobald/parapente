@@ -14,24 +14,12 @@
 
 @section('content')
 <div class="max-w-7xl">
-    <div class="flex items-baseline justify-between mb-4">
-        <div>
-            <h1 class="text-2xl font-semibold text-white">APIs météo</h1>
-            <p class="text-sm text-gray-500 mt-1">
-                Sources de données pour le fetch des modèles. Chaque modèle pointe vers UNE API (politique single-shot).
-            </p>
-        </div>
-    </div>
-
-    @if (session('status'))
-        <div class="mb-4 px-4 py-3 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-sm">
-            {{ session('status') }}
-        </div>
-    @endif
+    <x-admin.page-title title="APIs météo"
+        subtitle="Sources de données pour le fetch des modèles. Chaque modèle pointe vers UNE API (politique single-shot)." />
 
     <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
         <table class="w-full text-sm">
-            <thead class="bg-gray-950 text-xs uppercase tracking-wider border-b border-gray-800">
+            <thead class="bg-gray-950 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-800">
                 <tr>
                     <th class="px-4 py-3 text-left">API</th>
                     <th class="px-4 py-3 text-left w-32">Auth</th>
@@ -115,7 +103,9 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="8" class="px-4 py-12 text-center text-gray-500">Aucune API configurée.</td>
+                        <td colspan="8" class="px-0 py-0">
+                            <x-admin.empty-state icon="fa-solid fa-plug" message="Aucune API configurée." class="border-0 rounded-none" />
+                        </td>
                     </tr>
                 @endforelse
             </tbody>

@@ -3,28 +3,23 @@
 
 @section('content')
 <div class="max-w-4xl">
-    <div class="flex items-baseline justify-between mb-4">
-        <div>
-            <h1 class="text-2xl font-semibold text-white">Articles / Changelog</h1>
-            <p class="text-sm text-gray-500 mt-1">
-                Affichés sur la page d'accueil, du plus récent au plus ancien
-                ({{ $articles->total() }} au total).
-            </p>
-        </div>
-        <a href="{{ route('admin.articles.create') }}"
-           class="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-medium rounded-md transition shrink-0">
-            <i class="fa-solid fa-plus"></i> Nouvel article
-        </a>
-    </div>
+    <x-admin.page-title title="Articles / Changelog">
+        <x-slot:subtitle>
+            Affichés sur la page d'accueil, du plus récent au plus ancien ({{ $articles->total() }} au total).
+        </x-slot:subtitle>
+        <x-slot:actions>
+            <x-admin.button variant="primary" size="sm" :href="route('admin.articles.create')" icon="fa-solid fa-plus">
+                Nouvel article
+            </x-admin.button>
+        </x-slot:actions>
+    </x-admin.page-title>
 
     @if ($articles->isEmpty())
-        <div class="rounded-xl border border-dashed border-gray-700 bg-gray-900/40 p-10 text-center text-gray-500">
-            Aucun article pour l'instant.
-        </div>
+        <x-admin.empty-state icon="fa-solid fa-newspaper" message="Aucun article pour l'instant." />
     @else
         <div class="rounded-xl border border-gray-800 overflow-hidden">
             <table class="w-full text-sm">
-                <thead class="bg-gray-900 text-gray-500 text-xs uppercase tracking-wider">
+                <thead class="bg-gray-950 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-800">
                     <tr>
                         <th class="text-left px-4 py-2 font-medium">Titre</th>
                         <th class="text-left px-4 py-2 font-medium w-44">Date de publication</th>
@@ -41,9 +36,7 @@
                                         {{ $article->title }}
                                     </a>
                                     @if ($article->is_pinned)
-                                        <span class="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded px-1.5 py-0.5">
-                                            <i class="fa-solid fa-thumbtack"></i> Épinglé
-                                        </span>
+                                        <x-admin.badge status="warning" icon="fa-solid fa-thumbtack" :dot="false">Épinglé</x-admin.badge>
                                     @endif
                                 </div>
                                 @if ($article->author)
@@ -55,13 +48,9 @@
                             </td>
                             <td class="px-4 py-3">
                                 @if ($article->is_published)
-                                    <span class="inline-flex items-center gap-1.5 text-xs text-emerald-400">
-                                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Publié
-                                    </span>
+                                    <x-admin.badge status="published">Publié</x-admin.badge>
                                 @else
-                                    <span class="inline-flex items-center gap-1.5 text-xs text-gray-500">
-                                        <span class="w-1.5 h-1.5 rounded-full bg-gray-600"></span> Brouillon
-                                    </span>
+                                    <x-admin.badge status="neutral">Brouillon</x-admin.badge>
                                 @endif
                             </td>
                             <td class="px-4 py-3">

@@ -51,28 +51,20 @@
 @endphp
 
 <div class="max-w-5xl">
-    <div class="flex items-start justify-between mb-1 flex-wrap gap-3">
-        <div>
-            <h1 class="text-2xl font-semibold text-white">Qualité des données</h1>
-            <p class="text-sm text-gray-500 mt-1">
-                Doublons potentiels détectés sur la base des coordonnées géographiques.
-            </p>
-        </div>
-        <form method="GET" action="{{ route('admin.data-quality.index') }}" class="flex items-center gap-2">
-            <label class="inline-flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
-                <input type="checkbox" name="show_ignored" value="1" @checked($showIgnored)
-                       onchange="this.form.submit()"
-                       class="w-3.5 h-3.5 rounded border-gray-600 bg-gray-900 text-sky-500 focus:ring-sky-500/40">
-                Voir aussi les paires ignorées
-            </label>
-        </form>
-    </div>
+    <x-admin.page-title title="Qualité des données"
+        subtitle="Doublons potentiels détectés sur la base des coordonnées géographiques.">
+        <x-slot:actions>
+            <form method="GET" action="{{ route('admin.data-quality.index') }}" class="flex items-center gap-2">
+                <label class="inline-flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
+                    <input type="checkbox" name="show_ignored" value="1" @checked($showIgnored)
+                           onchange="this.form.submit()"
+                           class="w-3.5 h-3.5 rounded border-gray-600 bg-gray-900 text-sky-500 focus:ring-sky-500/40">
+                    Voir aussi les paires ignorées
+                </label>
+            </form>
+        </x-slot:actions>
+    </x-admin.page-title>
 
-    @if (session('status'))
-        <div class="mb-4 px-4 py-2 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-sm">
-            {{ session('status') }}
-        </div>
-    @endif
 
     {{-- ── Sites ─────────────────────────────────────────────────── --}}
     <section class="mt-6 bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">

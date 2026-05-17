@@ -3,28 +3,23 @@
 
 @section('content')
 <div class="max-w-5xl">
-    <div class="flex items-baseline justify-between mb-4">
-        <div>
-            <h1 class="text-2xl font-semibold text-white">Aide / Wiki</h1>
-            <p class="text-sm text-gray-500 mt-1">
-                Pages publiées sur <code class="text-gray-400">/aide</code>
-                ({{ $pages->total() }} au total).
-            </p>
-        </div>
-        <a href="{{ route('admin.wiki.create') }}"
-           class="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-medium rounded-md transition shrink-0">
-            <i class="fa-solid fa-plus"></i> Nouvelle page
-        </a>
-    </div>
+    <x-admin.page-title title="Aide / Wiki">
+        <x-slot:subtitle>
+            Pages publiées sur <code class="text-gray-400">/aide</code> ({{ $pages->total() }} au total).
+        </x-slot:subtitle>
+        <x-slot:actions>
+            <x-admin.button variant="primary" size="sm" :href="route('admin.wiki.create')" icon="fa-solid fa-plus">
+                Nouvelle page
+            </x-admin.button>
+        </x-slot:actions>
+    </x-admin.page-title>
 
     @if ($pages->isEmpty())
-        <div class="rounded-xl border border-dashed border-gray-700 bg-gray-900/40 p-10 text-center text-gray-500">
-            Aucune page pour l'instant.
-        </div>
+        <x-admin.empty-state icon="fa-solid fa-book-open" message="Aucune page pour l'instant." />
     @else
         <div class="rounded-xl border border-gray-800 overflow-hidden">
             <table class="w-full text-sm">
-                <thead class="bg-gray-900 text-gray-500 text-xs uppercase tracking-wider">
+                <thead class="bg-gray-950 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-800">
                     <tr>
                         <th class="text-left px-4 py-2 font-medium">Titre</th>
                         <th class="text-left px-4 py-2 font-medium w-40">Parent</th>
@@ -50,13 +45,9 @@
                             <td class="px-4 py-3 text-gray-400 font-mono text-xs">{{ $p->sort_order }}</td>
                             <td class="px-4 py-3">
                                 @if ($p->is_published)
-                                    <span class="inline-flex items-center gap-1.5 text-xs text-emerald-400">
-                                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Publiée
-                                    </span>
+                                    <x-admin.badge status="published">Publiée</x-admin.badge>
                                 @else
-                                    <span class="inline-flex items-center gap-1.5 text-xs text-gray-500">
-                                        <span class="w-1.5 h-1.5 rounded-full bg-gray-600"></span> Brouillon
-                                    </span>
+                                    <x-admin.badge status="neutral">Brouillon</x-admin.badge>
                                 @endif
                             </td>
                             <td class="px-4 py-3">

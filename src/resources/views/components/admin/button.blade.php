@@ -3,7 +3,7 @@
     'size'    => 'md',               // sm | md
     'href'    => null,               // si fourni : <a> au lieu de <button>
     'type'    => 'button',           // type pour <button> (button | submit)
-    'icon'    => null,               // emoji / SVG inline en slot left
+    'icon'    => null,               // classe(s) FontAwesome ('fa-solid fa-plus') OU HTML brut (emoji / SVG inline)
     'disabled' => false,
 ])
 
@@ -43,16 +43,24 @@
     };
 
     $cls = trim("{$base} {$sizeClasses} {$variantClasses}");
+
+    // Détection : si l'icône est une chaîne FA (commence par "fa-"), on wrap automatiquement
+    // dans <i class="..."></i>. Sinon (emoji, SVG inline, autre HTML) on rend tel quel.
+    $iconIsFa = $icon && is_string($icon) && str_starts_with(trim($icon), 'fa-');
 @endphp
 
 @if ($href)
     <a href="{{ $href }}" {{ $attributes->merge(['class' => $cls]) }}>
-        @isset($icon){{ $icon }}@endisset
+        @if ($icon)
+            @if ($iconIsFa)<i class="{{ $icon }}"></i>@else{!! $icon !!}@endif
+        @endif
         {{ $slot }}
     </a>
 @else
     <button type="{{ $type }}" @disabled($disabled) {{ $attributes->merge(['class' => $cls]) }}>
-        @isset($icon){{ $icon }}@endisset
+        @if ($icon)
+            @if ($iconIsFa)<i class="{{ $icon }}"></i>@else{!! $icon !!}@endif
+        @endif
         {{ $slot }}
     </button>
 @endif

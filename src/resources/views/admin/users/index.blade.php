@@ -18,35 +18,29 @@
 
 @section('content')
 <div class="max-w-5xl">
-    <div class="flex items-baseline justify-between mb-4">
-        <div>
-            <h1 class="text-2xl font-semibold text-white">Utilisateurs</h1>
-            <p class="text-sm text-gray-500 mt-1">
-                {{ number_format($users->total(), 0, ',', ' ') }} utilisateur{{ $users->total() > 1 ? 's' : '' }}
-            </p>
-        </div>
-        <div class="flex items-center gap-3">
+    <x-admin.page-title
+        title="Utilisateurs"
+        :subtitle="number_format($users->total(), 0, ',', ' ') . ' utilisateur' . ($users->total() > 1 ? 's' : '')">
+        <x-slot:actions>
             @if (request()->query())
                 <a href="{{ route('admin.users.index') }}" class="text-xs text-gray-400 hover:text-white transition" title="Réinitialiser les filtres">
                     <i class="fa-solid fa-rotate-left"></i> Réinitialiser
                 </a>
             @endif
-            <button form="filters-form" type="submit"
-                    class="px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-white text-xs font-medium rounded-md transition">
-                <i class="fa-solid fa-filter"></i> Appliquer
-            </button>
-            <a href="{{ route('admin.users.create') }}"
-               class="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-medium rounded-md transition">
-                <i class="fa-solid fa-user-plus"></i> Nouvel utilisateur
-            </a>
-        </div>
-    </div>
+            <x-admin.button form="filters-form" type="submit" variant="primary" size="sm" icon="fa-solid fa-filter">
+                Appliquer
+            </x-admin.button>
+            <x-admin.button :href="route('admin.users.create')" variant="primary" size="sm" icon="fa-solid fa-user-plus">
+                Nouvel utilisateur
+            </x-admin.button>
+        </x-slot:actions>
+    </x-admin.page-title>
 
     <form id="filters-form" method="GET"></form>
 
     <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
         <table class="w-full text-sm">
-            <thead class="bg-gray-950 text-xs uppercase tracking-wider border-b border-gray-800">
+            <thead class="bg-gray-950 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-800">
                 <tr>
                     <th class="px-4 py-3 text-left align-top">
                         {!! $sortLink('name', 'Nom / Email') !!}
@@ -75,20 +69,16 @@
                             <div class="text-gray-100 font-medium flex items-center gap-2">
                                 {{ $u->name }}
                                 @if ($u->id === auth()->id())
-                                    <span class="text-xs text-sky-300 bg-sky-500/15 border border-sky-500/30 px-1.5 py-0.5 rounded">vous</span>
+                                    <x-admin.badge status="info" :dot="false">vous</x-admin.badge>
                                 @endif
                             </div>
                             <div class="text-xs text-gray-500 font-mono">{{ $u->email }}</div>
                         </td>
                         <td class="px-4 py-3">
                             @if ($u->role === 'admin')
-                                <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-violet-500/15 text-violet-300 border border-violet-500/30">
-                                    <i class="fa-solid fa-shield-halved"></i> Admin
-                                </span>
+                                <x-admin.badge status="admin" icon="fa-solid fa-shield-halved" :dot="false">Admin</x-admin.badge>
                             @else
-                                <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-gray-800 text-gray-400 border border-gray-700">
-                                    <i class="fa-solid fa-user"></i> User
-                                </span>
+                                <x-admin.badge status="neutral" icon="fa-solid fa-user" :dot="false">User</x-admin.badge>
                             @endif
                         </td>
                         <td class="px-4 py-3 text-gray-400 text-xs font-mono">
@@ -123,7 +113,9 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="4" class="px-4 py-12 text-center text-gray-500">Aucun utilisateur.</td>
+                        <td colspan="4" class="px-0 py-0">
+                            <x-admin.empty-state icon="fa-solid fa-users" message="Aucun utilisateur." class="border-0 rounded-none" />
+                        </td>
                     </tr>
                 @endforelse
             </tbody>

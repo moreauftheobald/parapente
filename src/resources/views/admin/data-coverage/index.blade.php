@@ -84,12 +84,13 @@
 
 @section('content')
 <div class="max-w-[1400px]">
-    <h1 class="text-2xl font-semibold text-white mb-1">Couverture des données météo</h1>
-    <p class="text-sm text-gray-500 mb-6">
-        Ratio <span class="font-mono">heures reçues / heures attendues</span> sur la période de rétention de chaque source.
-        Une cellule à 100 % signifie qu’on a une ligne par heure pour chaque unité active (site ou balise) ce jour-là.
-        <span class="text-gray-600">Cache 5 min.</span>
-    </p>
+    <x-admin.page-title title="Couverture des données météo">
+        <x-slot:subtitle>
+            Ratio <span class="font-mono">heures reçues / heures attendues</span> sur la période de rétention de chaque source.
+            Une cellule à 100 % signifie qu’on a une ligne par heure pour chaque unité active (site ou balise) ce jour-là.
+            <span class="text-gray-600">Cache 5 min.</span>
+        </x-slot:subtitle>
+    </x-admin.page-title>
 
     {{-- ─────────────────────────────────────────────────────────────
          Section 1 — Fraîcheur des modèles météo

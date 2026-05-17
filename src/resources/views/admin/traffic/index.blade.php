@@ -58,19 +58,15 @@
 @endphp
 
 <div class="max-w-6xl">
-    <div class="flex items-baseline justify-between mb-6 flex-wrap gap-3">
-        <div>
-            <h1 class="text-2xl font-semibold text-white">Trafic du site</h1>
-            <p class="text-sm text-gray-500 mt-1">
-                Dernière mise à jour : {{ $now->translatedFormat('l j F · H:i') }}
-                · Fuseau Europe/Paris
-            </p>
-        </div>
-        <a href="{{ route('admin.settings.index') }}#analytics"
-           class="text-xs text-gray-500 hover:text-sky-300 transition">
-            <i class="fa-solid fa-gear"></i> Configurer la rétention
-        </a>
-    </div>
+    <x-admin.page-title title="Trafic du site"
+        :subtitle="'Dernière mise à jour : ' . $now->translatedFormat('l j F · H:i') . ' · Fuseau Europe/Paris'">
+        <x-slot:actions>
+            <a href="{{ route('admin.settings.index') }}#analytics"
+               class="text-xs text-gray-500 hover:text-sky-300 transition">
+                <i class="fa-solid fa-gear"></i> Configurer la rétention
+            </a>
+        </x-slot:actions>
+    </x-admin.page-title>
 
     {{-- ── KPI tiles ─────────────────────────────────────────────── --}}
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
@@ -111,36 +107,37 @@
             $chartH = 160;
             $barW   = 100 / 24;
         @endphp
+        {{-- SVG des barres uniquement (étirement horizontal accepté pour des rectangles).
+             Les labels sont rendus en HTML positionné en % pour éviter la déformation
+             due à preserveAspectRatio="none". --}}
         <div class="relative">
-            <svg viewBox="0 0 100 {{ $chartH + 24 }}" preserveAspectRatio="none" class="w-full h-48">
-                {{-- Lignes de grille --}}
+            <svg viewBox="0 0 100 {{ $chartH }}" preserveAspectRatio="none" class="w-full h-40 block">
                 @foreach ([0.25, 0.5, 0.75] as $f)
                     <line x1="0" y1="{{ $chartH * (1 - $f) }}" x2="100" y2="{{ $chartH * (1 - $f) }}"
-                          stroke="#1f2937" stroke-width="0.2" stroke-dasharray="0.5,0.5"/>
+                          stroke="#1f2937" stroke-width="0.4" stroke-dasharray="0.8,0.8"/>
                 @endforeach
                 @foreach ($hourlyToday as $i => $row)
                     @php
                         $h = $chartH * ($row['visits'] / $maxHour);
                         $y = $chartH - $h;
                     @endphp
-                    <g>
-                        <rect x="{{ $i * $barW + 0.3 }}" y="{{ $y }}"
-                              width="{{ $barW - 0.6 }}" height="{{ $h }}"
-                              fill="{{ $row['visits'] > 0 ? '#0ea5e9' : '#374151' }}"
-                              opacity="0.85">
-                            <title>{{ $row['hour'] }}h : {{ $fmt($row['visits']) }} visite{{ $row['visits'] > 1 ? 's' : '' }} · {{ $fmt($row['uniques']) }} unique{{ $row['uniques'] > 1 ? 's' : '' }}</title>
-                        </rect>
-                    </g>
-                @endforeach
-                {{-- Labels heures (uniquement 0h, 6h, 12h, 18h, 23h pour rester lisible) --}}
-                @foreach ([0, 6, 12, 18, 23] as $h)
-                    <text x="{{ $h * $barW + $barW / 2 }}" y="{{ $chartH + 14 }}"
-                          fill="#6b7280" font-size="6" text-anchor="middle"
-                          font-family="system-ui, sans-serif">{{ $h }}h</text>
+                    <rect x="{{ $i * $barW + 0.3 }}" y="{{ $y }}"
+                          width="{{ $barW - 0.6 }}" height="{{ $h }}"
+                          fill="{{ $row['visits'] > 0 ? '#0ea5e9' : '#374151' }}"
+                          opacity="0.85">
+                        <title>{{ $row['hour'] }}h : {{ $fmt($row['visits']) }} visite{{ $row['visits'] > 1 ? 's' : '' }} · {{ $fmt($row['uniques']) }} unique{{ $row['uniques'] > 1 ? 's' : '' }}</title>
+                    </rect>
                 @endforeach
             </svg>
+            {{-- Labels en HTML : positionnés au centre de chaque barre cible. --}}
+            <div class="relative h-5 mt-1 text-[11px] text-gray-500 font-mono select-none">
+                @foreach ([0, 6, 12, 18, 23] as $h)
+                    @php $left = $h * $barW + $barW / 2; @endphp
+                    <span class="absolute -translate-x-1/2 top-0" style="left: {{ $left }}%;">{{ $h }}h</span>
+                @endforeach
+            </div>
         </div>
-        <p class="text-xs text-gray-500 mt-2">
+        <p class="text-xs text-gray-500 mt-3">
             Survole une barre pour voir le détail. Total :
             <strong class="text-white">{{ $fmt(array_sum(array_column($hourlyToday, 'visits'))) }}</strong> visites,
             <strong class="text-sky-400">{{ $fmt($kpis['today']['uniques']) }}</strong> uniques.
@@ -152,12 +149,18 @@
         <h2 class="text-sm font-semibold text-sky-200 uppercase tracking-wider mb-4 flex items-center gap-2">
             <i class="fa-solid fa-chart-column"></i> Visites par jour — 30 derniers jours
         </h2>
-        @php $nDays = count($dailyMonth); $barWD = $nDays > 0 ? 100 / $nDays : 0; @endphp
+        @php
+            $nDays = count($dailyMonth);
+            $barWD = $nDays > 0 ? 100 / $nDays : 0;
+            $labelIndices = $nDays > 0
+                ? array_values(array_unique([0, (int) ($nDays * 0.25), (int) ($nDays * 0.5), (int) ($nDays * 0.75), $nDays - 1]))
+                : [];
+        @endphp
         <div class="relative">
-            <svg viewBox="0 0 100 {{ $chartH + 24 }}" preserveAspectRatio="none" class="w-full h-48">
+            <svg viewBox="0 0 100 {{ $chartH }}" preserveAspectRatio="none" class="w-full h-40 block">
                 @foreach ([0.25, 0.5, 0.75] as $f)
                     <line x1="0" y1="{{ $chartH * (1 - $f) }}" x2="100" y2="{{ $chartH * (1 - $f) }}"
-                          stroke="#1f2937" stroke-width="0.2" stroke-dasharray="0.5,0.5"/>
+                          stroke="#1f2937" stroke-width="0.4" stroke-dasharray="0.8,0.8"/>
                 @endforeach
                 @foreach ($dailyMonth as $i => $row)
                     @php
@@ -171,17 +174,15 @@
                         <title>{{ $row['label'] }} : {{ $fmt($row['visits']) }} visites · {{ $fmt($row['uniques']) }} uniques</title>
                     </rect>
                 @endforeach
-                {{-- 5 labels jalons : 0, ~25%, ~50%, ~75%, dernier --}}
-                @if ($nDays > 0)
-                    @foreach ([0, (int) ($nDays * 0.25), (int) ($nDays * 0.5), (int) ($nDays * 0.75), $nDays - 1] as $i)
-                        @if (isset($dailyMonth[$i]))
-                            <text x="{{ $i * $barWD + $barWD / 2 }}" y="{{ $chartH + 14 }}"
-                                  fill="#6b7280" font-size="5" text-anchor="middle"
-                                  font-family="system-ui, sans-serif">{{ $dailyMonth[$i]['label'] }}</text>
-                        @endif
-                    @endforeach
-                @endif
             </svg>
+            <div class="relative h-5 mt-1 text-[11px] text-gray-500 font-mono select-none">
+                @foreach ($labelIndices as $i)
+                    @if (isset($dailyMonth[$i]))
+                        @php $left = $i * $barWD + $barWD / 2; @endphp
+                        <span class="absolute -translate-x-1/2 top-0" style="left: {{ $left }}%;">{{ $dailyMonth[$i]['label'] }}</span>
+                    @endif
+                @endforeach
+            </div>
         </div>
     </section>
 

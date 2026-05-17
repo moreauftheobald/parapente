@@ -28,32 +28,28 @@
 
 @section('content')
 <div class="max-w-7xl">
-    <div class="flex items-baseline justify-between mb-4">
-        <div>
-            <h1 class="text-2xl font-semibold text-white">Balises météo</h1>
-            <p class="text-sm text-gray-500 mt-1">
-                {{ number_format($totalCount, 0, ',', ' ') }} balise{{ $totalCount > 1 ? 's' : '' }} en base
-                · {{ number_format($balises->total(), 0, ',', ' ') }} après filtre
-            </p>
-        </div>
-        <div class="flex items-center gap-3">
+    <x-admin.page-title title="Balises météo">
+        <x-slot:subtitle>
+            {{ number_format($totalCount, 0, ',', ' ') }} balise{{ $totalCount > 1 ? 's' : '' }} en base
+            · {{ number_format($balises->total(), 0, ',', ' ') }} après filtre
+        </x-slot:subtitle>
+        <x-slot:actions>
             @if (request()->query())
                 <a href="{{ route('admin.balises.index') }}" class="text-xs text-gray-400 hover:text-white transition" title="Réinitialiser les filtres">
                     <i class="fa-solid fa-rotate-left"></i> Réinitialiser
                 </a>
             @endif
-            <button form="filters-form" type="submit"
-                    class="px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-white text-xs font-medium rounded-md transition">
-                <i class="fa-solid fa-filter"></i> Appliquer
-            </button>
-        </div>
-    </div>
+            <x-admin.button form="filters-form" type="submit" variant="primary" size="sm" icon="fa-solid fa-filter">
+                Appliquer
+            </x-admin.button>
+        </x-slot:actions>
+    </x-admin.page-title>
 
     <form id="filters-form" method="GET"></form>
 
     <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
         <table class="w-full text-sm">
-            <thead class="bg-gray-950 text-xs uppercase tracking-wider border-b border-gray-800">
+            <thead class="bg-gray-950 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-800">
                 <tr>
                     <th class="px-4 py-3 text-left align-top">
                         {!! $sortLink('name', 'Balise') !!}
@@ -171,7 +167,9 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="6" class="px-4 py-12 text-center text-gray-500">Aucune balise.</td>
+                        <td colspan="6" class="px-0 py-0">
+                            <x-admin.empty-state icon="fa-solid fa-tower-broadcast" message="Aucune balise." class="border-0 rounded-none" />
+                        </td>
                     </tr>
                 @endforelse
             </tbody>

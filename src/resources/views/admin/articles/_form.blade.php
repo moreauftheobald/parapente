@@ -1,29 +1,22 @@
 @php
     $editing  = $article->exists;
     $action   = $editing ? route('admin.articles.update', $article) : route('admin.articles.store');
-    $inputCls = 'w-full px-3 py-2 bg-gray-950 border border-gray-700 rounded-md text-gray-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/40';
+    $textareaCls = 'w-full px-3 py-2 bg-gray-950 border border-gray-700 rounded-md text-gray-100 text-sm focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/40';
 @endphp
 
 <form method="POST" action="{{ $action }}" class="space-y-5">
     @csrf
     @if ($editing) @method('PATCH') @endif
 
-    <div>
-        <label for="title" class="block text-xs font-medium text-gray-400 mb-1">Titre</label>
-        <input id="title" name="title" type="text" required maxlength="200"
-               value="{{ old('title', $article->title) }}" class="{{ $inputCls }}">
-        @error('title') <p class="text-red-400 text-xs mt-1">{{ $message }}</p> @enderror
-    </div>
+    <x-admin.input name="title" label="Titre" :value="old('title', $article->title)" required maxlength="200" />
 
     <div class="grid sm:grid-cols-2 gap-4">
-        <div>
-            <label for="published_at" class="block text-xs font-medium text-gray-400 mb-1">Date de publication</label>
-            <input id="published_at" name="published_at" type="datetime-local"
-                   value="{{ old('published_at', optional($article->published_at)->format('Y-m-d\TH:i')) }}"
-                   class="{{ $inputCls }}">
-            <p class="text-[11px] text-gray-600 mt-1">Détermine l'ordre d'affichage sur l'accueil (plus récent en premier).</p>
-            @error('published_at') <p class="text-red-400 text-xs mt-1">{{ $message }}</p> @enderror
-        </div>
+        <x-admin.input
+            name="published_at"
+            type="datetime-local"
+            label="Date de publication"
+            :value="old('published_at', optional($article->published_at)->format('Y-m-d\TH:i'))"
+            hint="Détermine l'ordre d'affichage sur l'accueil (plus récent en premier)." />
         <div class="flex flex-col gap-2 sm:items-start sm:justify-end sm:pb-1">
             <label class="flex items-center gap-2 text-sm text-gray-300">
                 <input type="hidden" name="is_published" value="0">
@@ -42,16 +35,14 @@
         </div>
     </div>
 
-    <div>
-        <label for="article-body" class="block text-xs font-medium text-gray-400 mb-1">Contenu</label>
-        <textarea id="article-body" name="body">{{ old('body', $article->body) }}</textarea>
-        @error('body') <p class="text-red-400 text-xs mt-1">{{ $message }}</p> @enderror
-    </div>
+    <x-admin.field name="body" label="Contenu">
+        <textarea id="article-body" name="body" class="{{ $textareaCls }}">{{ old('body', $article->body) }}</textarea>
+    </x-admin.field>
 
     <div class="flex items-center gap-3 pt-2">
-        <button type="submit" class="px-4 py-2 bg-sky-500 hover:bg-sky-400 text-white text-sm font-medium rounded-md transition">
+        <x-admin.button type="submit" variant="primary">
             {{ $editing ? 'Enregistrer' : "Créer l'article" }}
-        </button>
+        </x-admin.button>
         <a href="{{ route('admin.articles.index') }}" class="text-sm text-gray-400 hover:text-white transition">Annuler</a>
     </div>
 </form>

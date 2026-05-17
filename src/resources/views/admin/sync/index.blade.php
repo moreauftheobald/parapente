@@ -9,13 +9,14 @@
 
 @section('content')
 <div class="max-w-4xl">
-    <h1 class="text-2xl font-semibold text-white mb-1">Synchronisation des données</h1>
-    <p class="text-sm text-gray-500 mb-6">
-        Déclenche manuellement l'import des sites de vol (ParaglidingEarth) et la découverte
-        des balises météo (PiouPiou, METAR). Opérations idempotentes : relancer met à jour
-        l'existant et ajoute les nouveautés, sans rien désactiver. L'exécution est synchrone
-        et peut prendre jusqu'à une minute.
-    </p>
+    <x-admin.page-title title="Synchronisation des données">
+        <x-slot:subtitle>
+            Déclenche manuellement l'import des sites de vol (ParaglidingEarth) et la découverte
+            des balises météo (PiouPiou, METAR). Opérations idempotentes : relancer met à jour
+            l'existant et ajoute les nouveautés, sans rien désactiver. L'exécution est synchrone
+            et peut prendre jusqu'à une minute.
+        </x-slot:subtitle>
+    </x-admin.page-title>
 
     @if (session('sync_output'))
         <div class="mb-6 bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">

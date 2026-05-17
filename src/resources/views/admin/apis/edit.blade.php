@@ -2,9 +2,10 @@
 @section('title', 'API · ' . $api->name)
 
 @php
+    // Classes héritées par les inputs spécifiques (font-mono, password, etc.).
+    // Pour les inputs standards, préférer <x-admin.input>.
     $inputCls = 'w-full px-3 py-2 bg-gray-950 border border-gray-700 rounded-md text-sm text-gray-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/40';
     $labelCls = 'block text-xs font-medium text-gray-400 mb-1';
-    $errorCls = 'text-red-400 text-xs mt-1';
 @endphp
 
 @section('content')
@@ -24,26 +25,21 @@
         </a>
     </div>
 
-    @if (session('status'))
-        <div class="mb-4 px-4 py-3 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-sm">
-            {{ session('status') }}
-        </div>
-    @endif
 
     @if ($errors->any())
-        <div class="mb-4 px-4 py-3 rounded bg-red-500/15 border border-red-500/30 text-red-300 text-sm">
-            <strong><i class="fa-solid fa-triangle-exclamation"></i> Quelques erreurs :</strong>
+        <x-admin.alert type="error">
+            <strong>Quelques erreurs :</strong>
             <ul class="list-disc list-inside mt-1">
                 @foreach ($errors->all() as $err)<li>{{ $err }}</li>@endforeach
             </ul>
-        </div>
+        </x-admin.alert>
     @endif
 
     @if ($api->last_error_at && (! $api->last_success_at || $api->last_error_at->gt($api->last_success_at)))
-        <div class="mb-4 px-4 py-3 rounded bg-red-500/10 border border-red-500/30 text-red-300 text-xs">
-            <strong><i class="fa-solid fa-circle-exclamation"></i> Dernière erreur ({{ $api->last_error_at->diffForHumans() }})</strong>
+        <x-admin.alert type="error">
+            <strong>Dernière erreur ({{ $api->last_error_at->diffForHumans() }})</strong>
             <pre class="mt-1 whitespace-pre-wrap font-mono text-[11px] text-red-200">{{ $api->last_error }}</pre>
-        </div>
+        </x-admin.alert>
     @endif
 
     <form method="POST" action="{{ route('admin.apis.update', $api) }}">
@@ -181,9 +177,7 @@
         </div>
 
         <div class="flex items-center justify-between">
-            <button type="submit" class="px-5 py-2.5 bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-400 hover:to-sky-500 text-white text-sm font-medium rounded-md transition shadow-lg shadow-sky-500/20">
-                <i class="fa-solid fa-floppy-disk"></i> Enregistrer
-            </button>
+            <x-admin.button type="submit" variant="primary" icon="fa-solid fa-floppy-disk">Enregistrer</x-admin.button>
             <a href="{{ route('admin.apis.index') }}" class="text-sm text-gray-400 hover:text-white transition">Annuler</a>
         </div>
     </form>

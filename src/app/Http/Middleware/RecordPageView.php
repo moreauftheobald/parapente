@@ -17,7 +17,9 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * Branché sur le groupe `web` (cf. bootstrap/app.php) — donc :
  *  - aucun appel /api/* n'est compté (JSON internes)
- *  - aucun asset (servi par Nginx, pas par PHP)
+ *  - aucun asset statique servi par Nginx
+ *  - cas particulier : /icons-cache/* passe par PHP au PREMIER hit
+ *    (Nginx prend la relève après), donc explicitement skippé ici.
  *
  * Le middleware s'exécute APRÈS la réponse pour pouvoir tenir
  * compte du status_code (on ne compte pas les 4xx/5xx comme
@@ -113,7 +115,7 @@ class RecordPageView
     private function shouldSkipPath(string $path): bool
     {
         // Préfixes à ignorer
-        foreach (['/livewire', '/_debugbar', '/_ignition', '/telescope', '/horizon', '/storage/'] as $prefix) {
+        foreach (['/livewire', '/_debugbar', '/_ignition', '/telescope', '/horizon', '/storage/', '/icons-cache/'] as $prefix) {
             if (str_starts_with($path, $prefix)) return true;
         }
         // L'admin lui-même ne nous intéresse pas pour la fréquentation

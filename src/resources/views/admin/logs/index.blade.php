@@ -21,8 +21,11 @@
 
 @section('content')
 <div class="max-w-6xl">
-    <h1 class="text-2xl font-semibold text-white mb-1">Logs &amp; monitoring</h1>
-    <p class="text-sm text-gray-500 mb-6">Volumétrie de la base + dernières lignes du fichier <code class="text-gray-400 font-mono">{{ $logPath }}</code> ({{ $fmtSize($logSize) }}).</p>
+    <x-admin.page-title title="Logs & monitoring">
+        <x-slot:subtitle>
+            Volumétrie de la base + dernières lignes du fichier <code class="text-gray-400 font-mono">{{ $logPath }}</code> ({{ $fmtSize($logSize) }}).
+        </x-slot:subtitle>
+    </x-admin.page-title>
 
     {{-- ─────────────────────────────────────────────
          Compteurs DB
@@ -69,7 +72,7 @@
     </h2>
     <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden mb-8">
         <table class="w-full text-sm">
-            <thead class="bg-gray-950 text-xs uppercase tracking-wider text-gray-400 border-b border-gray-800">
+            <thead class="bg-gray-950 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-800">
                 <tr>
                     <th class="px-4 py-2 text-left">Job</th>
                     <th class="px-4 py-2 text-left w-44">Dernière exécution</th>
@@ -110,9 +113,9 @@
                     <option value="{{ $val }}" @selected($level === $val)>{{ $lbl }}</option>
                 @endforeach
             </select>
-            <button type="submit" class="px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-white text-xs font-medium rounded transition">
-                <i class="fa-solid fa-filter"></i> Filtrer
-            </button>
+            <x-admin.button type="submit" variant="primary" size="sm" icon="fa-solid fa-filter">
+                Filtrer
+            </x-admin.button>
             @if ($level || $search)
                 <a href="{{ route('admin.logs.index') }}" class="text-xs text-gray-400 hover:text-white transition">
                     <i class="fa-solid fa-rotate-left"></i>
@@ -122,9 +125,7 @@
     </div>
 
     @if (empty($entries))
-        <div class="bg-gray-900 border border-gray-800 rounded-xl p-12 text-center text-sm text-gray-500">
-            Aucune entrée dans la fenêtre lue.
-        </div>
+        <x-admin.empty-state icon="fa-solid fa-scroll" message="Aucune entrée dans la fenêtre lue." />
     @else
         <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
             <div class="divide-y divide-gray-800 max-h-[60vh] overflow-y-auto">

@@ -3,8 +3,7 @@
 
 @section('content')
     <div class="max-w-5xl">
-        <h1 class="text-2xl font-semibold text-white mb-1">Dashboard</h1>
-        <p class="text-sm text-gray-500 mb-6">Bienvenue {{ auth()->user()->name }}.</p>
+        <x-admin.page-title title="Dashboard" :subtitle="'Bienvenue ' . auth()->user()->name . '.'" />
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
             <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
