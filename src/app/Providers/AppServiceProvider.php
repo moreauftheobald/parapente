@@ -5,7 +5,7 @@ namespace App\Providers;
 use App\Models\Balise;
 use App\Models\Site;
 use App\Observers\GeocodableObserver;
-use App\Services\Geocoding\BanReverseGeocoder;
+use App\Services\Geocoding\GeoApiGouvReverseGeocoder;
 use App\Services\Geocoding\HybridReverseGeocoder;
 use App\Services\Geocoding\NominatimReverseGeocoder;
 use App\Services\Geocoding\ReverseGeocoderInterface;
@@ -25,13 +25,12 @@ class AppServiceProvider extends ServiceProvider
         // implicite côté service via Cache::remember()).
         $this->app->singleton(Settings::class);
 
-        // ── Reverse geocoding (BAN + Nominatim hybride) ────────────
-        $this->app->singleton(BanReverseGeocoder::class, function ($app) {
-            $cfg = $app['config']->get('services.geocoding.ban');
-            return new BanReverseGeocoder(
+        // ── Reverse geocoding (geo.api.gouv + Nominatim) ───────────
+        $this->app->singleton(GeoApiGouvReverseGeocoder::class, function ($app) {
+            $cfg = $app['config']->get('services.geocoding.geo_api_gouv');
+            return new GeoApiGouvReverseGeocoder(
                 $app->make(HttpFactory::class),
                 rtrim((string) $cfg['base_url'], '/'),
-                (float) $cfg['min_score'],
                 (int) $cfg['timeout'],
             );
         });

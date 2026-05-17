@@ -6,18 +6,17 @@ namespace App\Console\Commands;
 
 use App\Models\Balise;
 use App\Models\Site;
-use App\Services\Geocoding\BanReverseGeocoder;
+use App\Services\Geocoding\HybridReverseGeocoder;
 use App\Services\Geocoding\LocationResult;
-use App\Services\Geocoding\NominatimReverseGeocoder;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
-use Throwable;
 
 /**
  * Géocode en masse les sites et balises (pays / région / département)
- * via BAN (batch CSV pour la France) + Nominatim en fallback (étranger).
+ * via geo.api.gouv.fr (FR par point-in-polygon) + Nominatim en
+ * fallback (étranger, 1 req/s).
  *
  * Idempotent : sans `--force`, ne traite que les entrées dont
  * `geocoded_at IS NULL` — relançable à volonté sans casse.
@@ -26,7 +25,6 @@ use Throwable;
  *   php artisan geocode:locations                      # sites + balises non géocodés
  *   php artisan geocode:locations --sites              # uniquement sites
  *   php artisan geocode:locations --balises --force    # re-géocode toutes les balises
- *   php artisan geocode:locations --chunk=50           # batches BAN plus petits
  *   php artisan geocode:locations --limit=10           # test sur 10 entrées
  *
  * Cf. FF_location_enrichment.md.
@@ -37,13 +35,12 @@ class GeocodeLocations extends Command
         {--sites    : ne traite que les sites}
         {--balises  : ne traite que les balises}
         {--force    : re-géocode même les entrées déjà géocodées}
-        {--chunk=100 : taille des batches BAN CSV (max 1000)}
-        {--no-batch : force le mode point-par-point (debug, BAN down)}
-        {--limit=  : limite le nombre d\'entrées traitées (test)}';
+        {--chunk=200 : taille des chunks d\'itération DB}
+        {--limit=   : limite le nombre d\'entrées traitées (test)}';
 
     protected $description = 'Géocode en masse les sites et balises (pays, région, département).';
 
-    public function handle(BanReverseGeocoder $ban, NominatimReverseGeocoder $nominatim): int
+    public function handle(HybridReverseGeocoder $geocoder): int
     {
         $onlySites   = (bool) $this->option('sites');
         $onlyBalises = (bool) $this->option('balises');
@@ -54,12 +51,11 @@ class GeocodeLocations extends Command
         };
 
         $force    = (bool) $this->option('force');
-        $chunk    = max(1, min(1000, (int) $this->option('chunk')));
-        $noBatch  = (bool) $this->option('no-batch');
+        $chunk    = max(1, (int) $this->option('chunk'));
         $limitRaw = $this->option('limit');
         $limit    = $limitRaw !== null ? max(1, (int) $limitRaw) : null;
 
-        $totalBan = 0;
+        $totalGeo = 0;
         $totalNom = 0;
         $totalFail = 0;
 
@@ -81,53 +77,49 @@ class GeocodeLocations extends Command
             $bar = $this->output->createProgressBar($count);
             $bar->start();
 
-            [$banHits, $nomHits, $failures] = $this->process(
-                $query, $limit, $chunk, $noBatch, $ban, $nominatim,
+            [$geoHits, $nomHits, $failures] = $this->process(
+                $query, $limit, $chunk, $geocoder,
                 fn () => $bar->advance(),
             );
 
             $bar->finish();
             $this->newLine();
             $this->line(sprintf(
-                '  ✓ %s : %d via BAN, %d via Nominatim, %d échec(s).',
-                $label, $banHits, $nomHits, $failures
+                '  ✓ %s : %d via geo.api.gouv, %d via Nominatim, %d échec(s).',
+                $label, $geoHits, $nomHits, $failures
             ));
 
-            $totalBan  += $banHits;
+            $totalGeo  += $geoHits;
             $totalNom  += $nomHits;
             $totalFail += $failures;
         }
 
         $this->newLine();
         $this->info(sprintf(
-            'TOTAL : %d géocodés (BAN: %d, Nominatim: %d) — %d échec(s).',
-            $totalBan + $totalNom, $totalBan, $totalNom, $totalFail
+            'TOTAL : %d géocodés (geo.api.gouv: %d, Nominatim: %d) — %d échec(s).',
+            $totalGeo + $totalNom, $totalGeo, $totalNom, $totalFail
         ));
 
         return self::SUCCESS;
     }
 
     /**
-     * @return array{0:int,1:int,2:int} [banHits, nominatimHits, failures]
+     * @return array{0:int,1:int,2:int} [geoApiGouvHits, nominatimHits, failures]
      */
     private function process(
         Builder $query,
         ?int $limit,
         int $chunk,
-        bool $noBatch,
-        BanReverseGeocoder $ban,
-        NominatimReverseGeocoder $nominatim,
+        HybridReverseGeocoder $geocoder,
         \Closure $onProcessed,
     ): array {
-        $banHits = $nomHits = $failures = 0;
+        $geoHits = $nomHits = $failures = 0;
         $processed = 0;
 
-        // On itère par chunks de la query — on ne charge pas tout en mémoire.
         $query->orderBy('id')->chunkById($chunk, function (Collection $batch) use (
-            &$banHits, &$nomHits, &$failures, &$processed,
-            $limit, $noBatch, $ban, $nominatim, $onProcessed,
+            &$geoHits, &$nomHits, &$failures, &$processed,
+            $limit, $geocoder, $onProcessed,
         ) {
-            // Tronque au limit si besoin
             if ($limit !== null && $processed + $batch->count() > $limit) {
                 $batch = $batch->take($limit - $processed);
             }
@@ -135,40 +127,18 @@ class GeocodeLocations extends Command
                 return false;
             }
 
-            $banResults = [];
-            if (! $noBatch) {
-                $points = $batch->map(fn (Model $m) => [
-                    'key' => (string) $m->getKey(),
-                    'lat' => (float) $m->getAttribute('latitude'),
-                    'lng' => (float) $m->getAttribute('longitude'),
-                ])->all();
-
-                try {
-                    $banResults = $ban->reverseBatch($points);
-                } catch (Throwable $e) {
-                    $this->warn('  ! BAN batch a échoué, fallback point-par-point : ' . $e->getMessage());
-                    $banResults = [];
-                }
-            }
-
             foreach ($batch as $model) {
-                $key = (string) $model->getKey();
-                $result = $banResults[$key] ?? null;
+                $lat = (float) $model->getAttribute('latitude');
+                $lng = (float) $model->getAttribute('longitude');
 
-                if ($result === null) {
-                    // Pas dans BAN (étranger ou échec batch) → Nominatim
-                    $result = $nominatim->reverse(
-                        (float) $model->getAttribute('latitude'),
-                        (float) $model->getAttribute('longitude'),
-                    );
-                }
+                $result = $geocoder->reverse($lat, $lng);
 
                 if ($result === null) {
                     $failures++;
                 } else {
                     $this->persist($model, $result);
-                    if ($result->provider === 'ban') $banHits++;
-                    else                              $nomHits++;
+                    if ($result->provider === 'geo-api-gouv') $geoHits++;
+                    else                                       $nomHits++;
                 }
 
                 $processed++;
@@ -176,12 +146,12 @@ class GeocodeLocations extends Command
             }
 
             if ($limit !== null && $processed >= $limit) {
-                return false; // arrêt anticipé du chunkById
+                return false;
             }
             return true;
         });
 
-        return [$banHits, $nomHits, $failures];
+        return [$geoHits, $nomHits, $failures];
     }
 
     private function persist(Model $model, LocationResult $r): void
@@ -193,7 +163,7 @@ class GeocodeLocations extends Command
             'department'        => $r->department,
             'geocoded_provider' => $r->provider,
             'geocoded_at'       => now(),
-        ])->saveQuietly(); // saveQuietly → ne réveille pas l'observer (évite boucle infinie)
+        ])->saveQuietly(); // saveQuietly → ne réveille pas l'observer
     }
 
     /**

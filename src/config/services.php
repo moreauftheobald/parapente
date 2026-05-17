@@ -36,10 +36,9 @@ return [
     ],
 
     'geocoding' => [
-        'ban' => [
-            'base_url'  => env('BAN_BASE_URL', 'https://api-adresse.data.gouv.fr'),
-            'min_score' => (float) env('BAN_MIN_SCORE', 0.3),
-            'timeout'   => (int) env('BAN_TIMEOUT', 15),
+        'geo_api_gouv' => [
+            'base_url' => env('GEO_API_GOUV_BASE_URL', 'https://geo.api.gouv.fr'),
+            'timeout'  => (int) env('GEO_API_GOUV_TIMEOUT', 15),
         ],
         'nominatim' => [
             'base_url'           => env('NOMINATIM_BASE_URL', 'https://nominatim.openstreetmap.org'),

@@ -3,8 +3,15 @@
 **Statut :** En cours d'implémentation
 **Priorité :** Filtres admin (sites, balises) + filtres scoring perso
 **Dépendances externes :**
-- `api-adresse.data.gouv.fr` (BAN) — reverse geocoding France, batch CSV, sans clé, sans rate limit notable
+- `geo.api.gouv.fr` (Découpage administratif) — point-in-polygon sur les communes françaises ; couvre 100 % des coords FR même en pleine montagne, sans rate limit
 - `nominatim.openstreetmap.org` (OSM) — fallback hors France, sans clé, 1 req/s max
+
+> **Historique** : une première implémentation utilisait BAN
+> (`api-adresse.data.gouv.fr`) en premier tier. Abandonné après
+> constat que BAN renvoie `not-found` pour la majorité des sites de
+> parapente (loin de toute adresse postale indexée). geo.api.gouv.fr
+> couvre 100 % des coords FR en une seule API, sans rate limit,
+> donc BAN devenait redondant.
 
 ---
 
