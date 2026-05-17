@@ -18,8 +18,7 @@
 #
 
 set -euo pipefail
-
-SSH_HOST="${PROD_SSH_HOST:-franck@213.199.51.57}"
+SSH_HOST="${PROD_SSH_HOST:-perso-user}"
 PROD_PATH="${PROD_PATH:-/srv/parapente-app/parapente}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -58,5 +58,5 @@ var/dumps/
 # ──────────────────────────────────────────
 # Scripts de sync prod→local (perso, non partagés)
 # ──────────────────────────────────────────
-/scripts/sync-prod-to-local.sh
-/scripts/load-dump.sh
+/sync-prod-to-local.sh
+/load-dump.sh
