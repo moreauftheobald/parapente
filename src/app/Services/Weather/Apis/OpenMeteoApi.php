@@ -270,7 +270,11 @@ class OpenMeteoApi implements WeatherApiInterface
         $skipped = 0;
         foreach ($times as $index => $time) {
             $forecastAt = \Carbon\Carbon::parse($time, self::TIMEZONE);
-            if ($forecastAt->isPast()) {
+            // On garde toute la journée en cours (même les heures déjà passées)
+            // pour qu'un site activé à 14h ait quand même le scoring du matin
+            // côté lecture. Le scope `Forecast::upcoming()` filtre ensuite à
+            // partir de now()->startOfHour() pour ne pas exposer du passé.
+            if ($forecastAt->lt(now()->startOfDay())) {
                 continue;
             }
 
@@ -334,7 +338,9 @@ class OpenMeteoApi implements WeatherApiInterface
 
         foreach ($times as $index => $time) {
             $forecastAt = \Carbon\Carbon::parse($time, self::TIMEZONE);
-            if ($forecastAt->isPast()) {
+            // cf. parseBaliseResponse — on garde toute la journée en cours
+            // (idem pour la même raison).
+            if ($forecastAt->lt(now()->startOfDay())) {
                 continue;
             }
 
