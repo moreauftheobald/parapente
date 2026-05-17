@@ -21,11 +21,13 @@ class Article extends Model
         'body',
         'author_id',
         'is_published',
+        'is_pinned',
         'published_at',
     ];
 
     protected $casts = [
         'is_published' => 'boolean',
+        'is_pinned'    => 'boolean',
         'published_at' => 'datetime',
     ];
 
@@ -42,5 +44,11 @@ class Article extends Model
             ->where(fn (Builder $q) => $q->whereNull('published_at')->orWhere('published_at', '<=', now()))
             ->orderByDesc('published_at')
             ->orderByDesc('id');
+    }
+
+    /** Article épinglé en tête de l'accueil (bloc philosophie). Au plus un. */
+    public function scopePinned(Builder $query): Builder
+    {
+        return $query->where('is_pinned', true)->where('is_published', true);
     }
 }

@@ -44,6 +44,10 @@ class ArticleController extends Controller
         $data = $this->validateData($request);
         $data['author_id'] = $request->user()?->id;
 
+        if ($data['is_pinned']) {
+            Article::where('is_pinned', true)->update(['is_pinned' => false]);
+        }
+
         Article::create($data);
 
         return redirect()->route('admin.articles.index')->with('status', 'Article créé.');
@@ -56,7 +60,13 @@ class ArticleController extends Controller
 
     public function update(Request $request, Article $article): RedirectResponse
     {
-        $article->update($this->validateData($request));
+        $data = $this->validateData($request);
+
+        if ($data['is_pinned']) {
+            Article::where('is_pinned', true)->where('id', '!=', $article->id)->update(['is_pinned' => false]);
+        }
+
+        $article->update($data);
 
         return redirect()->route('admin.articles.index')->with('status', 'Article mis à jour.');
     }
@@ -92,7 +102,7 @@ class ArticleController extends Controller
     }
 
     /**
-     * @return array{title:string, body:string, is_published:bool, published_at:string|null}
+     * @return array{title:string, body:string, is_published:bool, is_pinned:bool, published_at:string|null}
      */
     private function validateData(Request $request): array
     {
@@ -103,6 +113,7 @@ class ArticleController extends Controller
         ]);
 
         $data['is_published'] = $request->boolean('is_published');
+        $data['is_pinned']    = $request->boolean('is_pinned');
         $data['published_at'] = $data['published_at'] ?: now();
 
         return $data;

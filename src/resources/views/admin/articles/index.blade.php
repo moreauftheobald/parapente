@@ -36,9 +36,16 @@
                     @foreach ($articles as $article)
                         <tr class="bg-gray-950/40 hover:bg-gray-900/60 transition">
                             <td class="px-4 py-3">
-                                <a href="{{ route('admin.articles.edit', $article) }}" class="text-gray-100 hover:text-sky-300 font-medium">
-                                    {{ $article->title }}
-                                </a>
+                                <div class="flex items-center gap-2">
+                                    <a href="{{ route('admin.articles.edit', $article) }}" class="text-gray-100 hover:text-sky-300 font-medium">
+                                        {{ $article->title }}
+                                    </a>
+                                    @if ($article->is_pinned)
+                                        <span class="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded px-1.5 py-0.5">
+                                            <i class="fa-solid fa-thumbtack"></i> Épinglé
+                                        </span>
+                                    @endif
+                                </div>
                                 @if ($article->author)
                                     <div class="text-xs text-gray-600 mt-0.5">par {{ $article->author->name }}</div>
                                 @endif

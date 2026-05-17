@@ -24,13 +24,20 @@
             <p class="text-[11px] text-gray-600 mt-1">Détermine l'ordre d'affichage sur l'accueil (plus récent en premier).</p>
             @error('published_at') <p class="text-red-400 text-xs mt-1">{{ $message }}</p> @enderror
         </div>
-        <div class="flex sm:items-end">
-            <label class="flex items-center gap-2 text-sm text-gray-300 sm:pb-2">
+        <div class="flex flex-col gap-2 sm:items-start sm:justify-end sm:pb-1">
+            <label class="flex items-center gap-2 text-sm text-gray-300">
                 <input type="hidden" name="is_published" value="0">
                 <input type="checkbox" name="is_published" value="1"
                        {{ old('is_published', $article->is_published) ? 'checked' : '' }}
                        class="rounded border-gray-700 bg-gray-950 text-sky-500 focus:ring-sky-500/40">
                 Publié (visible sur l'accueil)
+            </label>
+            <label class="flex items-center gap-2 text-sm text-gray-300">
+                <input type="hidden" name="is_pinned" value="0">
+                <input type="checkbox" name="is_pinned" value="1"
+                       {{ old('is_pinned', $article->is_pinned) ? 'checked' : '' }}
+                       class="rounded border-gray-700 bg-gray-950 text-amber-500 focus:ring-amber-500/40">
+                <span>Épingler en tête d'accueil <span class="text-[11px] text-gray-500">(un seul à la fois)</span></span>
             </label>
         </div>
     </div>
