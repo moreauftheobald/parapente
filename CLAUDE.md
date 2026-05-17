@@ -85,9 +85,10 @@ src/                        ← Racine Laravel
 │   │   │   │   └── UserScoringController.php ← CRUD scorings perso utilisateur
 │   │   │   ├── Admin/                   ← BackOffice (sites, balises, modèles, APIs,
 │   │   │   │                                users, sync, logs, articles, modules…)
-│   │   │   ├── HomeController.php        ← Page d'accueil (articles)
+│   │   │   ├── HomeController.php        ← Page d'accueil (articles + épinglé « À la une »)
 │   │   │   ├── IconCacheController.php   ← Tampon disque icônes SpotAir
-│   │   │   └── MapController.php         ← Vue carte
+│   │   │   ├── MapController.php         ← Vue carte
+│   │   │   └── WikiController.php        ← Pseudo-wiki / aide en ligne (/aide)
 │   │   ├── Requests/Api/
 │   │   │   ├── ScoringRules.php           ← Catalogue de règles validation partagé
 │   │   │   └── ValidatesScoringCoherence  ← Invariants relationnels (min ≤ max, etc.)
@@ -97,7 +98,8 @@ src/                        ← Racine Laravel
 │   │   ├── Site.php, SiteCondition.php, WeatherModel.php, Forecast.php,
 │   │   ├── SiteScore.php, Balise.php, BaliseReading.php
 │   │   ├── Module.php                    ← Modules du menu (table `modules`)
-│   │   └── Article.php                   ← Articles / changelog accueil
+│   │   ├── Article.php                   ← Articles / changelog accueil (+ flag `is_pinned`)
+│   │   └── WikiPage.php                  ← Pages du pseudo-wiki (arborescence parent_id)
 │   ├── Support/
 │   │   └── Navigation.php                ← Liste des modules visibles (navbar)
 │   ├── Services/
@@ -168,7 +170,8 @@ src/                        ← Racine Laravel
 | `balises`         | Balises PiouPiou/FFVL                                   |
 | `balise_readings` | Lectures temps réel balises                             |
 | `modules`         | Modules du menu (key, label, icône, route, `is_active`, `access_level` guest\|user\|admin, `requires_registration`, `sort_order`) |
-| `articles`        | Articles / changelog accueil (titre, body HTML, `author_id`, `is_published`, `published_at`) |
+| `articles`        | Articles / changelog accueil (titre, body HTML, `author_id`, `is_published`, `is_pinned`, `published_at`) |
+| `wiki_pages`      | Pages du pseudo-wiki (`parent_id` auto-référent, `slug` unique, `title`, `excerpt`, body HTML, `sort_order`, `is_published`, `author_id`) |
 | `settings`        | Paramètres globaux (clé unique, valeur JSON, label, description) — seuils de scoring éditables via `/admin/settings` |
 
 ### Colonnes clés `site_conditions`
@@ -283,16 +286,30 @@ Notes :
   (provoque « Undefined variable $component ») — utiliser `@include`.
 - Les pages utilisant `<x-app-shell>` peuvent `@push('styles')` / `@push('scripts')`
   (le shell expose `@stack('styles')` dans le `<head>` et `@stack('scripts')` avant `</body>`).
-- **Page d'accueil** (`/`, `HomeController`) : affiche les articles publiés
-  (`Article::published()`), du plus récent au plus ancien.
+- **Page d'accueil** (`/`, `HomeController`) : affiche d'abord l'article
+  épinglé (`Article::pinned()`, au plus un — flag `is_pinned`, garde-fou
+  côté contrôleur) dans un bloc « À la une » au-dessus, puis le flux
+  des articles publiés (`Article::published()`) du plus récent au plus ancien.
 - **BackOffice** (`layouts/admin.blade.php`) : repose sur `<x-app-shell>` ; la
   navigation des sections admin est dans le panneau gauche, ouvert par défaut.
   Une page admin peut alimenter le panneau droit via `@section('help')`.
+  Les messages flash (`session('status'|'error'|'warning')`) sont rendus
+  globalement par le layout via `<x-admin.alert>` — ne pas les répéter
+  dans les vues individuelles.
 - **Modules** : éditables dans `/admin/modules` (actif, niveau de droit
   `guest|user|admin`, compte obligatoire). Visibilité menu = `Module::isVisibleFor()`.
   Un module sans `route_name` est affiché grisé (« non implémenté »).
 - **Articles** : éditeur WYSIWYG **TinyMCE** (CDN), upload d'images via
   `POST /admin/articles/upload-image` → disque `public` (⇒ `php artisan storage:link`).
+  Un seul article peut être « épinglé » (`is_pinned`) à la fois ; les
+  autres sont dépinglés automatiquement à l'écriture.
+- **Pseudo-wiki / aide en ligne** (`/aide`, `WikiController`) : pages
+  organisées en arborescence simple (`wiki_pages.parent_id` auto-référent).
+  Index `/aide` liste les racines, `/aide/{slug}` rend une page avec
+  navigation arborescente dans le panneau gauche et fil d'Ariane.
+  Admin : CRUD `/admin/wiki/*` (TinyMCE, slug auto avec déduplication,
+  prévention des boucles parent/enfant). Upload d'images dédié
+  `POST /admin/wiki/upload-image` (disque `public/wiki/`).
 - La **vue carte** (`/carte`) utilise désormais `<x-app-shell>` comme toutes
   les autres pages (depuis V2.x — refonte mobile). `mapApp()` est passé
   directement en `x-data` du shell via la prop `x-data="mapApp()"` ; il
@@ -572,13 +589,13 @@ Base de données équipements avec comparaison et notation communautaire.
 
 ## À faire plus tard (backlog)
 
-- **« Pseudo-wiki » technique** : page (publique ou admin) documentant en
-  détail le fonctionnement de l'appli — sources de données, modèles météo,
-  mode de calcul du scoring, voting logic, plafond/Espy, fenêtre solaire,
-  rétroaction/validation par balises, etc.
 - **Fonction « I am here »** sur la carte : poser un marqueur (position
   saisie ou géoloc) et filtrer les sites situés à moins de X minutes de route
   de ce point (calcul d'isochrone / temps de trajet).
+- **Contenu du wiki technique** : la coque `/aide` est en place (cf. plus
+  haut, `WikiPage` / `WikiController`) — reste à rédiger les pages
+  attendues (sources de données, modèles météo, voting logic, plafond /
+  Espy, fenêtre solaire, rétroaction balises, etc.).
 
 ---
 
@@ -608,9 +625,29 @@ Base de données équipements avec comparaison et notation communautaire.
   l'ouverture par défaut des volets latéraux. Single source of truth pour ce breakpoint.
 
 ### BackOffice (admin)
-- **Composant `<x-admin.button>`** (variants `primary|secondary|danger|ghost`, sizes `sm|md`)
-  pour les boutons standardisés. Voir `resources/views/components/admin/button.blade.php`
-  pour la doc inline.
+- **Composants standardisés** dans `resources/views/components/admin/` —
+  utiliser systématiquement plutôt que de copier-coller des classes Tailwind :
+  - `<x-admin.button>` (variants `primary|secondary|danger|ghost`, sizes
+    `sm|md`, prop `icon` qui wrappe automatiquement les classes FA
+    `fa-...` dans `<i>`).
+  - `<x-admin.page-title title="..." subtitle="...">` — titre h1 + ligne
+    descriptive cohérents, slot `actions` à droite, slot `subtitle` si
+    le sous-titre contient du HTML ou des apostrophes (préférer le slot
+    quand on a un doute — l'attribut `:subtitle=` casse vite avec une
+    apostrophe dans une chaîne double-quotée).
+  - `<x-admin.badge status="published|draft|active|admin|info|warning|danger|neutral|...">` —
+    statuts cohérents (palette dot+texte ou icône+texte).
+  - `<x-admin.empty-state icon="fa-..." message="...">` — états vides
+    cohérents, slot `actions` possible.
+  - `<x-admin.alert type="success|error|warning|info">` — bandeau
+    d'alerte. Pas besoin de l'utiliser pour `session('status')` — le
+    layout admin l'affiche déjà globalement.
+  - `<x-admin.input name="..." label="..." type="..." hint="..." />` —
+    champ de saisie standard (lit `old()` et `$errors` auto). Pour les
+    `<textarea>` / `<select>`, utiliser `<x-admin.field>` qui wrappe
+    label/erreur autour d'un slot libre.
+  - `<x-admin.section title="..." icon="fa-..." color="gray|sky|violet|emerald|amber|red">` —
+    section thématique de formulaire.
 - **Trait `HasFilterableIndex`** (`app/Http/Controllers/Concerns/`) pour les controllers
   admin de listing : `applySearch(query, term, columns)`, `applyTriStateFilter(query, raw, column)`,
   `applySorting(query, request, allowed, defaultSort, defaultDir)` (whitelist anti-injection

@@ -11,6 +11,98 @@ Conventions :
 
 ---
 
+## 2026-05-17 — Article épinglé, pseudo-wiki et harmonisation BackOffice
+
+Trois chantiers esthétiques/fonctionnels regroupés sur une même journée :
+épinglage d'un article en tête d'accueil (« philosophie » de Qui Vole),
+section d'aide en ligne (pseudo-wiki) et passe d'harmonisation visuelle
+de l'interface admin.
+
+### Ajouté
+- **Article épinglé** sur l'accueil
+  - Colonne `articles.is_pinned` (avec index), scope `Article::pinned()`.
+  - Au plus un article épinglé à la fois — contrainte garantie côté
+    contrôleur (`Admin\ArticleController::store/update` dépinglent les
+    autres avant l'écriture).
+  - Affichage dédié en tête de la page d'accueil (bloc style ambre
+    « À la une » au-dessus du flux d'actualités).
+  - Admin : checkbox « Épingler en tête d'accueil » dans le formulaire,
+    badge « Épinglé » dans la liste.
+- **Pseudo-wiki / aide en ligne** sur `/aide`
+  - Table `wiki_pages` : arborescence simple (`parent_id` auto-référent),
+    slug unique, body HTML (TinyMCE), `excerpt`, `sort_order`,
+    `is_published`, `author_id`. Index sur `(parent_id, sort_order)` et
+    `(is_published, sort_order)`.
+  - Modèle `App\Models\WikiPage` : relations `parent()`, `children()`,
+    `author()`, scope `published()`, helpers `publishedRoots()` et
+    `ancestors()`.
+  - Contrôleurs `WikiController` (public, `index` + `show`) et
+    `Admin\WikiPageController` (CRUD complet avec slug auto, prévention
+    des boucles parent/enfant, upload TinyMCE dédié).
+  - Routes : `GET /aide` (`wiki.index`), `GET /aide/{slug}`
+    (`wiki.show`) ; admin `/admin/wiki/*` (`admin.wiki.*`).
+  - Vues publiques : `<x-app-shell>` avec navigation arborescente dans
+    le panneau gauche, fil d'Ariane, sous-pages en footer.
+  - Module « Aide » (clé `wiki`) ajouté à la barre de menu via
+    migration data idempotente (et entrée dans `ModuleSeeder` pour la
+    cohérence).
+- **Composants admin standardisés** dans `resources/views/components/admin/`
+  - `<x-admin.page-title>` — titre h1 + sous-titre + slot `actions`.
+  - `<x-admin.badge>` — palette de statuts (published/draft/active/
+    admin/info/warning/danger/neutral/...).
+  - `<x-admin.empty-state>` — état vide cohérent (slot `actions`).
+  - `<x-admin.alert>` — bandeau success/error/warning/info.
+  - `<x-admin.input>` — champ texte avec label/hint/erreur auto-gérés
+    (lit `old()` et `$errors` automatiquement).
+  - `<x-admin.field>` — wrapper générique label + erreur pour
+    `<textarea>` / `<select>` complexes.
+  - `<x-admin.section>` — section colorée avec icône (palette
+    gray/sky/violet/emerald/amber/red).
+
+### Modifié
+- `<x-admin.button>` : la prop `icon="fa-..."` est désormais wrappée
+  automatiquement dans `<i class="..."></i>` (avant : rendu brut). Pour
+  passer un emoji ou un SVG inline, écrire la valeur littérale.
+- `layouts/admin.blade.php` affiche maintenant globalement les flash
+  `session('status' | 'error' | 'warning')` via `<x-admin.alert>` ; les
+  ~5 vues qui répétaient le bloc localement ont été nettoyées.
+- 20 vues admin refactorées pour utiliser ces composants : suppression
+  de la duplication des constantes `$inputCls` / `$labelCls` /
+  `$errorCls`, normalisation des `<thead>` (cohérence `bg-gray-950`),
+  unification des badges et empty-states.
+- `RecordPageView` (middleware analytics) : ajout de `/icons-cache/` à
+  `shouldSkipPath`. Les URLs des icônes SpotAir passent par PHP au
+  premier hit avant que Nginx ne prenne la relève — sans ce skip, ça
+  polluait `/admin/traffic` (chaque icône non encore cachée comptait
+  comme une visite).
+
+### Corrigé
+- Vue `/admin/traffic` : les `<text>` des graphes étaient déformés
+  horizontalement (SVG `preserveAspectRatio="none"` + viewBox `100×184`
+  rendu en `~1180×192` → étirement ~12×). Les labels sortent
+  désormais du SVG et sont rendus en HTML positionné en `%` (police
+  monospace cohérente).
+
+### Base de données
+- `2026_05_17_100000_add_is_pinned_to_articles.php` — colonne
+  `articles.is_pinned` (bool, défaut false) + index.
+- `2026_05_17_110000_create_wiki_pages_table.php` — table `wiki_pages`.
+- `2026_05_17_110100_add_wiki_module.php` — migration data idempotente
+  (upsert) pour ajouter le module « Aide » dans `modules`.
+- `2026_05_17_120000_purge_icons_cache_page_views.php` — purge
+  rétroactive des entrées `/icons-cache/*` dans `page_views` (les
+  visites artificielles loggées avant le skip middleware).
+
+### Déploiement
+```bash
+docker exec parapente_php php artisan migrate --force
+docker exec parapente_php php artisan optimize:clear && php artisan optimize
+docker compose -f docker-compose.prod.yml restart parapente-php
+docker compose -f docker-compose.prod.yml restart parapente-nginx
+```
+
+---
+
 ## 2026-05-17 — Tampon disque pour les icônes SpotAir
 
 Mise en place d'un tampon sur disque pour toutes les icônes SVG
