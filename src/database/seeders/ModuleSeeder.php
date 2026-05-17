@@ -40,6 +40,15 @@ class ModuleSeeder extends Seeder
                 'sort_order'            => 30,
             ],
             [
+                'key'                   => 'wiki',
+                'label'                 => 'Aide',
+                'icon'                  => 'fa-solid fa-circle-question',
+                'route_name'            => 'wiki.index',
+                'access_level'          => 'guest',
+                'requires_registration' => false,
+                'sort_order'            => 40,
+            ],
+            [
                 'key'                   => 'admin',
                 'label'                 => 'Administration',
                 'icon'                  => 'fa-solid fa-gauge-high',

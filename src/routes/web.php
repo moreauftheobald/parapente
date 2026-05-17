@@ -15,11 +15,13 @@ use App\Http\Controllers\Admin\TrafficController as AdminTrafficController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Admin\WeatherApiController as AdminApiController;
 use App\Http\Controllers\Admin\WeatherModelController as AdminModelController;
+use App\Http\Controllers\Admin\WikiPageController as AdminWikiPageController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\IconCacheController;
 use App\Http\Controllers\MapController;
+use App\Http\Controllers\WikiController;
 use App\Http\Controllers\User\ProfileController;
 use App\Http\Controllers\User\ScoringPageController;
 use Illuminate\Support\Facades\Route;
@@ -29,6 +31,10 @@ Route::get('/', [HomeController::class, 'index'])->name('home');
 
 // Carte météo (module 1)
 Route::get('/carte', [MapController::class, 'index'])->name('map');
+
+// Aide en ligne / pseudo-wiki (public)
+Route::get('/aide',          [WikiController::class, 'index'])->name('wiki.index');
+Route::get('/aide/{slug}',   [WikiController::class, 'show'])->where('slug', '[a-z0-9\-]+')->name('wiki.show');
 
 // Tampon d'icônes SpotAir : Nginx sert les fichiers déjà présents
 // dans public/icons-cache/ via try_files. PHP n'est appelé qu'au
@@ -134,6 +140,16 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::patch('/articles/{article}',       [AdminArticleController::class, 'update'])->name('articles.update');
         Route::delete('/articles/{article}',      [AdminArticleController::class, 'destroy'])->name('articles.destroy');
         Route::post('/articles/{article}/toggle', [AdminArticleController::class, 'toggle'])->name('articles.toggle');
+
+        // ── Wiki / aide en ligne ─────────────────────────────────
+        Route::get('/wiki',                       [AdminWikiPageController::class, 'index'])->name('wiki.index');
+        Route::get('/wiki/create',                [AdminWikiPageController::class, 'create'])->name('wiki.create');
+        Route::post('/wiki',                      [AdminWikiPageController::class, 'store'])->name('wiki.store');
+        Route::post('/wiki/upload-image',         [AdminWikiPageController::class, 'uploadImage'])->name('wiki.upload');
+        Route::get('/wiki/{wikiPage}/edit',       [AdminWikiPageController::class, 'edit'])->name('wiki.edit');
+        Route::patch('/wiki/{wikiPage}',          [AdminWikiPageController::class, 'update'])->name('wiki.update');
+        Route::delete('/wiki/{wikiPage}',         [AdminWikiPageController::class, 'destroy'])->name('wiki.destroy');
+        Route::post('/wiki/{wikiPage}/toggle',    [AdminWikiPageController::class, 'toggle'])->name('wiki.toggle');
 
         // ── Modules du menu principal ────────────────────────────
         Route::get('/modules',           [AdminModuleController::class, 'index'])->name('modules.index');

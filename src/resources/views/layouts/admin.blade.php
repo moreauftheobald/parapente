@@ -28,6 +28,9 @@
                 <a href="{{ route('admin.articles.index') }}" class="{{ $adminLink($adminSection === 'articles') }}">
                     <i class="fa-solid fa-newspaper w-4 text-center"></i> Articles / Changelog
                 </a>
+                <a href="{{ route('admin.wiki.index') }}" class="{{ $adminLink($adminSection === 'wiki') }}">
+                    <i class="fa-solid fa-book-open w-4 text-center"></i> Aide / Wiki
+                </a>
 
                 <div class="mt-3 px-3 text-[10px] uppercase tracking-widest text-gray-600">Données</div>
                 <a href="{{ route('admin.sites.index') }}" class="{{ $adminLink($adminSection === 'sites') }}">
