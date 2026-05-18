@@ -1,14 +1,38 @@
 # FF — Fiabilité dynamique des modèles météo
 
-> **Statut** : phase 1 livrée (collecte) — phase 2.5 (shadow comparatif)
-> en cours d'implémentation sur la branche `claude/weather-model-voting-yTBxM`.
-> Phases 2, 3 et 4 à planifier ensuite.
+> **Statut** : phases 1 et 2.5 **livrées en prod** (2026-05-18, branche V2).
+> Phases 2 (consolidation), 3 (UI utilisateur) et 4 (intégration consensus)
+> à planifier ensuite.
 > **Date de rédaction** : 2026-05-13 (révisé 2026-05-18).
-> **Pré-requis bloquant phase 2 / 2.5** : ≥ 7 jours de données accumulées
-> dans `forecast_archive_balises` et `balise_readings_hourly`.
+> **Pré-requis bloquant phase 4** : 2-3 semaines d'observation des
+> consensus A / B / C en production, validation des critères de réussite
+> (§ *Phase 2.5 — Critère de réussite*).
 
 Ce document consigne la discussion de cadrage. Il sert de point de
 reprise quand on décidera d'implémenter les phases suivantes.
+
+---
+
+## Travaux livrés — phase 2.5 (2026-05-18)
+
+Validation par triple-consensus shadow livrée et déployée en prod sur
+`qui-vole.fr`. Découpé en 5 commits sur la branche
+`claude/weather-model-voting-yTBxM`, fusionnée dans `V2` :
+
+| Commit | Périmètre | Livrables |
+|--------|-----------|-----------|
+| 1 | Schéma + settings + toggle balise | 3 migrations (`add_in_consensus_compare_panel_to_balises`, `create_model_reliability_table`, `create_balise_consensus_compare_table`), 2 modèles Eloquent (`ModelReliability`, `BaliseConsensusCompare`), 11 nouvelles clés `reliability.*` dans `Settings::DEFAULTS`, support du type `bool` côté UI settings, toggle « Panel test fiabilité » sur la fiche admin balise. |
+| 2 | Services + tests | `ConsensusCalculator` (classe statique pure : `legacyLinear`, `legacyCircular`, `improvedLinear`, `improvedCircular` + helpers MAD/médiane/circulaire), `ReliabilityCalculator` (lookup `weight_factor` + cache mémoire + méthode batch), `BaliseConsensusCompareService` (orchestrateur), commande artisan `reliability:compute-compare`, 13 tests unitaires couvrant cas standards et limites. |
+| 3 | Jobs + scheduling | `ComputeBaliseConsensusCompareJob` (horaire `:10`), `ComputeModelReliabilityJob` (quotidien 03:30), extension `ReliabilityCalculator::recomputeForBalise()` pour MAE/RMSE/bias/weight_factor (linéaire + circulaire). Méthode `signedCircularDiff()` pour bias direction. Commande artisan `reliability:compute-factors`. |
+| 4 | Écrans admin | `/admin/reliability/compare` (J / J+1 / J+2 par balise/variable, MAE A/B/C, badge 🏆 sur le meilleur, ΔA/ΔB/ΔC colorés) et `/admin/reliability/models` (pivot modèle × bucket avec MAE/biais/poids/n + bouton « Recalculer maintenant »). Entrée sidebar admin. |
+| 5 | Exports + contexte | `ReliabilityExportService` (CSV cursor + JSON complet), 3 endpoints `/admin/reliability/export.*`, boutons CSV/JSON sur les 2 écrans. `RELIABILITY_ANALYSIS_CONTEXT.md` (~400 lignes) destiné à accompagner les exports JSON pour analyse externe (Claude chat, R, Python). |
+
+État au déploiement (2026-05-18, 3 balises panel) :
+- ~3500 tuples dans `balise_consensus_compare` (fenêtre ±72 h)
+- ~520 tuples dans `model_reliability` (toutes variables × buckets)
+- Temps de calcul : ~15 s par balise pour `compute-compare`,
+  ~15-30 s pour `compute-factors`. Largement dans les timeouts
+  (300 s / 600 s).
 
 ---
 
@@ -768,6 +792,60 @@ chiffres encore instables.
    forte dispersion / bimodalité) et basculer manuellement sur une
    méthode itérative si nécessaire. À surveiller dans l'écran de
    comparaison via la colonne `mad_value`.
+
+---
+
+## Pistes d'optimisation (si scaling du panel)
+
+Les temps mesurés en prod au déploiement (2026-05-18, 3 balises) :
+
+| Job | Durée par balise | Tuples upsertés |
+|-----|------------------|-----------------|
+| `reliability:compute-compare` (fenêtre 72 h) | ~5-15 s | ~1100-1300 |
+| `reliability:compute-factors` (fenêtre 7 j) | ~10-30 s | ~170 |
+
+À 3 balises, c'est confortable. Si le **panel de validation** devait
+être étendu un jour (50, 100 balises pour un mapping régional fin
+avant phase 4), la charge croîtrait **linéairement** et dépasserait
+le timeout du job horaire à ~100 balises.
+
+Le panel n'a **a priori pas vocation à dépasser 5-10 balises** — c'est
+un panel statistique, pas opérationnel. Mais si jamais le besoin
+émerge, voici les 5 optimisations possibles par ordre d'impact, à
+attaquer dans l'ordre :
+
+1. **Bulk `upsert()` au lieu de `updateOrCreate()` en boucle** —
+   gain estimé **×10 à ×50**. Aujourd'hui chaque ligne fait 2 requêtes
+   SQL (SELECT + UPDATE/INSERT) ; un `DB::table()->upsert()` Laravel
+   sur tableau de 1500 lignes en fait une seule. Modif : ~1 h de
+   refactoring sur `BaliseConsensusCompareService::computeForBalise()`
+   et `ReliabilityCalculator::recomputeForBalise()`. **Suffit dans
+   90 % des cas**.
+2. **Job parallèle via `Bus::batch`** — gain proportionnel au nombre
+   de workers Redis queue. Aujourd'hui `ComputeBaliseConsensusCompareJob`
+   traite les balises en séquence ; refactor en sous-jobs (1 par balise)
+   dispatchés en batch absorbé par N workers. À 4 workers → ÷4 du temps
+   d'horloge. Pattern déjà utilisé par `FetchForecastsJob` en prod.
+3. **Index DB ciblé** sur `forecast_archive_balises (balise_id, target_at,
+   horizon_bucket)` et sur `balise_readings_hourly (balise_id, hour_at)` —
+   gain ×2 à ×3 sur les SELECT, surtout avec des fenêtres élargies.
+4. **SQL agrégé pour les vitesses** dans
+   `ReliabilityCalculator::recomputeForBalise()` — gain ×3 à ×5. Au lieu
+   de charger toutes les paires en PHP, calculer
+   `AVG(ABS(pred - obs))` directement en SQL pour les vitesses (la
+   direction reste en PHP à cause de la circularité). MariaDB gère ça
+   très bien.
+5. **Calcul différentiel** (job horaire uniquement) — gain massif (×30+).
+   Recalculer seulement les créneaux nouveaux/modifiés depuis le dernier
+   run au lieu de re-traiter la fenêtre ±72 h complète à chaque tick. Le
+   job quotidien `compute-factors` reste full-scan (acceptable car
+   1 fois/jour à 03:30).
+
+Note : la **phase 4** (intégration `weight_factor` dans `ScoringService`)
+ne change rien à la charge du shadow. Elle ajoute juste un lookup
+en mémoire dans le scoring (déjà géré par
+`ReliabilityCalculator::weightFactorsBatch()`) — coût négligeable, ne
+scale pas avec le nombre de balises mais avec le nombre de sites.
 
 ---
 

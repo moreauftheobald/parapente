@@ -96,7 +96,9 @@ src/                        ← Racine Laravel
 │   │       └── HasFilterableIndex.php     ← Trait search/sort whitelist pour admin
 │   ├── Models/
 │   │   ├── Site.php, SiteCondition.php, WeatherModel.php, Forecast.php,
-│   │   ├── SiteScore.php, Balise.php, BaliseReading.php
+│   │   ├── SiteScore.php, Balise.php, BaliseReading.php, BaliseReadingHourly.php
+│   │   ├── ModelReliability.php          ← Fiabilité par modèle (phase 2.5)
+│   │   ├── BaliseConsensusCompare.php    ← Historique triple-consensus (phase 2.5)
 │   │   ├── Module.php                    ← Modules du menu (table `modules`)
 │   │   ├── Article.php                   ← Articles / changelog accueil (+ flag `is_pinned`)
 │   │   └── WikiPage.php                  ← Pages du pseudo-wiki (arborescence parent_id)
@@ -105,11 +107,16 @@ src/                        ← Racine Laravel
 │   ├── Services/
 │   │   ├── Weather/
 │   │   │   ├── Apis/OpenMeteoApi.php         (fetch sites + batch balises)
-│   │   │   ├── ScoringService.php            (voting logic)
+│   │   │   ├── ScoringService.php            (voting logic — algo A legacy en prod)
 │   │   │   ├── SiteScoresPayloadBuilder.php  (build `/api/sites/{id}/scores`)
 │   │   │   ├── SiteChartPayloadBuilder.php   (build `/api/sites/{id}/chart`)
 │   │   │   ├── SiteMultimodelPayloadBuilder.php (build `/api/sites/{id}/multimodel`)
-│   │   │   └── UserScoringService.php        (overrides scoring perso)
+│   │   │   ├── UserScoringService.php        (overrides scoring perso)
+│   │   │   └── Reliability/              ← Shadow mode triple-consensus (FF_model_reliability.md)
+│   │   │       ├── ConsensusCalculator.php          (classe pure : legacy + improved, linear + circular)
+│   │   │       ├── ReliabilityCalculator.php        (lookup weight_factor + recomputeForBalise)
+│   │   │       ├── BaliseConsensusCompareService.php (orchestrateur des 3 consensus)
+│   │   │       └── ReliabilityExportService.php     (CSV/JSON pour analyse externe)
 │   │   ├── Balises/
 │   │   │   ├── BaliseProviderInterface.php
 │   │   │   ├── BaliseConstants.php           (DEAD_AFTER_DAYS, etc.)
@@ -134,6 +141,10 @@ src/                        ← Racine Laravel
 │   │   ├── FetchPiouPiouReadingsJob.php  ← Étend FetchBaliseReadingsJob
 │   │   ├── FetchMetarReadingsJob.php     ← Étend FetchBaliseReadingsJob
 │   │   ├── FetchWindyReadingsJob.php     ← Étend FetchBaliseReadingsJob
+│   │   ├── FetchBaliseForecastsJob.php   ← Archive prévisions aux coords balises
+│   │   ├── AggregateBaliseReadingsHourlyJob.php ← Agrège balise_readings → balise_readings_hourly
+│   │   ├── ComputeBaliseConsensusCompareJob.php ← Phase 2.5 — horaire :10
+│   │   ├── ComputeModelReliabilityJob.php ← Phase 2.5 — quotidien 03:30
 │   │   ├── GeocodeLocationJob.php        ← Géocode 1 Site/Balise (job async)
 │   │   └── RebuildMapBundleJob.php       ← Régénère le map bundle (ShouldBeUnique 30s)
 │   └── Observers/
@@ -178,12 +189,16 @@ src/                        ← Racine Laravel
 | `weather_apis`    | Sources API météo (Open-Meteo…)                         |
 | `forecasts`       | Prévisions brutes Open-Meteo (nullable)                 |
 | `site_scores`     | Scores calculés par site/heure (green/orange/red)       |
-| `balises`         | Balises PiouPiou/FFVL                                   |
+| `balises`         | Balises PiouPiou/FFVL/METAR/Windy (+ flag `in_consensus_compare_panel` pour la phase 2.5) |
 | `balise_readings` | Lectures temps réel balises                             |
+| `balise_readings_hourly` | Agrégat horaire des lectures balises (dir/vit/rafale/temp) — alimenté par `AggregateBaliseReadingsHourlyJob` |
+| `forecast_archive_balises` | Prévisions Open-Meteo archivées aux coords des balises, ventilées par horizon_bucket (nowcast/same_day/j_plus_1/j_plus_2) |
+| `model_reliability` | Fiabilité par modèle météo × balise × bucket × variable (MAE/RMSE/biais/`weight_factor`/`samples_n`) — alimenté par `ComputeModelReliabilityJob`. Cf. `FF_model_reliability.md`. |
+| `balise_consensus_compare` | Historique triple-consensus (A legacy / B amélioré / C amélioré+fiabilité) vs observation balise, pour les balises du panel `in_consensus_compare_panel`. Rétention 14 j. |
 | `modules`         | Modules du menu (key, label, icône, route, `is_active`, `access_level` guest\|user\|admin, `requires_registration`, `sort_order`) |
 | `articles`        | Articles / changelog accueil (titre, body HTML, `author_id`, `is_published`, `is_pinned`, `published_at`) |
 | `wiki_pages`      | Pages du pseudo-wiki (`parent_id` auto-référent, `slug` unique, `title`, `excerpt`, body HTML, `sort_order`, `is_published`, `author_id`) |
-| `settings`        | Paramètres globaux (clé unique, valeur JSON, label, description) — seuils de scoring éditables via `/admin/settings` |
+| `settings`        | Paramètres globaux (clé unique, valeur JSON, label, description) — seuils de scoring + paramètres `reliability.*` éditables via `/admin/settings` |
 
 > **Colonnes de géocodage** (sur `sites` et `balises`) :
 > `country_code` (CHAR 2 ISO-2), `country` (libellé FR), `admin_region`
@@ -655,6 +670,76 @@ Seeder : `php artisan db:seed --class=SettingsSeeder --force` (idempotent).
 - `FetchPiouPiouReadingsJob`, `FetchMetarReadingsJob`,
   `FetchWindyReadingsJob` : étendent `FetchBaliseReadingsJob`. Windy
   parallélise ses appels HTTP via `Http::pool()` (chunks de 10 simultanés).
+- `FetchBaliseForecastsJob` : cron horaire. Archive les prévisions des
+  13 modèles aux coords de chaque balise active, dans
+  `forecast_archive_balises`. Ventile par `horizon_bucket` (nowcast /
+  same_day / j_plus_1 / j_plus_2).
+- `AggregateBaliseReadingsHourlyJob` : cron horaire à `:05`. Agrège
+  `balise_readings` en buckets horaires alignés sur l'heure pile dans
+  `balise_readings_hourly` (moyenne circulaire pour la direction,
+  AVG/MAX pour les vitesses). Fenêtre glissante 3 h pour les retards.
+- `ComputeBaliseConsensusCompareJob` : cron horaire à `:10` (cf. FF
+  phase 2.5). Calcule les 3 consensus (A legacy, B amélioré, C
+  amélioré + fiabilité) pour les balises du panel
+  `in_consensus_compare_panel`, fenêtre ±72 h. Honore le kill switch
+  `reliability.shadow_enabled`. **Pas d'impact sur le scoring prod.**
+- `ComputeModelReliabilityJob` : cron quotidien à 03:30. Recalcule
+  MAE/RMSE/biais/`weight_factor` par modèle × balise × bucket ×
+  variable sur la fenêtre glissante `reliability.window_days` (7 j).
+
+### Fiabilité des modèles — `App\Services\Weather\Reliability\*` (phase 2.5)
+
+Système de **shadow mode** qui calcule en continu trois consensus
+alternatifs (A legacy, B amélioré sans fiabilité, C amélioré +
+pondération dynamique) pour quelques balises de référence, et les
+confronte à la vérité-terrain. **Aucun impact sur le scoring de prod**
+— sert à valider chiffres en main une éventuelle évolution future de la
+voting logic. Cf. `FF_model_reliability.md`.
+
+- **Panel de balises** : drapeau `balises.in_consensus_compare_panel`
+  (boolean, par défaut false). Toggle sur la fiche admin
+  `/admin/balises/{id}`. Distinct de `reliability_class` (pro/amateur).
+- **3 consensus** stockés dans `balise_consensus_compare` :
+  - **A — legacy** : reproduction stricte de `ScoringService` (inverse-carré
+    EPSILON 0.001, moyenne circulaire pondérée).
+  - **B — amélioré** : EPSILON revu, filtrage outliers MAD intra-créneau,
+    médiane pondérée. Tous les modèles à poids 1.0.
+  - **C — amélioré + fiabilité** : idem B + pondération par
+    `weight_factor` issu de `model_reliability`.
+- **Variables** : `wind_speed_avg`, `wind_speed_max`, `wind_direction`
+  (la direction utilise la distance circulaire pour MAE/RMSE et la
+  différence circulaire signée pour le biais).
+- **Paramètres `reliability.*`** dans `settings` (groupe « Fiabilité des
+  modèles » dans `/admin/settings`) : `shadow_enabled`, `epsilon_new`,
+  `mad_floor`, `z_outlier_threshold`, `dir_mad_z_threshold`,
+  `use_weighted_median`, `use_mad_filtering`, `min_samples`,
+  `factor_min`, `factor_max`, `window_days`.
+- **Écrans admin** :
+  - `/admin/reliability/compare` — tableau J / J+1 / J+2 par balise et
+    variable, avec MAE A/B/C et badge 🏆 sur le meilleur.
+  - `/admin/reliability/models` — pivot modèle × bucket avec MAE,
+    biais signé, `weight_factor`, `samples_n`. Bouton « Recalculer
+    maintenant » (dispatch sync).
+- **Exports** :
+  - `GET /admin/reliability/export.json` — payload complet horodaté
+    (paramètres + panel + datasets + stats MAE agrégées).
+  - `GET /admin/reliability/export/consensus-compare.csv` et
+    `/model-reliability.csv` — CSV streamé (BOM UTF-8), filtres par
+    balise/variable.
+  - Le fichier `RELIABILITY_ANALYSIS_CONTEXT.md` (racine du repo)
+    accompagne ces exports pour permettre à un Claude analyste de
+    faire des points d'étape réguliers sans contexte préalable.
+- **Commandes utilitaires** :
+  - `php artisan reliability:compute-compare [--balise=ID] [--hours=72]`
+    — équivalent sync de `ComputeBaliseConsensusCompareJob`.
+  - `php artisan reliability:compute-factors [--balise=ID] [--days=N]`
+    — équivalent sync de `ComputeModelReliabilityJob`.
+- **Tests** : `tests/Unit/Weather/Reliability/ConsensusCalculatorTest`
+  (13 tests, classe pure sans DB).
+
+> **Quand `weight_factor` reste à 1.0** : on est en *cold start*
+> (`samples_n < reliability.min_samples`, 50 par défaut). C'est attendu
+> les premiers 3-7 jours. C est alors strictement identique à B.
 
 ---
 
@@ -780,6 +865,12 @@ docker exec -it parapente_php php artisan map:rebuild-bundle --clear
 docker exec -it parapente_php php artisan geocode:locations
 docker exec -it parapente_php php artisan geocode:locations --sites --force
 docker exec -it parapente_php php artisan geocode:locations --balises --limit=5  # test
+
+# Fiabilité des modèles — shadow mode (cf. FF_model_reliability.md, phase 2.5)
+docker exec -it parapente_php php artisan reliability:compute-compare              # toutes balises panel, ±72h
+docker exec -it parapente_php php artisan reliability:compute-compare --balise=12  # une seule balise
+docker exec -it parapente_php php artisan reliability:compute-factors              # MAE / weight_factor
+docker exec -it parapente_php php artisan reliability:compute-factors --days=14    # fenêtre étendue
 
 # Vérifier les données en base
 # >>> \App\Models\SiteScore::where('site_id',1)->where('forecast_at','like','2026-05-08%')->get(['forecast_at','wind_dir_consensus','status']);
