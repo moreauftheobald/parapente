@@ -168,6 +168,89 @@ class Settings
             'group'       => 'balises',
             'type'        => 'secret',
         ],
+
+        // ── Fiabilité des modèles (phase 2 + 2.5) ────────────────
+        // Cf. FF_model_reliability.md. Tous ces paramètres pilotent
+        // soit le calcul de la fiabilité dynamique d'un modèle météo
+        // (phase 2), soit les algorithmes de consensus alternatifs
+        // évalués en shadow mode (phase 2.5).
+        'reliability.shadow_enabled' => [
+            'default'     => true,
+            'label'       => 'Shadow mode actif (phase 2.5)',
+            'description' => "Active le calcul horaire du triple-consensus (A legacy / B amélioré / C amélioré + fiabilité) sur les balises marquées « Panel test fiabilité ». N'affecte pas le scoring de prod — uniquement la table de comparaison admin. Kill switch global.",
+            'group'       => 'reliability',
+            'type'        => 'bool',
+        ],
+        'reliability.epsilon_new' => [
+            'default'     => 1.0,
+            'label'       => 'EPSILON (consensus B et C)',
+            'description' => "Constante ajoutée au carré des écarts dans la pondération inverse-carré, pour les consensus B et C uniquement (A reste à 0.001, valeur historique). Une valeur plus grande lisse les écarts faibles et évite qu'un quasi-doublon ne capte un poids démesuré.",
+            'group'       => 'reliability',
+            'type'        => 'float',
+        ],
+        'reliability.mad_floor' => [
+            'default'     => 0.5,
+            'label'       => 'MAD plancher (km/h)',
+            'description' => "Valeur plancher de la MAD intra-créneau pour éviter la division par zéro quand tous les modèles convergent. Si la MAD calculée est inférieure, on retient ce plancher.",
+            'group'       => 'reliability',
+            'type'        => 'float',
+        ],
+        'reliability.z_outlier_threshold' => [
+            'default'     => 3.0,
+            'label'       => 'Seuil outlier MAD (vitesse, en MAD)',
+            'description' => "Un modèle dont l'écart à la médiane dépasse ce seuil (exprimé en MAD × 1.4826) est exclu du consensus B / C pour les variables de vitesse.",
+            'group'       => 'reliability',
+            'type'        => 'float',
+        ],
+        'reliability.dir_mad_z_threshold' => [
+            'default'     => 3.0,
+            'label'       => 'Seuil outlier MAD (direction, en MAD circulaire)',
+            'description' => "Équivalent du seuil ci-dessus pour la direction du vent, exprimé en MAD circulaire (distance angulaire absolue à la médiane circulaire).",
+            'group'       => 'reliability',
+            'type'        => 'float',
+        ],
+        'reliability.use_weighted_median' => [
+            'default'     => true,
+            'label'       => 'Médiane pondérée (consensus B et C)',
+            'description' => "Si activé, utilise la médiane pondérée au lieu de la moyenne pondérée pour agréger les modèles dans les consensus B et C. Plus robuste aux outliers résiduels après filtrage MAD.",
+            'group'       => 'reliability',
+            'type'        => 'bool',
+        ],
+        'reliability.use_mad_filtering' => [
+            'default'     => true,
+            'label'       => 'Filtrage MAD (consensus B et C)',
+            'description' => "Si activé, filtre les modèles aberrants via la MAD intra-créneau avant agrégation. Décorrélé du switch « médiane pondérée » — on peut activer l'un sans l'autre.",
+            'group'       => 'reliability',
+            'type'        => 'bool',
+        ],
+        'reliability.min_samples' => [
+            'default'     => 50,
+            'label'       => 'Seuil min. d\'échantillons',
+            'description' => "Nombre minimal de paires (prévu, observé) accumulées pour qu'un modèle soit considéré comme jugé. En-dessous, son weight_factor reste neutre (= 1.0) et la voting logic le traite comme un modèle inconnu.",
+            'group'       => 'reliability',
+            'type'        => 'int',
+        ],
+        'reliability.factor_min' => [
+            'default'     => 0.25,
+            'label'       => 'Plancher du weight_factor',
+            'description' => "Borne basse du multiplicateur de fiabilité appliqué au consensus C. Empêche un modèle d'être complètement réduit au silence — préserve la diversité de l'ensemble.",
+            'group'       => 'reliability',
+            'type'        => 'float',
+        ],
+        'reliability.factor_max' => [
+            'default'     => 2.0,
+            'label'       => 'Plafond du weight_factor',
+            'description' => "Borne haute du multiplicateur de fiabilité. Empêche un modèle « chanceux » sur la fenêtre courante de dominer le consensus.",
+            'group'       => 'reliability',
+            'type'        => 'float',
+        ],
+        'reliability.window_days' => [
+            'default'     => 7,
+            'label'       => 'Fenêtre glissante (jours)',
+            'description' => "Profondeur d'historique utilisée pour calculer la fiabilité d'un modèle. Aligné par défaut sur la rétention de balise_readings_hourly.",
+            'group'       => 'reliability',
+            'type'        => 'int',
+        ],
     ];
 
     /**

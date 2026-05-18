@@ -3,6 +3,8 @@
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use App\Jobs\AggregateBaliseReadingsHourlyJob;
+use App\Jobs\ComputeBaliseConsensusCompareJob;
+use App\Jobs\ComputeModelReliabilityJob;
 use App\Jobs\FetchBaliseForecastsJob;
 use App\Jobs\FetchForecastsJob;
 use App\Jobs\FetchMetarReadingsJob;
@@ -78,5 +80,26 @@ Schedule::job(AggregateBaliseReadingsHourlyJob::class)
 Schedule::job(PurgePageViewsJob::class)
     ->dailyAt('03:15')
     ->name('purge-page-views')
+    ->withoutOverlapping();
+
+// ── Fiabilité des modèles (phase 2.5 — shadow comparatif) ────────
+// Cf. FF_model_reliability.md. Aucun impact sur le scoring de prod ;
+// alimente uniquement l'écran admin de comparaison.
+
+// Recalcul du triple-consensus pour les balises du panel — horaire à :10
+// (après FetchBaliseForecastsJob à :00 et AggregateBaliseReadingsHourlyJob à :05).
+// Honore le kill switch reliability.shadow_enabled.
+Schedule::job(ComputeBaliseConsensusCompareJob::class)
+    ->hourlyAt(10)
+    ->name('compute-consensus-compare')
+    ->withoutOverlapping();
+
+// Recalcul des MAE / weight_factor des modèles sur la fenêtre glissante
+// (reliability.window_days, défaut 7 j). Une fois par jour à 03h30 —
+// après les purges (03:00, 03:15) et avant que les utilisateurs ne
+// commencent à consulter la carte au petit matin.
+Schedule::job(ComputeModelReliabilityJob::class)
+    ->dailyAt('03:30')
+    ->name('compute-model-reliability')
     ->withoutOverlapping();
 

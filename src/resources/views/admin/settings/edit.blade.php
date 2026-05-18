@@ -78,13 +78,26 @@
                                 $type = $meta['type'] ?? 'float';
                                 $isSecret = $type === 'secret';
                                 $isString = $type === 'string';
+                                $isBool   = $type === 'bool';
                                 $colSpan = ($isSecret || $isString) ? 'md:col-span-2' : '';
                             @endphp
                             <div class="{{ $colSpan }}">
                                 <label class="{{ $labelCls }}" for="{{ $name }}">
                                     {{ $meta['label'] ?? $key }}
                                 </label>
-                                @if ($isSecret)
+                                @if ($isBool)
+                                    @php $checked = (bool) old($name, $meta['value']); @endphp
+                                    <input type="hidden" name="{{ $name }}" value="0">
+                                    <label class="inline-flex items-center gap-2 cursor-pointer select-none">
+                                        <input type="checkbox"
+                                               id="{{ $name }}"
+                                               name="{{ $name }}"
+                                               value="1"
+                                               @checked($checked)
+                                               class="h-4 w-4 rounded border-gray-700 bg-gray-800 text-sky-500 focus:ring-sky-500/30">
+                                        <span class="text-xs text-gray-300">{{ $checked ? 'Activé' : 'Désactivé' }}</span>
+                                    </label>
+                                @elseif ($isSecret)
                                     @php
                                         $current = (string) ($meta['value'] ?? '');
                                         $hasValue = $current !== '';

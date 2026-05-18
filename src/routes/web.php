@@ -9,6 +9,9 @@ use App\Http\Controllers\Admin\DataQualityController as AdminDataQualityControll
 use App\Http\Controllers\Admin\DataSyncController as AdminSyncController;
 use App\Http\Controllers\Admin\LogController as AdminLogController;
 use App\Http\Controllers\Admin\ModuleController as AdminModuleController;
+use App\Http\Controllers\Admin\ReliabilityCompareController as AdminReliabilityCompareController;
+use App\Http\Controllers\Admin\ReliabilityExportController as AdminReliabilityExportController;
+use App\Http\Controllers\Admin\ReliabilityModelsController as AdminReliabilityModelsController;
 use App\Http\Controllers\Admin\SettingsController as AdminSettingsController;
 use App\Http\Controllers\Admin\SiteController as AdminSiteController;
 use App\Http\Controllers\Admin\TrafficController as AdminTrafficController;
@@ -98,10 +101,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::delete('/users/{user}',    [AdminUserController::class, 'destroy'])->name('users.destroy');
 
         // ── Balises ──────────────────────────────────────────────
-        Route::get('/balises',                  [AdminBaliseController::class, 'index'])->name('balises.index');
-        Route::get('/balises/{balise}',         [AdminBaliseController::class, 'show'])->name('balises.show');
-        Route::post('/balises/{balise}/toggle', [AdminBaliseController::class, 'toggleActive'])->name('balises.toggle');
-        Route::delete('/balises/{balise}',      [AdminBaliseController::class, 'destroy'])->name('balises.destroy');
+        Route::get('/balises',                                [AdminBaliseController::class, 'index'])->name('balises.index');
+        Route::get('/balises/{balise}',                       [AdminBaliseController::class, 'show'])->name('balises.show');
+        Route::post('/balises/{balise}/toggle',               [AdminBaliseController::class, 'toggleActive'])->name('balises.toggle');
+        Route::post('/balises/{balise}/toggle-compare-panel', [AdminBaliseController::class, 'togglePanel'])->name('balises.toggle-compare-panel');
+        Route::delete('/balises/{balise}',                    [AdminBaliseController::class, 'destroy'])->name('balises.destroy');
 
         // ── Modèles météo ────────────────────────────────────────
         Route::get('/models',                  [AdminModelController::class, 'index'])->name('models.index');
@@ -165,5 +169,15 @@ Route::prefix('admin')->name('admin.')->group(function () {
         // ── Paramètres généraux (seuils de scoring) ───────────────
         Route::get('/settings',   [AdminSettingsController::class, 'index'])->name('settings.index');
         Route::patch('/settings', [AdminSettingsController::class, 'update'])->name('settings.update');
+
+        // ── Fiabilité des modèles (phase 2.5 — shadow comparatif) ─
+        Route::get('/reliability/compare',          [AdminReliabilityCompareController::class, 'index'])->name('reliability.compare');
+        Route::get('/reliability/models',           [AdminReliabilityModelsController::class, 'index'])->name('reliability.models');
+        Route::post('/reliability/models/recompute',[AdminReliabilityModelsController::class, 'recompute'])->name('reliability.models.recompute');
+
+        // Exports (CSV et JSON complet — cf. RELIABILITY_ANALYSIS_CONTEXT.md)
+        Route::get('/reliability/export.json',                          [AdminReliabilityExportController::class, 'json'])->name('reliability.export.json');
+        Route::get('/reliability/export/consensus-compare.csv',         [AdminReliabilityExportController::class, 'consensusCompareCsv'])->name('reliability.export.compare-csv');
+        Route::get('/reliability/export/model-reliability.csv',         [AdminReliabilityExportController::class, 'modelReliabilityCsv'])->name('reliability.export.reliability-csv');
     });
 });

@@ -35,12 +35,13 @@ class SettingsController extends Controller
 
         // Regroupement par section (cf. catalogue Settings::DEFAULTS) :
         $groups = [
-            'precip'    => ['title' => 'Précipitations',           'icon' => 'fa-cloud-rain',     'keys' => []],
-            'gust'      => ['title' => 'Rafales',                  'icon' => 'fa-tornado',        'keys' => []],
-            'viability' => ['title' => "Viabilité d'une journée",  'icon' => 'fa-chart-line',     'keys' => []],
-            'quality'   => ['title' => 'Qualité des données',      'icon' => 'fa-clipboard-check','keys' => []],
-            'balises'   => ['title' => 'Sources balises',          'icon' => 'fa-tower-broadcast','keys' => []],
-            'analytics' => ['title' => 'Trafic / analytics',       'icon' => 'fa-chart-line',     'keys' => []],
+            'precip'      => ['title' => 'Précipitations',           'icon' => 'fa-cloud-rain',     'keys' => []],
+            'gust'        => ['title' => 'Rafales',                  'icon' => 'fa-tornado',        'keys' => []],
+            'viability'   => ['title' => "Viabilité d'une journée",  'icon' => 'fa-chart-line',     'keys' => []],
+            'quality'     => ['title' => 'Qualité des données',      'icon' => 'fa-clipboard-check','keys' => []],
+            'balises'     => ['title' => 'Sources balises',          'icon' => 'fa-tower-broadcast','keys' => []],
+            'analytics'   => ['title' => 'Trafic / analytics',       'icon' => 'fa-chart-line',     'keys' => []],
+            'reliability' => ['title' => 'Fiabilité des modèles',    'icon' => 'fa-flask-vial',     'keys' => []],
         ];
         foreach (Settings::DEFAULTS as $key => $meta) {
             $g = $meta['group'] ?? 'misc';
@@ -59,12 +60,13 @@ class SettingsController extends Controller
     public function update(Request $request): RedirectResponse
     {
         // Construction dynamique des règles de validation à partir du
-        // catalogue (int / float / secret-string).
+        // catalogue (int / float / bool / secret-string).
         $rules = [];
         foreach (Settings::DEFAULTS as $key => $meta) {
             $name = $this->keyToField($key);
             $rules[$name] = match ($meta['type'] ?? 'float') {
-                'int'             => ['required', 'integer', 'min:0'],
+                'int'              => ['required', 'integer', 'min:0'],
+                'bool'             => ['required', 'boolean'],
                 'string', 'secret' => ['nullable', 'string', 'max:500'],
                 default            => ['required', 'numeric', 'min:0'],
             };
@@ -78,9 +80,10 @@ class SettingsController extends Controller
             $type = $meta['type'] ?? 'float';
 
             $values[$key] = match ($type) {
-                'int'             => (int) $raw,
+                'int'              => (int) $raw,
+                'bool'             => (bool) filter_var($raw, FILTER_VALIDATE_BOOLEAN),
                 'string', 'secret' => trim((string) ($raw ?? '')),
-                default           => (float) $raw,
+                default            => (float) $raw,
             };
         }
 

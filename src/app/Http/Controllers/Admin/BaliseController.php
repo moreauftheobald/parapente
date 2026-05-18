@@ -110,6 +110,26 @@ class BaliseController extends Controller
             ));
     }
 
+    /**
+     * Bascule l'inclusion d'une balise dans le panel de test fiabilité
+     * (phase 2.5 — triple-consensus shadow). Consommé par le futur job
+     * `ComputeBaliseConsensusCompareJob` : tant qu'aucune balise n'est
+     * marquée, le job ne fait rien.
+     */
+    public function togglePanel(Balise $balise): RedirectResponse
+    {
+        $balise->in_consensus_compare_panel = ! $balise->in_consensus_compare_panel;
+        $balise->save();
+
+        return redirect()
+            ->back()
+            ->with('status', sprintf(
+                'Panel test fiabilité : « %s » %s.',
+                $balise->name,
+                $balise->in_consensus_compare_panel ? 'inclus' : 'retiré'
+            ));
+    }
+
     public function destroy(Balise $balise): RedirectResponse
     {
         $name = $balise->name;

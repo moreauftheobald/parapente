@@ -20,6 +20,7 @@ class Balise extends Model
         'site_id',
         'source',
         'reliability_class',
+        'in_consensus_compare_panel',
         'external_id',
         'name',
         'latitude',
@@ -36,12 +37,13 @@ class Balise extends Model
     ];
 
     protected $casts = [
-        'latitude'     => 'decimal:7',
-        'longitude'    => 'decimal:7',
-        'altitude_m'   => 'integer',
-        'height_agl_m' => 'integer',
-        'active'       => 'boolean',
-        'geocoded_at'  => 'datetime',
+        'latitude'                   => 'decimal:7',
+        'longitude'                  => 'decimal:7',
+        'altitude_m'                 => 'integer',
+        'height_agl_m'               => 'integer',
+        'active'                     => 'boolean',
+        'in_consensus_compare_panel' => 'boolean',
+        'geocoded_at'                => 'datetime',
     ];
 
     // ── Relations ───────────────────────────────────────────────

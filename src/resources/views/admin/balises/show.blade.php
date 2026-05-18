@@ -24,6 +24,19 @@
             </p>
         </div>
         <div class="flex items-center gap-2">
+            <form method="POST" action="{{ route('admin.balises.toggle-compare-panel', $balise) }}" class="inline">
+                @csrf
+                <button type="submit"
+                        title="Inclure cette balise dans le panel de validation triple-consensus (phase 2.5). Cf. FF_model_reliability.md."
+                        class="px-3 py-1.5 text-xs rounded border transition
+                            @class([
+                                'border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/10' => ! $balise->in_consensus_compare_panel,
+                                'border-violet-400 bg-violet-500/15 text-violet-100 hover:bg-violet-500/25' => $balise->in_consensus_compare_panel,
+                            ])">
+                    <i class="fa-solid fa-flask-vial"></i>
+                    {{ $balise->in_consensus_compare_panel ? 'Panel test fiabilité ✓' : 'Panel test fiabilité' }}
+                </button>
+            </form>
             <form method="POST" action="{{ route('admin.balises.toggle', $balise) }}" class="inline">
                 @csrf
                 <button type="submit"
