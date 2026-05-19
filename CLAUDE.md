@@ -88,6 +88,7 @@ src/                        ← Racine Laravel
 │   │   │   ├── HomeController.php        ← Page d'accueil (articles + épinglé « À la une »)
 │   │   │   ├── IconCacheController.php   ← Tampon disque icônes SpotAir
 │   │   │   ├── MapController.php         ← Vue carte
+│   │   │   ├── ModelGridController.php   ← Module « Carte des modèles » (admin-only, FF_model_reliability.md)
 │   │   │   └── WikiController.php        ← Pseudo-wiki / aide en ligne (/aide)
 │   │   ├── Requests/Api/
 │   │   │   ├── ScoringRules.php           ← Catalogue de règles validation partagé
@@ -133,7 +134,8 @@ src/                        ← Racine Laravel
 │   │       ├── SiteDetailCache.php           (cache /scores /chart /multimodel)
 │   │       ├── BalisesBundleCache.php        (cache /api/balises + /history)
 │   │       ├── DayQualityCalculator.php      (helper viabilité jour)
-│   │       └── SunWindowCalculator.php       (helper fenêtre solaire)
+│   │       ├── SunWindowCalculator.php       (helper fenêtre solaire)
+│   │       └── ModelGridBuilder.php          (grille NWP en GeoJSON, /carte-modeles)
 │   ├── Jobs/
 │   │   ├── FetchForecastsJob.php         ← Orchestre par site (Bus::batch)
 │   │   ├── FetchSiteForecastsJob.php     ← Fetch + score 1 site
@@ -740,6 +742,58 @@ voting logic. Cf. `FF_model_reliability.md`.
 > **Quand `weight_factor` reste à 1.0** : on est en *cold start*
 > (`samples_n < reliability.min_samples`, 50 par défaut). C'est attendu
 > les premiers 3-7 jours. C est alors strictement identique à B.
+
+### Module front « Carte des modèles » — `/carte-modeles`
+
+Visualisation didactique de la grille d'un modèle météo NWP avec
+coloration par fiabilité agrégée des balises du panel tombant dans
+chaque cellule. Module utilisateur (table `modules`, key
+`model-grid`), **caché aux non-admins** via `access_level = 'admin'`
+le temps que la couverture du panel soit suffisante. Pas une page
+sous `/admin/` — c'est conceptuellement une page front filtrée par
+visibility module + middleware.
+
+- **Service `App\Services\Map\ModelGridBuilder`** : construit la
+  grille en GeoJSON sur une bbox. Alignement standard 0°/0°, pas
+  constant = `resolution_km / 111`. Pour chaque cellule, identifie
+  les balises du panel dedans, puis agrège `model_reliability`
+  (moyenne pondérée par `samples_n` pour `mae`/`weight_factor`/
+  `bias_signed`, somme pour `samples_n`).
+- **Mode grille complète** (`show_empty=true`, défaut) : ajoute aussi
+  les cellules vides (juste contour léger), montre la maille effective
+  du modèle. Anti-overload : > 16 000 cellules → `meta.too_large=true`
+  + zoom recommandé renvoyé au front (qui affiche « Zoom davantage »).
+- **Zoom minimum auto-calculé** par modèle :
+  `ceil(log2(360 / (resolution_deg × 64))) + 2`. Le `+ 2` compense le
+  ratio largeur/hauteur de la viewport et garantit que les DivIcons
+  centrales tiennent dans la cellule. Exemples :
+  - ICON Global (13 km) → zoom 7
+  - ICON-EU (6.5 km) → zoom 9
+  - AROME 0.025° (2.5 km) → zoom 11
+  - AROME-HD (1.3 km) → zoom 12
+- **Vue Leaflet plein écran** (`resources/views/model-grid/index.blade.php`) :
+  - Toolbar : 4 dropdowns (modèle / variable / horizon / métrique) +
+    checkbox grille complète + toggle fond clair/sombre (CartoDB
+    Voyager par défaut, dark_all en option).
+  - Polygones colorés selon métrique : `weight_factor` (gradient
+    rouge < 0.5 → gris ≈ 1 → emeraude > 1.5) ou `mae` (gradient vert
+    → rouge avec seuils différents pour vitesses vs direction).
+  - DivIcons SVG au centre des cellules occupées : rond gris/vert
+    pour `samples_n` (seuil 50), flèche ↑ rouge / ↓ bleue pour le
+    bias signé (seuils 0.5 km/h vitesses, 5° direction).
+  - Légende : implémentée comme `L.Control` natif (position
+    `bottomleft`), évite les soucis de z-index avec les panes Leaflet.
+  - Popup au clic sur cellule : balises présentes + métriques détaillées.
+- **Routes** (hors groupe `/admin`, middleware `['auth', 'admin']`) :
+  - `GET /carte-modeles` → page (`model-grid.index`)
+  - `GET /carte-modeles/data` → endpoint GeoJSON (`model-grid.data`)
+- **Module** : migration `2026_05_19_100000_add_model_grid_module.php`
+  (idempotente) + entrée correspondante dans `ModuleSeeder`.
+
+> **Pour rendre le module public** quand la couverture sera
+> suffisante (intégration future FFVL) : aller dans
+> `/admin/modules` et passer `access_level` à `'user'` ou `'guest'`.
+> Aucun code à modifier.
 
 ---
 

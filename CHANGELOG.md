@@ -11,6 +11,91 @@ Conventions :
 
 ---
 
+## 2026-05-19 — Nouveau module front « Carte des modèles » + écran horizon
+
+Suite immédiate de la phase 2.5 livrée la veille. Deux ajouts
+complémentaires pour l'analyse visuelle de la fiabilité des modèles
+météo.
+
+### Ajouté
+
+- **Nouvel écran admin `/admin/reliability/horizon`** — comparaison
+  apple-to-apple des 4 buckets sur les `target_at` présents
+  simultanément dans les 4 horizons avec observation. Permet de
+  mesurer honnêtement la dégradation de la prévision quand l'horizon
+  s'éloigne, sans le biais des fenêtres d'observation non recouvrantes
+  (l'écran `/admin/reliability/compare` calcule chaque bucket sur
+  son propre ensemble). Bandeau récap MAE + tableau strict + tableau
+  référence « full » pour transparence. Liens cross-écran ajoutés
+  sur compare et models (icône bullseye).
+
+- **Export CSV** et intégration JSON pour l'horizon MAE :
+  - `GET /admin/reliability/export/horizon-mae.csv` — 1 ligne par
+    `(balise × variable × bucket × set)` où `set ∈ {common, full}`.
+  - Section `horizon_mae` ajoutée au payload de
+    `/admin/reliability/export.json` (`schema_version` bumpé à 2).
+  - `ReliabilityExportService::buildHorizonStats()` — source unique
+    de vérité réutilisée par l'écran admin, le CSV et le JSON.
+  - `RELIABILITY_ANALYSIS_CONTEXT.md` enrichi : avertissement
+    explicite sur `stats` (pas apple-to-apple), documentation
+    complète de la section `horizon_mae` + 2 nouvelles questions-types
+    pour Claude analyste (§9.11 dégradation par horizon, §9.12 effet
+    du filtre common vs full).
+
+- **Nouveau module front `model-grid`** — page `/carte-modeles`
+  visualisant la grille d'un modèle météo NWP avec coloration par
+  fiabilité agrégée des balises tombant dans chaque cellule. Module
+  caché pour les non-admins (`access_level = 'admin'` dans la table
+  `modules`) le temps que la couverture du panel soit suffisante.
+  Cf. `FF_model_reliability.md` § *Pour aller plus loin* (hors scope
+  initial, ajouté en bonus).
+
+  - **`App\Services\Map\ModelGridBuilder`** : génère le GeoJSON de la
+    grille sur une bbox donnée. Alignement standard 0°/0°, pas
+    constant = `resolution_km / 111`. Pour chaque cellule, identifie
+    les balises du panel dont les coords tombent dedans, puis agrège
+    `model_reliability` (moyenne pondérée par `samples_n` pour
+    `mae`/`weight_factor`/`bias_signed`, somme pour `samples_n`).
+    Cellules vides ajoutées si `show_empty=true` (mode grille
+    pédagogique). Garde-fou anti-overload : si la bbox déclencherait
+    > 16 000 cellules, retour `meta.too_large=true` avec zoom
+    recommandé. Zoom minimum auto-calculé selon résolution du modèle
+    (+ 2 crans pour assurer que les DivIcons tiennent visuellement).
+
+  - **`App\Http\Controllers\ModelGridController`** (non-admin —
+    page front filtrée par module visibility + middleware).
+    `index()` rend la page Leaflet, `data()` sert le GeoJSON validé.
+
+  - Routes au top niveau, middleware `['auth', 'admin']` :
+    `GET /carte-modeles` et `GET /carte-modeles/data`.
+
+  - **Vue Leaflet** plein écran : toolbar 4 dropdowns (modèle /
+    variable / horizon / métrique) + checkbox grille complète +
+    toggle fond clair/sombre (CartoDB Voyager par défaut, dark_all
+    en option). Légende implémentée comme `L.Control` natif
+    (pas un sibling div) pour éviter les soucis de z-index avec les
+    panes Leaflet. DivIcons SVG au centre des cellules occupées :
+    rond gris/vert pour `samples_n`, flèche ↑ rouge / ↓ bleue pour
+    le bias signé. Popups au clic avec détail balises et métriques.
+
+### Migration
+
+- `2026_05_19_100000_add_model_grid_module.php` — insère la ligne
+  du module dans `modules` (idempotent, pattern wiki).
+- `ModuleSeeder` enrichi en parallèle.
+
+### Notes opérationnelles
+
+- Au déploiement : le script standard `bash deploy.sh` lance la
+  migration et insère le module. Aucune intervention manuelle.
+- L'admin verra apparaître **« Carte des modèles »** (icône
+  table-cells) dans la barre du menu principal.
+- Pour rendre le module public quand le panel sera suffisamment
+  étendu (avenir, post-intégration FFVL) : aller dans `/admin/modules`
+  et passer `access_level` à `user` ou `guest`.
+
+---
+
 ## 2026-05-18 — Phase 2.5 : fiabilité dynamique des modèles en shadow mode
 
 Mise en place d'un système d'évaluation continue de la fiabilité des
