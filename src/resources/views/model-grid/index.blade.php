@@ -5,9 +5,16 @@
 
     @push('styles')
     <style>
-        /* Conteneur carte plein hauteur de la zone main */
+        /* Conteneur carte plein hauteur de la zone main.
+           Pattern aligné sur map/_partials/styles/base.blade.php :
+           width/height 100%, position:relative, et flex column pour
+           empiler toolbar + carte. PAS de position:absolute (le <main>
+           du shell n'est pas positionné, donc inset:0 remonterait à
+           app-shell-root et couvrirait la navbar). */
         #mg-root {
-            position: absolute; inset: 0;
+            width: 100%; height: 100%;
+            min-width: 0; min-height: 0;
+            position: relative;
             display: flex; flex-direction: column;
             background: #0b1220;
             color: #cbd5e1;
@@ -21,6 +28,7 @@
             background: #0f172a;
             border-bottom: 1px solid #1e293b;
             z-index: 50;
+            flex: 0 0 auto;
         }
         #mg-toolbar label.field {
             display: flex; flex-direction: column; gap: 2px;
@@ -50,9 +58,14 @@
         }
         #mg-status .pill.warn { background: #422006; border-color: #92400e; color: #fbbf24; }
 
-        /* La carte */
+        /* La carte — flex enfant qui prend tout l'espace restant.
+           min-height:0 est crucial pour que flex:1 fonctionne dans
+           un parent flex column (sinon les enfants imposent leur
+           hauteur naturelle et débordent). */
         #mg-map {
-            flex: 1; min-height: 0;
+            flex: 1 1 auto;
+            min-height: 0;
+            position: relative;
             background: #020617;
         }
 
@@ -183,7 +196,14 @@
 
     @push('scripts')
     <script>
-        (function () {
+        (function init() {
+            // window.L est exposé par resources/js/app.js (chargé via Vite
+            // au début du shell). En cas de race rare où ce script
+            // s'exécute avant le bundle, on attend.
+            if (typeof window.L === 'undefined') {
+                setTimeout(init, 50);
+                return;
+            }
             const apiUrl = @json(route('model-grid.data'));
 
             // ── Palettes ──────────────────────────────────────────
@@ -236,6 +256,13 @@
                 maxZoom: 18,
                 subdomains: 'abcd',
             }).addTo(map);
+
+            // Force le recalcul des dimensions au cas où la mesure
+            // initiale a été prise sur un conteneur en cours de layout.
+            // (Si layout flex pas encore résolu, le map peut s'init à 0 px
+            // et rester noir.)
+            setTimeout(() => map.invalidateSize(), 0);
+            window.addEventListener('resize', () => map.invalidateSize());
 
             // Couche grille
             let gridLayer = L.layerGroup().addTo(map);
