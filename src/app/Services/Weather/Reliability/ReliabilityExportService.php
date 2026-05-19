@@ -114,14 +114,50 @@ class ReliabilityExportService
 
         return [
             'exported_at'       => $now->format('Y-m-d\TH:i:sP'),
-            'schema_version'    => 1,
+            'schema_version'    => 2,
             'parameters'        => $this->collectParameters(),
             'panel'             => $panel,
             'models'            => $models,
             'stats'             => $this->buildAggregateStats(),
+            'horizon_mae'       => $this->buildHorizonMaeAllBalises($panel),
             'consensus_compare' => $compareRows,
             'model_reliability' => $reliabilityRows,
         ];
+    }
+
+    /**
+     * Calcule la MAE par horizon (common + full) pour toutes les balises
+     * du panel × toutes les variables.
+     *
+     * Retourne une structure indexée par balise_id puis variable :
+     *   [12 => ['wind_speed_avg' => {common_targets_count, common: {bucket→{...}}, full: {bucket→{...}}}, ...]]
+     *
+     * @param array<array<string, mixed>> $panel
+     * @return array<int, array<string, array<string, mixed>>>
+     */
+    private function buildHorizonMaeAllBalises(array $panel): array
+    {
+        $variables = ['wind_speed_avg', 'wind_speed_max', 'wind_direction'];
+        $out       = [];
+        foreach ($panel as $b) {
+            $byVariable = [];
+            foreach ($variables as $variable) {
+                $stats = $this->buildHorizonStats((int) $b['id'], $variable);
+                // Arrondi pour des clés JSON propres et plus légères
+                foreach (['common', 'full'] as $set) {
+                    foreach ($stats[$set] as $bucket => $row) {
+                        foreach (['mae_a', 'mae_b', 'mae_c'] as $k) {
+                            if (isset($row[$k]) && $row[$k] !== null) {
+                                $stats[$set][$bucket][$k] = round((float) $row[$k], 3);
+                            }
+                        }
+                    }
+                }
+                $byVariable[$variable] = $stats;
+            }
+            $out[(int) $b['id']] = $byVariable;
+        }
+        return $out;
     }
 
     /**
@@ -300,6 +336,126 @@ class ReliabilityExportService
                 'samples_n'          => (int) $r->samples_n,
                 'computed_at'        => $r->computed_at?->format('Y-m-d H:i:s'),
             ];
+        }
+    }
+
+    // ── MAE par horizon sur target_at communs ─────────────────────
+
+    private const BUCKETS = ['nowcast', 'same_day', 'j_plus_1', 'j_plus_2'];
+
+    /**
+     * Calcule pour une balise × variable donnée :
+     *  - la MAE de chaque bucket sur les target_at présents dans les 4
+     *    buckets simultanément avec observation ("common" / strict) ;
+     *  - la MAE de chaque bucket sur l'ensemble complet ("full" / par
+     *    bucket pris isolément).
+     *
+     * Source unique de vérité pour l'écran admin et l'export — évite
+     * la duplication de la logique.
+     *
+     * @return array{
+     *   common_targets_count: int,
+     *   common: array<string, array{n:int, mae_a:?float, mae_b:?float, mae_c:?float}>,
+     *   full:   array<string, array{n:int, mae_a:?float, mae_b:?float, mae_c:?float, target_count:int}>
+     * }
+     */
+    public function buildHorizonStats(int $baliseId, string $variable): array
+    {
+        $rows = BaliseConsensusCompare::query()
+            ->where('balise_id', $baliseId)
+            ->where('variable', $variable)
+            ->whereNotNull('observation')
+            ->get(['target_at', 'horizon_bucket', 'consensus_a', 'consensus_b', 'consensus_c', 'observation']);
+
+        // Target_at présents dans les 4 buckets simultanément
+        $byTarget = $rows->groupBy(fn ($r) => $r->target_at->format('Y-m-d H:i:s'));
+        $commonTargets = $byTarget->filter(
+            fn (Collection $group) => $group->pluck('horizon_bucket')->unique()->count() === count(self::BUCKETS)
+        )->keys()->all();
+        $commonSet = array_flip($commonTargets);
+
+        $common = [];
+        $full   = [];
+        foreach (self::BUCKETS as $bucket) {
+            $bucketRows = $rows->filter(fn ($r) => $r->horizon_bucket === $bucket);
+
+            // Common (strict)
+            $strictRows = $bucketRows->filter(
+                fn ($r) => isset($commonSet[$r->target_at->format('Y-m-d H:i:s')])
+            );
+            $common[$bucket] = $this->maeOfGroup($strictRows->values(), $variable);
+
+            // Full (par bucket pris isolément)
+            $fullStats = $this->maeOfGroup($bucketRows->values(), $variable);
+            $fullStats['target_count'] = $bucketRows->pluck('target_at')->unique()->count();
+            $full[$bucket] = $fullStats;
+        }
+
+        return [
+            'common_targets_count' => count($commonTargets),
+            'common'               => $common,
+            'full'                 => $full,
+        ];
+    }
+
+    /**
+     * Aplatit les stats d'horizon en lignes CSV (1 ligne par balise ×
+     * variable × bucket × set, où `set` ∈ {common, full}).
+     *
+     * Filtres optionnels (sinon : toutes les balises du panel × toutes
+     * les variables).
+     *
+     * @return iterable<array<string, scalar|null>>
+     */
+    public function horizonStatsCsvRows(?int $baliseId = null, ?string $variable = null): iterable
+    {
+        $balises = Balise::query()
+            ->where('active', true)
+            ->where('in_consensus_compare_panel', true)
+            ->when($baliseId !== null, fn ($q) => $q->where('id', $baliseId))
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        $variables = $variable !== null
+            ? [$variable]
+            : ['wind_speed_avg', 'wind_speed_max', 'wind_direction'];
+
+        foreach ($balises as $b) {
+            foreach ($variables as $v) {
+                $stats = $this->buildHorizonStats((int) $b->id, $v);
+
+                foreach (self::BUCKETS as $bucket) {
+                    $row = $stats['common'][$bucket];
+                    yield [
+                        'balise_id'             => (int) $b->id,
+                        'balise_name'           => $b->name,
+                        'variable'              => $v,
+                        'set'                   => 'common',
+                        'horizon_bucket'        => $bucket,
+                        'common_targets_count'  => $stats['common_targets_count'],
+                        'bucket_target_count'   => null,
+                        'n'                     => $row['n'],
+                        'mae_a'                 => $row['mae_a'] !== null ? round((float) $row['mae_a'], 3) : null,
+                        'mae_b'                 => $row['mae_b'] !== null ? round((float) $row['mae_b'], 3) : null,
+                        'mae_c'                 => $row['mae_c'] !== null ? round((float) $row['mae_c'], 3) : null,
+                    ];
+
+                    $rowFull = $stats['full'][$bucket];
+                    yield [
+                        'balise_id'             => (int) $b->id,
+                        'balise_name'           => $b->name,
+                        'variable'              => $v,
+                        'set'                   => 'full',
+                        'horizon_bucket'        => $bucket,
+                        'common_targets_count'  => null,
+                        'bucket_target_count'   => $rowFull['target_count'],
+                        'n'                     => $rowFull['n'],
+                        'mae_a'                 => $rowFull['mae_a'] !== null ? round((float) $rowFull['mae_a'], 3) : null,
+                        'mae_b'                 => $rowFull['mae_b'] !== null ? round((float) $rowFull['mae_b'], 3) : null,
+                        'mae_c'                 => $rowFull['mae_c'] !== null ? round((float) $rowFull['mae_c'], 3) : null,
+                    ];
+                }
+            }
         }
     }
 }

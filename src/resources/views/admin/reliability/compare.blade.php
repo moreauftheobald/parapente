@@ -105,6 +105,11 @@
            title="Export JSON complet (tous les paramètres + tous les datasets) — pour analyse externe">
             <i class="fa-solid fa-file-code"></i> Export JSON complet
         </a>
+        <a href="{{ route('admin.reliability.horizon', ['balise' => $balise->id, 'variable' => $variable]) }}"
+           class="text-xs text-gray-400 hover:text-sky-300 transition flex items-center gap-2"
+           title="MAE par horizon sur target_at communs">
+            <i class="fa-solid fa-bullseye"></i> MAE par horizon
+        </a>
         <a href="{{ route('admin.reliability.models', ['balise' => $balise->id, 'variable' => $variable]) }}"
            class="text-xs text-gray-400 hover:text-sky-300 transition flex items-center gap-2">
             <i class="fa-solid fa-table-list"></i> Voir la fiabilité par modèle

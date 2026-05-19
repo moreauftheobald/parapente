@@ -11,6 +11,152 @@ Conventions :
 
 ---
 
+## 2026-05-18 — Phase 2.5 : fiabilité dynamique des modèles en shadow mode
+
+Mise en place d'un système d'évaluation continue de la fiabilité des
+modèles météo NWP par confrontation à la vérité-terrain (balises). Trois
+algorithmes de consensus calculés en parallèle (legacy / amélioré /
+amélioré + pondération dynamique), comparés contre l'observation balise
+pour valider chiffres en main une éventuelle évolution future de la
+voting logic de production. **Aucun impact sur le scoring de prod —
+shadow strict**. Cf. `FF_model_reliability.md` § *Phase 2.5*.
+
+### Ajouté
+
+- **Schéma DB**
+  - `balises.in_consensus_compare_panel` (boolean) — drapeau manuel
+    d'inclusion dans le panel de validation, distinct de
+    `reliability_class` (pro/amateur).
+  - Table `model_reliability` — fiabilité par tuple
+    `(weather_model_id × balise_id × horizon_bucket × variable)` :
+    MAE, RMSE, biais signé, `weight_factor` (clampé `[0.25, 2.0]`),
+    `samples_n`. Calcul sur fenêtre glissante 7 j par défaut.
+  - Table `balise_consensus_compare` — historique des trois consensus
+    (A legacy, B amélioré, C amélioré + fiabilité) par
+    `(balise × créneau × horizon × variable)` avec observation balise
+    et MAD intra-créneau. Rétention 14 j.
+
+- **Services `App\Services\Weather\Reliability\`**
+  - `ConsensusCalculator` (classe statique pure, testable hors Laravel) :
+    - `legacyLinear` et `legacyCircular` — reproduction stricte du
+      consensus actuel (inverse-carré EPSILON 0.001 et moyenne
+      circulaire pondérée).
+    - `improvedLinear` et `improvedCircular` — EPSILON paramétrable,
+      filtrage outliers MAD intra-créneau, médiane pondérée
+      (paramétrable).
+    - `circularDistance` et `signedCircularDiff` — helpers exposés
+      publiquement pour les analyses externes.
+  - `ReliabilityCalculator` — lookup `weight_factor` avec cache mémoire
+    (par instance) et garde-fous cold start. Méthode
+    `recomputeForBalise()` qui joint `forecast_archive_balises` ×
+    `balise_readings_hourly` sur la fenêtre glissante, agrège en
+    MAE/RMSE/bias par modèle × variable × bucket (linéaire ou
+    circulaire selon la variable), puis dérive le `weight_factor`
+    normalisé contre la médiane des MAE des modèles éligibles.
+  - `BaliseConsensusCompareService` — orchestrateur : pour une balise
+    du panel et une fenêtre temporelle, calcule les 3 consensus pour
+    chaque créneau × variable × horizon, joint l'observation
+    correspondante, upsert dans `balise_consensus_compare`. Honore le
+    kill switch `reliability.shadow_enabled`.
+  - `ReliabilityExportService` — assembleur unique pour les exports
+    CSV (cursor streamé) et JSON complet (paramètres + panel +
+    datasets + stats MAE agrégées par variable × bucket).
+
+- **Jobs**
+  - `App\Jobs\ComputeBaliseConsensusCompareJob` — schedulé horaire à
+    `:10` (après `FetchBaliseForecastsJob` à `:00` et
+    `AggregateBaliseReadingsHourlyJob` à `:05`). Fenêtre ±72 h.
+  - `App\Jobs\ComputeModelReliabilityJob` — schedulé quotidien à
+    `03:30` (après les purges). Recalcule l'ensemble de
+    `model_reliability` sur la fenêtre glissante.
+  - Les deux jobs sont `ShouldQueue` avec `withoutOverlapping()`,
+    timeout généreux (300 s / 600 s), logs structurés par balise.
+
+- **Settings — 11 nouvelles clés `reliability.*`**
+  - `shadow_enabled` (bool, true) — kill switch global du job.
+  - `epsilon_new` (float, 1.0) — EPSILON pour B et C.
+  - `mad_floor` (float, 0.5 km/h) — plancher MAD.
+  - `z_outlier_threshold` (float, 3.0) — seuil MAD vitesses.
+  - `dir_mad_z_threshold` (float, 3.0) — idem direction.
+  - `use_weighted_median` (bool, true) — switch médiane vs moyenne pondérée.
+  - `use_mad_filtering` (bool, true) — switch filtrage MAD.
+  - `min_samples` (int, 50) — seuil cold start pour `weight_factor`.
+  - `factor_min` / `factor_max` (float, 0.25 / 2.0) — clamp `weight_factor`.
+  - `window_days` (int, 7) — fenêtre glissante de calcul.
+  - Nouveau groupe « Fiabilité des modèles » dans `/admin/settings`,
+    avec support du **type `bool`** côté UI (checkbox + hidden input
+    pour gérer le cas non coché côté HTML).
+
+- **Écrans admin (nouveau menu « Fiabilité des modèles » dans Données)**
+  - `/admin/reliability/compare` — pour une balise × variable, tableau
+    heure par heure des consensus A/B/C vs observation, scindé en
+    3 sections J / J+1 / J+2. Bandeau global et sectionnel avec MAE
+    A/B/C et badge 🏆 sur le meilleur. Couleur sur ΔA/ΔB/ΔC selon
+    tolérance par variable (1.5 / 4 km/h ou 10 / 30°). Lignes futures
+    pâlies.
+  - `/admin/reliability/models` — tableau pivot modèle × bucket pour
+    une balise × variable. Affiche MAE / biais signé / `weight_factor`
+    / `samples_n`. Coloration cohérente du poids (rouge `<0.5`, ambre
+    `<0.9`, gris `≈1`, sky `>1.1`, emeraude `>1.5`). Bouton
+    « Recalculer maintenant » (dispatch sync).
+  - Toggle « Panel test fiabilité » sur la fiche admin balise
+    (`/admin/balises/{id}`), à côté du toggle « Activer ».
+
+- **Exports**
+  - `GET /admin/reliability/export.json` — payload complet horodaté
+    (paramètres courants + panel + modèles + stats + détail
+    `balise_consensus_compare` + détail `model_reliability`).
+  - `GET /admin/reliability/export/consensus-compare.csv` et
+    `/model-reliability.csv` — CSV streamés (BOM UTF-8 pour Excel),
+    filtrables par balise et variable. Boutons de téléchargement sur
+    les 2 écrans admin.
+
+- **Commandes artisan utilitaires**
+  - `php artisan reliability:compute-compare [--balise=ID] [--hours=72]`
+    — pendant sync de `ComputeBaliseConsensusCompareJob`.
+  - `php artisan reliability:compute-factors [--balise=ID] [--days=N]`
+    — pendant sync de `ComputeModelReliabilityJob`.
+
+- **Documentation**
+  - `RELIABILITY_ANALYSIS_CONTEXT.md` (~400 lignes, racine du repo) —
+    document destiné à accompagner un export JSON pour permettre à un
+    Claude analyste de fournir une lecture pertinente sans contexte
+    préalable (sections : projet, phase 2.5, schéma JSON commenté,
+    glossaire, ordres de grandeur, pièges connus, paramètres
+    ajustables, critères go/no-go phase 4, 10 questions-types).
+
+### Tests
+
+- 13 tests unitaires sur `ConsensusCalculator` (`tests/Unit/Weather/Reliability/`)
+  couvrant : cas du sujet 24/25/26/5/70, modèles identiques, direction
+  qui chevauche le Nord, filtrage MAD circulaire, cold start (C ≡ B),
+  MAD plancher, effet du `weight_factor` en mode moyenne pondérée,
+  distance circulaire, différence circulaire signée.
+
+### Notes opérationnelles
+
+- Au premier déploiement : lancer `db:seed --class=SettingsSeeder
+  --force` pour amorcer les libellés des 11 nouvelles clés. Cocher
+  manuellement le toggle « Panel test fiabilité » sur 3 balises de
+  zones variées (Alpes / plateaux / plaine), puis amorcer avec
+  `php artisan reliability:compute-compare` et
+  `reliability:compute-factors`.
+- Performance constatée en prod : ~15 s par balise pour
+  `compute-compare` sur 144 h, ~15-30 s pour `compute-factors`.
+- Le panel n'a pas vocation à dépasser 5-10 balises (panel statistique,
+  pas opérationnel). Pistes d'optimisation documentées dans le FF si
+  le besoin émerge.
+
+### Critères avant phase 4
+
+L'intégration des `weight_factor` dans le `ScoringService` de prod
+(phase 4) **n'est pas livrée** par cette release. Elle est conditionnée
+à 2-3 semaines d'observation et à la validation de critères
+statistiques (MAE B ≤ MAE A sur 2 var × 2 buckets × 2 balises, MAE C ≤
+MAE B sur ≥ 1 variable, aucun cas `MAE C > 1.5 × MAE A`).
+
+---
+
 ## 2026-05-17 — Géolocalisation administrative + cycle d'activation accéléré
 
 Trois améliorations interdépendantes : enrichissement des sites et

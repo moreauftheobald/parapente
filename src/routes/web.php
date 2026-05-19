@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\LogController as AdminLogController;
 use App\Http\Controllers\Admin\ModuleController as AdminModuleController;
 use App\Http\Controllers\Admin\ReliabilityCompareController as AdminReliabilityCompareController;
 use App\Http\Controllers\Admin\ReliabilityExportController as AdminReliabilityExportController;
+use App\Http\Controllers\Admin\ReliabilityHorizonController as AdminReliabilityHorizonController;
 use App\Http\Controllers\Admin\ReliabilityModelsController as AdminReliabilityModelsController;
 use App\Http\Controllers\Admin\SettingsController as AdminSettingsController;
 use App\Http\Controllers\Admin\SiteController as AdminSiteController;
@@ -172,6 +173,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
         // ── Fiabilité des modèles (phase 2.5 — shadow comparatif) ─
         Route::get('/reliability/compare',          [AdminReliabilityCompareController::class, 'index'])->name('reliability.compare');
+        Route::get('/reliability/horizon',          [AdminReliabilityHorizonController::class, 'index'])->name('reliability.horizon');
         Route::get('/reliability/models',           [AdminReliabilityModelsController::class, 'index'])->name('reliability.models');
         Route::post('/reliability/models/recompute',[AdminReliabilityModelsController::class, 'recompute'])->name('reliability.models.recompute');
 
@@ -179,5 +181,6 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/reliability/export.json',                          [AdminReliabilityExportController::class, 'json'])->name('reliability.export.json');
         Route::get('/reliability/export/consensus-compare.csv',         [AdminReliabilityExportController::class, 'consensusCompareCsv'])->name('reliability.export.compare-csv');
         Route::get('/reliability/export/model-reliability.csv',         [AdminReliabilityExportController::class, 'modelReliabilityCsv'])->name('reliability.export.reliability-csv');
+        Route::get('/reliability/export/horizon-mae.csv',               [AdminReliabilityExportController::class, 'horizonStatsCsv'])->name('reliability.export.horizon-csv');
     });
 });

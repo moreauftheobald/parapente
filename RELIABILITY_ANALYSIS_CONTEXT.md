@@ -99,7 +99,7 @@ Un modèle 4× pire → facteur 0.25 (plancher).
 ```jsonc
 {
   "exported_at": "2026-05-18T15:30:00+00:00",   // ISO 8601, UTC
-  "schema_version": 1,
+  "schema_version": 2,                          // v2 ajoute la section horizon_mae
 
   // ── Paramètres en vigueur lors de l'export ──────────────────
   "parameters": {
@@ -133,6 +133,10 @@ Un modèle 4× pire → facteur 0.25 (plancher).
   ],
 
   // ── Stats agrégées par variable × bucket ────────────────────
+  // ATTENTION : "n" et MAE peuvent être calculés sur des ensembles
+  // d'observations DIFFÉRENTS entre buckets (un même target_at n'est
+  // pas forcément présent dans les 4 buckets). Pas apple-to-apple.
+  // Pour une comparaison stricte entre buckets, voir horizon_mae.
   "stats": {
     "wind_speed_avg": {
       "nowcast":  {"n":216,"mae_a":2.88,"mae_b":2.93,"mae_c":2.93},
@@ -142,6 +146,35 @@ Un modèle 4× pire → facteur 0.25 (plancher).
     },
     "wind_speed_max": {...},
     "wind_direction": {...}     // MAE circulaire en degrés
+  },
+
+  // ── MAE par horizon, par balise × variable (schema v2) ──────
+  // Pour chaque (balise × variable), 2 jeux de MAE :
+  //   - "common" : strictement les target_at présents dans les 4
+  //     buckets avec observation → comparaison apple-to-apple
+  //   - "full" : MAE sur l'ensemble complet du bucket (utile en
+  //     référence, idem que la section `stats` ci-dessus)
+  // Voir aussi écran /admin/reliability/horizon.
+  "horizon_mae": {
+    "12": {                                       // balise_id (Jouy)
+      "wind_speed_avg": {
+        "common_targets_count": 47,               // nb de target_at dans les 4 buckets
+        "common": {
+          "nowcast":  {"n":47,"mae_a":2.51,"mae_b":2.49,"mae_c":2.51},
+          "same_day": {"n":47,"mae_a":2.83,"mae_b":2.85,"mae_c":2.84},
+          "j_plus_1": {"n":47,"mae_a":3.10,"mae_b":3.12,"mae_c":3.11},
+          "j_plus_2": {"n":47,"mae_a":3.36,"mae_b":3.39,"mae_c":3.40}
+        },
+        "full": {
+          "nowcast":  {"n":216,"mae_a":2.88,"mae_b":2.93,"mae_c":2.93,"target_count":216},
+          // ... idem stats[][] mais avec target_count en plus
+        }
+      },
+      "wind_speed_max": {...},
+      "wind_direction": {...}
+    },
+    "102": {...},                                 // autres balises du panel
+    "216": {...}
   },
 
   // ── Dataset 1 : tuples consensus vs observation ─────────────
@@ -386,6 +419,15 @@ Quelques pistes d'analyse utiles à demander :
     sur Jouy (plaine) ? Et sur Brunas (Causses) ? Le rang change-t-il
     significativement entre zones ? Cela suggère-t-il qu'un mapping
     régional aurait du sens ? »
+11. **Dégradation par horizon (apple-to-apple)** : « Regarde
+    `horizon_mae[balise][variable].common` pour chaque balise. La MAE
+    croît-elle régulièrement nowcast → J+2 comme attendu ? Si non,
+    quel bucket ne se comporte pas comme prévu, et quelle pourrait être
+    la cause (biais d'archivage, micro-climat) ? »
+12. **Effet du filtre common vs full** : « Compare
+    `horizon_mae[balise][variable].common.<bucket>.mae_a` vs
+    `horizon_mae[balise][variable].full.<bucket>.mae_a` pour chaque
+    bucket. Le filtre strict change-t-il le verdict sur quel algo gagne ? »
 
 ---
 
