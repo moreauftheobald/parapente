@@ -181,6 +181,11 @@
                 Afficher la grille complète
             </label>
 
+            <label class="field chk">
+                <input type="checkbox" id="f-dark-mode">
+                <span><i class="fa-solid fa-moon"></i> Fond sombre</span>
+            </label>
+
             <div id="mg-status">
                 <span class="pill" id="s-cells">— cellules</span>
                 <span class="pill" id="s-occupied">— occupées</span>
@@ -251,10 +256,25 @@
                 attributionControl: false,
             }).setView([46.5, 2.5], 6); // centre France
 
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            // Fonds de carte clair (défaut) et sombre, basculables via
+            // le checkbox "Fond sombre" de la toolbar. Cohérent avec la
+            // palette de la carte météo principale (voyager + dark_all).
+            const TILE_LAYERS = {
+                light: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+                dark:  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+            };
+            let currentTile = L.tileLayer(TILE_LAYERS.light, {
                 maxZoom: 18,
                 subdomains: 'abcd',
             }).addTo(map);
+
+            function setBaseLayer(theme) {
+                map.removeLayer(currentTile);
+                currentTile = L.tileLayer(TILE_LAYERS[theme] || TILE_LAYERS.light, {
+                    maxZoom: 18,
+                    subdomains: 'abcd',
+                }).addTo(map);
+            }
 
             // Force le recalcul des dimensions au cas où la mesure
             // initiale a été prise sur un conteneur en cours de layout.
@@ -484,6 +504,12 @@
             // ── Listeners filtres ─────────────────────────────────
             ['f-model','f-variable','f-bucket','f-metric','f-show-empty'].forEach(id => {
                 document.getElementById(id).addEventListener('change', refresh);
+            });
+
+            // Toggle fond clair/sombre (n'a pas besoin de refresh —
+            // c'est juste le tile layer qui change).
+            document.getElementById('f-dark-mode').addEventListener('change', (e) => {
+                setBaseLayer(e.target.checked ? 'dark' : 'light');
             });
 
             // Premier rendu
