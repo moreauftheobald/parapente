@@ -69,32 +69,34 @@
             background: #020617;
         }
 
-        /* Légende flottante bas-gauche */
-        #mg-legend {
-            position: absolute; left: 12px; bottom: 12px;
+        /* Légende — injectée comme L.Control par Leaflet, donc dans
+           leaflet-control-container.bottomleft. Pas de position
+           absolute custom : Leaflet gère le placement. */
+        .mg-legend {
             background: rgba(15,23,42,0.95);
             border: 1px solid #1e293b;
             border-radius: 8px;
             padding: 10px 12px;
             font-size: 11px;
+            color: #cbd5e1;
             box-shadow: 0 4px 16px rgba(0,0,0,.4);
-            z-index: 40;
             max-width: 280px;
+            pointer-events: auto;
         }
-        #mg-legend h4 {
+        .mg-legend h4 {
             font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
             color: #64748b; margin: 0 0 6px 0;
         }
-        #mg-legend .row {
+        .mg-legend .row {
             display: flex; align-items: center; gap: 8px;
             margin: 2px 0;
         }
-        #mg-legend .sw {
+        .mg-legend .sw {
             width: 14px; height: 14px; border-radius: 3px;
             border: 1px solid rgba(255,255,255,0.1);
         }
-        #mg-legend .ic { width: 18px; text-align: center; }
-        #mg-legend .sep {
+        .mg-legend .ic { width: 18px; text-align: center; }
+        .mg-legend .sep {
             height: 1px; background: #1e293b; margin: 8px 0;
         }
 
@@ -187,11 +189,8 @@
             </div>
         </div>
 
-        {{-- Carte --}}
+        {{-- Carte (la légende est ajoutée comme L.Control dynamique) --}}
         <div id="mg-map"></div>
-
-        {{-- Légende dynamique --}}
-        <div id="mg-legend"></div>
     </div>
 
     @push('scripts')
@@ -263,6 +262,25 @@
             // et rester noir.)
             setTimeout(() => map.invalidateSize(), 0);
             window.addEventListener('resize', () => map.invalidateSize());
+
+            // ── Légende (L.Control plutôt que div sibling pour
+            //    éviter les soucis de z-index avec les panes Leaflet) ─
+            const LegendControl = L.Control.extend({
+                options: { position: 'bottomleft' },
+                onAdd: function () {
+                    this._div = L.DomUtil.create('div', 'mg-legend');
+                    // Empêche les interactions souris (drag/zoom) de la
+                    // carte quand on est sur la légende.
+                    L.DomEvent.disableClickPropagation(this._div);
+                    L.DomEvent.disableScrollPropagation(this._div);
+                    return this._div;
+                },
+                update: function (html) {
+                    if (this._div) this._div.innerHTML = html;
+                },
+            });
+            const legendCtrl = new LegendControl();
+            legendCtrl.addTo(map);
 
             // Couche grille
             let gridLayer = L.layerGroup().addTo(map);
@@ -340,7 +358,7 @@
                 html += `<div class="row"><span class="ic">●</span> rond gris = cold start (< 50)</div>`;
                 html += `<div class="row"><span class="ic" style="color:#ef4444">▲</span> bias positif (sur-estime)</div>`;
                 html += `<div class="row"><span class="ic" style="color:#3b82f6">▼</span> bias négatif (sous-estime)</div>`;
-                document.getElementById('mg-legend').innerHTML = html;
+                legendCtrl.update(html);
             }
 
             // ── Fetch + rendu ─────────────────────────────────────

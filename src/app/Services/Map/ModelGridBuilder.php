@@ -177,12 +177,18 @@ class ModelGridBuilder
     /**
      * Calcule le zoom Leaflet minimum recommandé pour qu'un modèle de
      * résolution donnée n'affiche pas trop de cellules. Formule :
-     *   min_zoom = ceil(log2(360 / (resolution_deg × TARGET_CELLS_PER_DIM)))
+     *   min_zoom = ceil(log2(360 / (resolution_deg × TARGET_CELLS_PER_DIM))) + 1
+     *
+     * Le +1 final compense le ratio largeur/hauteur typique d'une
+     * viewport (~16:9 sur desktop), que la formule théorique ignore.
+     * Sans cette marge, à zoom recommandé l'affichage déclenche en
+     * pratique le seuil too_large car la bbox réelle est plus large
+     * que haute.
      */
     public function recommendedMinZoom(float $resolutionDeg): int
     {
         $ratio = 360.0 / ($resolutionDeg * self::TARGET_CELLS_PER_DIM);
-        return max(1, (int) ceil(log($ratio, 2)));
+        return max(1, (int) ceil(log($ratio, 2)) + 1);
     }
 
     /**
