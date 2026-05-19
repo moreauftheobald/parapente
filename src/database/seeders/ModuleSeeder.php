@@ -49,6 +49,15 @@ class ModuleSeeder extends Seeder
                 'sort_order'            => 40,
             ],
             [
+                'key'                   => 'model-grid',
+                'label'                 => 'Carte des modèles',
+                'icon'                  => 'fa-solid fa-table-cells',
+                'route_name'            => 'model-grid.index',
+                'access_level'          => 'admin',
+                'requires_registration' => true,
+                'sort_order'            => 50,
+            ],
+            [
                 'key'                   => 'admin',
                 'label'                 => 'Administration',
                 'icon'                  => 'fa-solid fa-gauge-high',

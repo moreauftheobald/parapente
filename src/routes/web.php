@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\DataSyncController as AdminSyncController;
 use App\Http\Controllers\Admin\LogController as AdminLogController;
 use App\Http\Controllers\Admin\ModuleController as AdminModuleController;
 use App\Http\Controllers\Admin\ReliabilityCompareController as AdminReliabilityCompareController;
+use App\Http\Controllers\ModelGridController;
 use App\Http\Controllers\Admin\ReliabilityExportController as AdminReliabilityExportController;
 use App\Http\Controllers\Admin\ReliabilityHorizonController as AdminReliabilityHorizonController;
 use App\Http\Controllers\Admin\ReliabilityModelsController as AdminReliabilityModelsController;
@@ -39,6 +40,13 @@ Route::get('/carte', [MapController::class, 'index'])->name('map');
 // Aide en ligne / pseudo-wiki (public)
 Route::get('/aide',          [WikiController::class, 'index'])->name('wiki.index');
 Route::get('/aide/{slug}',   [WikiController::class, 'show'])->where('slug', '[a-z0-9\-]+')->name('wiki.show');
+
+// Carte des modèles (module front, admin-only le temps que la couverture
+// du panel de balises soit suffisante). Cf. table `modules` access_level.
+Route::middleware(['auth', 'admin'])->group(function () {
+    Route::get('/carte-modeles',      [ModelGridController::class, 'index'])->name('model-grid.index');
+    Route::get('/carte-modeles/data', [ModelGridController::class, 'data'])->name('model-grid.data');
+});
 
 // Tampon d'icônes SpotAir : Nginx sert les fichiers déjà présents
 // dans public/icons-cache/ via try_files. PHP n'est appelé qu'au
