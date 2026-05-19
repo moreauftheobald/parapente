@@ -181,5 +181,6 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/reliability/export.json',                          [AdminReliabilityExportController::class, 'json'])->name('reliability.export.json');
         Route::get('/reliability/export/consensus-compare.csv',         [AdminReliabilityExportController::class, 'consensusCompareCsv'])->name('reliability.export.compare-csv');
         Route::get('/reliability/export/model-reliability.csv',         [AdminReliabilityExportController::class, 'modelReliabilityCsv'])->name('reliability.export.reliability-csv');
+        Route::get('/reliability/export/horizon-mae.csv',               [AdminReliabilityExportController::class, 'horizonStatsCsv'])->name('reliability.export.horizon-csv');
     });
 });

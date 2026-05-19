@@ -6,10 +6,8 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Balise;
-use App\Models\BaliseConsensusCompare;
-use App\Services\Weather\Reliability\ConsensusCalculator;
+use App\Services\Weather\Reliability\ReliabilityExportService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
 /**
@@ -28,11 +26,18 @@ use Illuminate\View\View;
  *
  * Bonus : la MAE « full » (= sur l'ensemble complet du bucket) est
  * affichée à côté pour mesurer l'effet du filtre.
+ *
+ * Le calcul est délégué au service `ReliabilityExportService` (méthode
+ * `buildHorizonStats`) pour rester DRY avec les exports CSV / JSON.
  */
 class ReliabilityHorizonController extends Controller
 {
     private const BUCKETS = ['nowcast', 'same_day', 'j_plus_1', 'j_plus_2'];
     private const VARS    = ['wind_speed_avg', 'wind_speed_max', 'wind_direction'];
+
+    public function __construct(private ReliabilityExportService $exportService)
+    {
+    }
 
     public function index(Request $request): View
     {
@@ -44,11 +49,11 @@ class ReliabilityHorizonController extends Controller
 
         if ($panel->isEmpty()) {
             return view('admin.reliability.horizon', [
-                'panel'        => $panel,
-                'balise'       => null,
-                'variable'     => 'wind_speed_avg',
-                'rowsCommon'   => [],
-                'rowsFull'     => [],
+                'panel'         => $panel,
+                'balise'        => null,
+                'variable'      => 'wind_speed_avg',
+                'rowsCommon'    => [],
+                'rowsFull'      => [],
                 'commonTargets' => 0,
                 'fullTargets'   => [],
             ]);
@@ -65,84 +70,19 @@ class ReliabilityHorizonController extends Controller
         }
         $balise = $panel->firstWhere('id', $baliseId);
 
-        // 1. Charge tous les tuples (balise, variable) avec observation présente
-        $rows = BaliseConsensusCompare::query()
-            ->where('balise_id', $baliseId)
-            ->where('variable', $variable)
-            ->whereNotNull('observation')
-            ->get(['target_at', 'horizon_bucket', 'consensus_a', 'consensus_b', 'consensus_c', 'observation']);
-
-        // 2. Identifie les target_at communs aux 4 buckets
-        $byTarget = $rows->groupBy(fn ($r) => $r->target_at->format('Y-m-d H:i:s'));
-        $commonTargets = $byTarget->filter(
-            fn (Collection $group) => $group->pluck('horizon_bucket')->unique()->count() === count(self::BUCKETS)
-        )->keys()->all();
-
-        // 3. MAE sur l'intersection (target_at présents dans les 4 buckets)
-        $rowsCommon = [];
-        foreach (self::BUCKETS as $bucket) {
-            $subset = $rows->filter(
-                fn ($r) => $r->horizon_bucket === $bucket
-                          && in_array($r->target_at->format('Y-m-d H:i:s'), $commonTargets, true)
-            );
-            $rowsCommon[$bucket] = $this->maeOf($subset, $variable);
-        }
-
-        // 4. MAE « full » : sur l'ensemble du bucket, sans filtre
-        $rowsFull = [];
-        foreach (self::BUCKETS as $bucket) {
-            $subset = $rows->filter(fn ($r) => $r->horizon_bucket === $bucket);
-            $rowsFull[$bucket] = $this->maeOf($subset, $variable);
-            $rowsFull[$bucket]['target_count'] = $subset->pluck('target_at')->unique()->count();
-        }
+        $stats = $this->exportService->buildHorizonStats($baliseId, $variable);
 
         return view('admin.reliability.horizon', [
             'panel'         => $panel,
             'balise'        => $balise,
             'variable'      => $variable,
-            'rowsCommon'    => $rowsCommon,
-            'rowsFull'      => $rowsFull,
-            'commonTargets' => count($commonTargets),
+            'rowsCommon'    => $stats['common'],
+            'rowsFull'      => $stats['full'],
+            'commonTargets' => $stats['common_targets_count'],
             'fullTargets'   => array_combine(
                 self::BUCKETS,
-                array_map(fn ($b) => $rowsFull[$b]['target_count'], self::BUCKETS)
+                array_map(fn ($b) => $stats['full'][$b]['target_count'], self::BUCKETS)
             ),
         ]);
-    }
-
-    /**
-     * @return array{n:int, mae_a:?float, mae_b:?float, mae_c:?float}
-     */
-    private function maeOf(Collection $rows, string $variable): array
-    {
-        $n = $rows->count();
-        if ($n === 0) {
-            return ['n' => 0, 'mae_a' => null, 'mae_b' => null, 'mae_c' => null];
-        }
-
-        $sums = ['a' => 0.0, 'b' => 0.0, 'c' => 0.0];
-        $cnt  = ['a' => 0,   'b' => 0,   'c' => 0];
-
-        foreach ($rows as $r) {
-            $obs = (float) $r->observation;
-            foreach (['a', 'b', 'c'] as $k) {
-                $val = $r->{"consensus_$k"};
-                if ($val === null) {
-                    continue;
-                }
-                $err = $variable === 'wind_direction'
-                    ? ConsensusCalculator::circularDistance((float) $val, $obs)
-                    : abs((float) $val - $obs);
-                $sums[$k] += $err;
-                $cnt[$k]++;
-            }
-        }
-
-        return [
-            'n'     => $n,
-            'mae_a' => $cnt['a'] > 0 ? $sums['a'] / $cnt['a'] : null,
-            'mae_b' => $cnt['b'] > 0 ? $sums['b'] / $cnt['b'] : null,
-            'mae_c' => $cnt['c'] > 0 ? $sums['c'] / $cnt['c'] : null,
-        ];
     }
 }

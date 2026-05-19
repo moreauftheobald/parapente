@@ -80,6 +80,30 @@ class ReliabilityExportController extends Controller
     }
 
     /**
+     * CSV des MAE par horizon (common + full), filtre optionnel.
+     * 1 ligne par (balise × variable × bucket × set), 8 lignes par
+     * couple (balise, variable) — 4 buckets × 2 sets.
+     */
+    public function horizonStatsCsv(Request $request): StreamedResponse
+    {
+        $baliseId = $request->filled('balise')   ? (int) $request->input('balise')   : null;
+        $variable = $request->filled('variable') ? (string) $request->input('variable') : null;
+
+        $headers = [
+            'balise_id', 'balise_name', 'variable', 'set', 'horizon_bucket',
+            'common_targets_count', 'bucket_target_count', 'n',
+            'mae_a', 'mae_b', 'mae_c',
+        ];
+        $rows = $this->service->horizonStatsCsvRows($baliseId, $variable);
+
+        return $this->streamCsv(
+            $this->buildFilename('horizon-mae', $baliseId, $variable),
+            $headers,
+            $rows
+        );
+    }
+
+    /**
      * Streame un CSV propre (UTF-8 BOM pour Excel, délimiteur virgule,
      * échappement standard).
      *

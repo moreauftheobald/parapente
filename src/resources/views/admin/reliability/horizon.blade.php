@@ -73,6 +73,16 @@
         </select>
     </div>
     <div class="ml-auto flex items-center gap-4">
+        <a href="{{ route('admin.reliability.export.horizon-csv', ['balise' => $balise->id, 'variable' => $variable]) }}"
+           class="text-xs text-emerald-400 hover:text-emerald-300 transition flex items-center gap-2"
+           title="CSV des MAE par horizon (common + full) — filtré sur la balise et la variable courantes">
+            <i class="fa-solid fa-file-csv"></i> Télécharger CSV
+        </a>
+        <a href="{{ route('admin.reliability.export.json') }}"
+           class="text-xs text-sky-400 hover:text-sky-300 transition flex items-center gap-2"
+           title="Export JSON complet — pour analyse externe">
+            <i class="fa-solid fa-file-code"></i> Export JSON complet
+        </a>
         <a href="{{ route('admin.reliability.compare', ['balise' => $balise->id, 'variable' => $variable]) }}"
            class="text-xs text-gray-400 hover:text-sky-300 transition flex items-center gap-2">
             <i class="fa-solid fa-table"></i> Voir la comparaison heure par heure
