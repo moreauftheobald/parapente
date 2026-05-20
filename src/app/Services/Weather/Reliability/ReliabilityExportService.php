@@ -32,6 +32,22 @@ class ReliabilityExportService
     }
 
     /**
+     * Liste les `id` des balises actuellement dans le panel actif. Sert
+     * à filtrer les exports/stats pour ne pas inclure les reliquats de
+     * balises sorties (les jobs upsertent mais n'effacent jamais).
+     *
+     * @return array<int>
+     */
+    private function currentPanelIds(): array
+    {
+        return Balise::query()
+            ->where('active', true)
+            ->where('in_consensus_compare_panel', true)
+            ->pluck('id')
+            ->all();
+    }
+
+    /**
      * Construit le payload JSON complet. Aucune limite de fenêtre — on
      * dump tout ce qui est en base (rétention 14 j pour
      * `balise_consensus_compare`, 7 j glissants pour `model_reliability`).
@@ -42,11 +58,21 @@ class ReliabilityExportService
     {
         $now = CarbonImmutable::now();
 
-        $panel = Balise::query()
+        $panelBalises = Balise::query()
             ->where('active', true)
             ->where('in_consensus_compare_panel', true)
             ->orderBy('name')
-            ->get(['id', 'name', 'source', 'reliability_class', 'latitude', 'longitude', 'altitude_m'])
+            ->get(['id', 'name', 'source', 'reliability_class', 'latitude', 'longitude', 'altitude_m']);
+
+        // Snapshot des balise_id strictement présentes dans le panel
+        // au moment de l'export. Toutes les sections de données qui
+        // suivent (consensus_compare, model_reliability, stats) sont
+        // filtrées sur cet ensemble pour éviter de polluer l'export
+        // avec des reliquats de balises sorties du panel (les jobs
+        // upsertent mais n'effacent jamais).
+        $panelIds = $panelBalises->pluck('id')->all();
+
+        $panel = $panelBalises
             ->map(fn ($b) => [
                 'id'                => $b->id,
                 'name'              => $b->name,
@@ -71,6 +97,7 @@ class ReliabilityExportService
             ->all();
 
         $compareRows = BaliseConsensusCompare::query()
+            ->whereIn('balise_id', $panelIds)
             ->orderBy('balise_id')
             ->orderBy('target_at')
             ->orderBy('horizon_bucket')
@@ -93,6 +120,7 @@ class ReliabilityExportService
             ->all();
 
         $reliabilityRows = ModelReliability::query()
+            ->whereIn('balise_id', $panelIds)
             ->orderBy('balise_id')
             ->orderBy('weather_model_id')
             ->orderBy('horizon_bucket')
@@ -118,7 +146,7 @@ class ReliabilityExportService
             'parameters'        => $this->collectParameters(),
             'panel'             => $panel,
             'models'            => $models,
-            'stats'             => $this->buildAggregateStats(),
+            'stats'             => $this->buildAggregateStats($panelIds),
             'horizon_mae'       => $this->buildHorizonMaeAllBalises($panel),
             'consensus_compare' => $compareRows,
             'model_reliability' => $reliabilityRows,
@@ -191,15 +219,24 @@ class ReliabilityExportService
     }
 
     /**
-     * Stats agrégées par variable × bucket sur les tuples avec observation.
+     * Stats agrégées par variable × bucket sur les tuples avec observation,
+     * **restreintes au panel passé en argument** (les jobs n'effacent
+     * jamais les vieux tuples, sans ce filtre on agrège aussi les balises
+     * sorties du panel).
+     *
      * MAE linéaire pour les vitesses, circulaire pour la direction.
      *
+     * @param array<int> $panelIds
      * @return array<string, array<string, array{n:int, mae_a:?float, mae_b:?float, mae_c:?float}>>
      */
-    private function buildAggregateStats(): array
+    private function buildAggregateStats(array $panelIds): array
     {
         $out = [];
+        if ($panelIds === []) {
+            return $out;
+        }
         $rows = BaliseConsensusCompare::query()
+            ->whereIn('balise_id', $panelIds)
             ->whereNotNull('observation')
             ->get();
 
@@ -259,8 +296,13 @@ class ReliabilityExportService
             ->pluck('name', 'id')
             ->all();
 
+        // Sans filtre balise explicite : restreindre au panel courant
+        // pour ne pas exporter les reliquats de balises sorties.
+        $panelIds = $baliseId === null ? $this->currentPanelIds() : null;
+
         $query = BaliseConsensusCompare::query()
             ->when($baliseId !== null, fn ($q) => $q->where('balise_id', $baliseId))
+            ->when($panelIds !== null, fn ($q) => $q->whereIn('balise_id', $panelIds))
             ->when($variable !== null, fn ($q) => $q->where('variable', $variable))
             ->orderBy('balise_id')
             ->orderBy('target_at')
@@ -312,8 +354,11 @@ class ReliabilityExportService
         $modelCode  = WeatherModel::query()->pluck('code', 'id')->all();
         $baliseById = Balise::query()->pluck('name', 'id')->all();
 
+        $panelIds = $baliseId === null ? $this->currentPanelIds() : null;
+
         $query = ModelReliability::query()
             ->when($baliseId !== null, fn ($q) => $q->where('balise_id', $baliseId))
+            ->when($panelIds !== null, fn ($q) => $q->whereIn('balise_id', $panelIds))
             ->when($variable !== null, fn ($q) => $q->where('variable', $variable))
             ->orderBy('balise_id')
             ->orderBy('weather_model_id')
