@@ -241,6 +241,124 @@ brique à développer :
 - Pas de temps réel sub-horaire — les modèles eux-mêmes ne se mettent
   à jour que toutes les 1 à 6 h selon le modèle.
 
+### 2.6 Paramétrage du consensus
+
+Les observations terrain de la phase 2.5 de `FF_model_reliability.md`
+(triple-consensus shadow sur 3 balises) ont montré que **la meilleure
+méthode dépend de la variable** :
+
+- B et C performent mieux pour `wind_speed_avg` et `wind_direction`.
+- A reste meilleure pour `wind_speed_max` (rafales).
+
+Conséquence : le sidecar doit permettre de **choisir la méthode
+indépendamment pour chaque variable**, et cette configuration doit
+être éditable depuis l'admin (pas hard-codée).
+
+#### Méthodes disponibles
+
+| Méthode | Nom court | Algo | Dispo phase 1a | Dispo grille |
+|---|---|---|---|---|
+| A | « Inverse-carré pondéré » | `legacyLinear` / `legacyCircular` (EPSILON 0.001, moyenne pondérée 1/dist²) | ✅ | ✅ partout |
+| B | « MAE amélioré » | `improvedLinear` / `improvedCircular` (filtrage outliers MAD, médiane pondérée) | ✅ | ✅ partout |
+| C | « MAE + fiabilité » | B + pondération par `weight_factor` issu de `model_reliability` | ❌ phase 1b | ⚠️ partiel |
+
+**Subtilité importante méthode C sur grille** : `weight_factor` est
+calculé **par balise** (où on a une vérité-terrain). Sur la majorité
+des cellules de grille (sans balise à proximité), C dégénère
+naturellement en B. Pour rendre C **vraiment utilisable sur toute la
+grille**, il faut une **extrapolation spatiale des `weight_factor`**
+depuis les balises — c'est le périmètre de `FF_model_reliability.md`
+**phase 4** (IDW depuis balises), pas encore livrée.
+
+**Conséquence pour le découpage de ce FF** :
+- **Phase 1a (démarrage immédiat)** : méthodes A et B sélectionnables
+  par variable.
+- **Phase 1b (après livraison FF_reliability phase 4)** : méthode C
+  activable, avec IDW des `weight_factor` calculé en amont par un
+  autre job.
+
+Les observations terrain montrent déjà un gain net B vs A pour 4
+variables sur 5, donc on capture l'essentiel du gain dès la phase 1a.
+
+#### Schéma de configuration (table `settings`)
+
+Nouveau groupe « Consensus multi-modèles » dans `/admin/settings` :
+
+| Clé                                       | Type | Défaut    | Description                              |
+|-------------------------------------------|------|-----------|------------------------------------------|
+| `consensus.method.wind_speed_avg`         | enum | `B`       | A \| B \| C (C grisé en phase 1a)        |
+| `consensus.method.wind_speed_max`         | enum | `A`       | (résultat terrain : A meilleur)           |
+| `consensus.method.wind_direction`         | enum | `B`       |                                          |
+| `consensus.method.precipitation`          | enum | `B`       |                                          |
+| `consensus.method.relative_humidity`      | enum | `B`       |                                          |
+| `consensus.method.temperature`            | enum | `B`       |                                          |
+| `consensus.method.cloud_cover_low`        | enum | `B`       |                                          |
+| `consensus.method.cloud_cover_mid`        | enum | `B`       |                                          |
+| `consensus.method.cloud_cover_high`       | enum | `B`       |                                          |
+| `consensus.method.cloud_base_strategy`    | enum | `alpha`   | `alpha` : Espy par modèle puis consensus<br>`beta` : consensus T/Td puis Espy |
+| `consensus.epsilon_inverse_square`        | float| `0.001`   | EPSILON méthode A                        |
+| `consensus.mad_z_threshold`               | float| `2.5`     | Seuil filtrage outliers méthode B (linéaire) |
+| `consensus.mad_z_threshold_circular`      | float| `2.0`     | Seuil méthode B (direction)              |
+| `consensus.min_samples_for_method_C`      | int  | `50`      | Sous ce seuil, C dégénère en B           |
+
+**Bonus admin attendu** : à côté de chaque select, afficher la MAE
+courante des 3 méthodes (déjà calculée par `/admin/reliability/compare`)
+pour rendre le choix data-driven visible — l'admin voit en un coup
+d'œil « pour cette variable, B donne 1.8 km/h, A donne 2.4 km/h, donc
+B est légitimement meilleure ».
+
+### 2.7 Variables produites par le consensus
+
+L'API interne (FastAPI compatible Open-Meteo) doit pouvoir servir
+**l'ensemble des paramètres météo** utilisés par l'app (scoring, chart,
+multimodel, carte) pour qu'à terme le scoring soit **entièrement
+basé sur le consensus** (cf. § 6 phases 3-4).
+
+| Variable Qui-Vole       | Champ Open-Meteo       | Type       | Méthode config                  | Consommée par                       |
+|-------------------------|------------------------|------------|---------------------------------|--------------------------------------|
+| Vent moyen              | `wind_speed_10m`       | linéaire   | `consensus.method.wind_speed_avg` | scoring, chart, multimodel, carte    |
+| Rafales                 | `wind_gusts_10m`       | linéaire   | `consensus.method.wind_speed_max` | scoring, chart, multimodel           |
+| Direction du vent       | `wind_direction_10m`   | circulaire | `consensus.method.wind_direction` | scoring, chart, popup carte          |
+| Précipitations          | `precipitation`        | linéaire   | `consensus.method.precipitation`  | scoring, chart, multimodel           |
+| Humidité relative       | `relative_humidity_2m` | linéaire   | `consensus.method.relative_humidity` | multimodel                           |
+| Température             | `temperature_2m`       | linéaire   | `consensus.method.temperature`    | multimodel, calcul plafond           |
+| Plafond de vol estimé   | `qui_vole_cloud_base`  | linéaire   | `consensus.method.cloud_base_strategy` (cf. ci-dessous) | scoring, chart, multimodel           |
+| Nébulosité basse        | `cloud_cover_low`      | linéaire   | `consensus.method.cloud_cover_low`  | chart (tuiles nuageuses)             |
+| Nébulosité moyenne      | `cloud_cover_mid`      | linéaire   | `consensus.method.cloud_cover_mid`  | chart                                |
+| Nébulosité haute        | `cloud_cover_high`     | linéaire   | `consensus.method.cloud_cover_high` | chart                                |
+| **Variables dérivées (métadonnées)** | | | | |
+| Nombre de modèles contributifs | `qui_vole_models_count` | int | n/a | métadonnée                     |
+| Nombre de modèles convergents  | `qui_vole_models_converging` | int | n/a | métadonnée + variable « confiance » carte |
+
+Soit **12 champs** dans le NetCDF.
+
+#### Stratégie de calcul du plafond (clé `cloud_base_strategy`)
+
+- **`alpha` (défaut)** : chaque modèle calcule `cloud_base = elevation
+  + 125 × (T_2m − Td_2m)` localement (règle d'Espy, cf. `OpenMeteoApi`
+  actuelle), puis on applique la méthode de consensus configurée sur
+  les valeurs `cloud_base`. **Continuité avec l'existant.**
+- **`beta` (expérimental)** : on applique le consensus sur `T_2m` et
+  `Td_2m` séparément (méthodes configurables), puis on calcule Espy
+  sur les valeurs consensus. Plus robuste statistiquement (les
+  outliers de T ou Td sont filtrés avant Espy), mais change la
+  sémantique.
+
+Pour la phase 1a : implémenter `alpha`. Garder `beta` en option
+configurable pour test ultérieur.
+
+#### Volumétrie révisée
+
+12 var × 24 h × 150 k cellules × 4 bytes = **173 MB brut**,
+**~45 MB compressé** (zlib niveau 5 sur NetCDF4). Marginalement plus
+que l'estimation à 5 variables (75 MB → 15-25 MB compressé).
+
+#### Mapping FastAPI
+
+Pour les variables ayant un équivalent Open-Meteo standard, le mapping
+est trivial. Pour les deux variables custom Qui-Vole (`qui_vole_*`),
+on convient d'un préfixe explicite qui les distingue des standards.
+
 ---
 
 ## 3. Architecture cible
@@ -425,7 +543,132 @@ que renvoie Open-Meteo pour les mêmes paramètres. Exemple type :
 
 Implémentation FastAPI estimée : ~150 lignes (parsing de la
 querystring Open-Meteo, lookup `xarray` au lat/lng demandé,
-sérialisation au bon format). Cf. § 6 phase 1.
+sérialisation au bon format). Cf. § 6 phase 1a.
+
+### 3.6 Organisation Docker
+
+**Décision : conteneur séparé, intégré au `docker-compose` existant.**
+
+Justification :
+- Stack différente (Python 3.12 + numpy/xarray vs PHP 8.4).
+- Cycles de vie différents : un **worker cron** (intervalle horaire,
+  ~2-3 min de calcul) **et un serveur FastAPI** (toujours up, répond
+  aux requêtes Laravel).
+- Isolation mémoire : numpy + cfgrib peuvent pointer à 2-3 GB en pic.
+- Redémarrage indépendant possible sans toucher PHP.
+
+#### Arborescence repo
+
+```
+docker/consensus-grid/
+├── Dockerfile
+├── requirements.txt
+├── entrypoint.sh                  # lance worker + uvicorn en parallèle (supervisord)
+├── supervisord.conf
+└── src/
+    ├── __init__.py
+    ├── config.py                  # lecture settings DB, constantes bbox/résolution
+    ├── grib_reader.py             # lecture GRIB Open-Meteo par modèle
+    ├── interpolation.py           # bilinéaire vers grille commune 2.5 km
+    ├── consensus/
+    │   ├── __init__.py
+    │   ├── methods.py             # méthode_A, méthode_B (+ stub C phase 1b)
+    │   └── helpers.py             # médiane pondérée, MAD, circular helpers
+    ├── netcdf_writer.py           # écriture NetCDF compressé
+    ├── api.py                     # FastAPI Open-Meteo-compat
+    ├── worker.py                  # cron horaire (boucle schedule)
+    └── tests/
+        ├── fixtures/              # JSON identiques à ConsensusCalculatorTest.php
+        ├── test_consensus.py      # parité Python ↔ PHP
+        └── test_api_format.py     # format réponse FastAPI
+```
+
+#### docker-compose (dev + prod, mêmes services)
+
+```yaml
+consensus-grid:
+  build:
+    context: ./docker/consensus-grid
+  container_name: parapente_consensus_grid
+  restart: unless-stopped
+  ports:
+    - "8082:8082"           # FastAPI exposé sur le pod interne
+  volumes:
+    - openmeteo_data:/data/grib:ro                      # GRIB lus en RO
+    - consensus_grid_output:/data/output                # NetCDF + tuiles
+  networks:
+    - parapente-internal-pod                            # accès MariaDB (settings)
+    - meteo-net                                         # accès volume GRIB Open-Meteo
+  environment:
+    - TZ=Europe/Paris
+    - DB_HOST=parapente_mariadb
+    - DB_PORT=3306
+    - DB_DATABASE=${DB_DATABASE}
+    - DB_USERNAME=${DB_USERNAME}                        # utilisateur dédié lecture seule recommandé
+    - DB_PASSWORD=${DB_PASSWORD}
+    - BBOX_SOUTH=41
+    - BBOX_WEST=-5
+    - BBOX_NORTH=52
+    - BBOX_EAST=10
+    - RESOLUTION_KM=2.5
+    - HORIZON_HOURS=24
+    - LOG_LEVEL=INFO
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+    interval: 30s
+    timeout: 5s
+    retries: 3
+```
+
+#### Réseaux
+
+- `parapente-internal-pod` : pour que Laravel (`parapente_php`,
+  `parapente_worker`) puissent appeler le FastAPI sur
+  `http://consensus-grid:8082`, et pour que le sidecar puisse lire
+  la table `settings` sur `parapente_mariadb:3306`.
+- `meteo-net` : partagé avec Open-Meteo pour accéder au volume des
+  GRIB téléchargés.
+
+#### Process management dans le conteneur
+
+Le conteneur tourne **deux processus** simultanés :
+- Worker cron (boucle `schedule` qui déclenche le pipeline à `:20`).
+- Serveur FastAPI/uvicorn (port 8082, sert les requêtes en continu).
+
+Géré par **supervisord** dans le conteneur. Alternative envisagée
+mais écartée : **deux conteneurs séparés** (worker + API). C'est plus
+propre conceptuellement, mais redouble les couches de configuration
+Docker et ne gagne rien — le worker et l'API partagent les mêmes
+volumes et la même config, autant les colocaliser.
+
+#### Variables d'environnement à ajouter dans `.env.prod` et `.env`
+
+```
+CONSENSUS_API_URL=http://consensus-grid:8082/v1
+```
+
+Lu par `config/weather.php` :
+```php
+'model_endpoints' => [
+    'default'            => env('OPEN_METEO_BASE_URL'),
+    'qui_vole_consensus' => env('CONSENSUS_API_URL'),
+],
+```
+
+#### Setup utilisateur DB dédié (recommandé)
+
+Plutôt que de réutiliser le user Laravel pour le sidecar (qui a le
+privilège WRITE), créer un user **lecture seule** sur la table
+`settings` uniquement :
+
+```sql
+CREATE USER 'consensus_ro'@'%' IDENTIFIED BY 'xxx';
+GRANT SELECT ON parapente.settings TO 'consensus_ro'@'%';
+FLUSH PRIVILEGES;
+```
+
+Et passer ces credentials au conteneur via `DB_USERNAME` /
+`DB_PASSWORD` dédiés. Principe du moindre privilège.
 
 ---
 
@@ -468,31 +711,62 @@ Le découpage est conçu pour que **chaque phase soit indépendamment
 déployable et déjà utile**. La migration moteur est progressive,
 réversible, et observée en parallèle de l'ancien pipeline.
 
-### Phase 1 — Sidecar Python + carte visuelle (~3-4 semaines)
-- Sidecar Python : lecture GRIB, interpolation, consensus brut, NetCDF.
-- Génération tuiles raster pour 1 variable (ex. vent moyen).
-- **FastAPI endpoint** compatible Open-Meteo (~150 lignes).
-- Mapping côté Laravel : ajout de `qui_vole_consensus` dans
-  `weather_models` + routage du code modèle vers le sidecar.
-- Page Blade minimale : carte + sélecteur variable + heure unique
-  (pas de slider).
-- Cron horaire dans le conteneur Python.
-- **Critère de succès phase 1** :
-  - Un overlay coloré fluide sur la France entière, mis à jour
-    chaque heure.
+### Phase 1a — Sidecar Python (calcul du consensus) (~2-3 semaines)
+
+**C'est le point de départ du chantier. Pas de carte visuelle, pas
+de tuiles. Juste le calcul + son exposition API.**
+
+- Conteneur Docker dédié `consensus-grid` (cf. § 3.6 ci-dessous).
+- Worker Python cron horaire :
+  - Lecture GRIB des 13 modèles actifs sur la bbox FR (`xarray` + `cfgrib`).
+  - Lecture des settings `consensus.*` depuis MariaDB (`pymysql` en RO).
+  - Interpolation bilinéaire vers grille 2.5 km commune.
+  - Calcul consensus **par variable selon la méthode configurée**
+    (A ou B, méthodes A et B implémentées en numpy vectorisé,
+    portage 1-pour-1 des unit tests PHP de `ConsensusCalculator`).
+  - Production des 12 variables (10 météo + 2 métadonnées).
+  - Écriture NetCDF compressé.
+- FastAPI compatible Open-Meteo :
+  - Endpoint `/v1/forecast?latitude=&longitude=&hourly=&models=qui_vole_consensus`.
+  - Lookup bilinéaire dans le NetCDF courant.
+  - Format de réponse strictement identique à Open-Meteo.
+  - Healthcheck `/health` qui renvoie l'heure du dernier run réussi.
+- Côté Laravel :
+  - Mapping `model_endpoints` dans `config/weather.php`.
+  - Entrée `qui_vole_consensus` dans `WeatherModelSeeder` (migration
+    idempotente).
+  - Nouveau groupe « Consensus multi-modèles » dans `/admin/settings`
+    (les 14 clés de § 2.6).
+- **Critère de succès phase 1a** :
+  - Le sidecar tourne en boucle horaire sans crash sur 3 jours.
   - Le modèle `qui_vole_consensus` apparaît dans `/admin/models` et
     dans la carte de comparaison `/carte-modeles`, ses données sont
     récupérables par le `FetchSiteForecastsJob` exactement comme un
     autre modèle.
   - **Pas de modification du scoring** — le consensus est juste un
     14ème modèle observable, sans impact métier.
+  - Les unit tests du portage A/B passent avec les mêmes fixtures
+    que `ConsensusCalculatorTest.php` (cohérence Python ↔ PHP).
 
-### Phase 2 — Flèches et slider temporel (~1 semaine)
-- Décimation des flèches par stride dans le sidecar.
-- Couche `L.canvas()` avec rendu custom des flèches.
-- Slider temporel 0-24 h (puis 0-120 h une fois validé).
-- Sélecteur de variable étendu aux 5 affichables (vent moyen,
+### Phase 1b — Méthode C (~1 semaine, dépend de FF_reliability phase 4)
+
+À déclencher **uniquement après livraison** de `FF_model_reliability`
+phase 4 (IDW spatial des `weight_factor` depuis balises).
+
+- Lecture en sidecar de la grille de `weight_factor` extrapolée
+  spatialement.
+- Activation de la méthode C dans les selects admin (jusqu'ici grisée).
+- Comparaison shadow C vs B sur les 5 variables principales.
+
+### Phase 2 — Carte visuelle (overlay couleur + flèches + slider) (~2 semaines)
+- Génération tuiles raster pour les 5 variables affichables (vent moyen,
   rafales, précip, plafond, confiance).
+- Décimation des flèches par stride dans le sidecar.
+- Page Blade carte + sélecteur de variable + slider temporel 0-24 h.
+- Couche `L.canvas()` avec rendu custom des flèches.
+- **Critère de succès phase 2** : un overlay coloré fluide sur la
+  France entière, mis à jour chaque heure, avec choix de variable
+  et navigation temporelle.
 
 ### Phase 3 — Shadow mode scoring (~2-3 semaines)
 **Préalable** : 2-3 semaines d'observation phase 1+2 en prod, pour
