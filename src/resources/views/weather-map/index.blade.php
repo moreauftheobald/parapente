@@ -180,6 +180,7 @@
             <div id="wm-status">
                 <span class="pill" id="s-sidecar">sidecar —</span>
                 <span class="pill" id="s-run">run —</span>
+                <span class="pill" id="s-cache">cache —</span>
                 <span class="pill" id="s-overlay">overlay —</span>
                 <span class="pill" id="s-arrows">flèches —</span>
             </div>
@@ -683,6 +684,7 @@
                 renderLegend();
                 drawOverlay();
                 drawArrows();
+                startPrefetch();    // warm le cache navigateur en tâche de fond
             }
 
             // Debounce du redraw lors de changements rapprochés (player rapide,
@@ -703,6 +705,78 @@
             function scheduleArrowsRedraw() {
                 clearTimeout(arrowsTimer);
                 arrowsTimer = setTimeout(drawArrows, 100);
+            }
+
+            // ── Préchargement de tous les PNG d'une variable ───────
+            // Dès qu'on connaît le manifest, on charge en tâche de fond les
+            // 121 PNG du variable courant + les 121 PNG de wind_direction_10m
+            // (pour les flèches). Les PNG vont dans le cache navigateur (HTTP
+            // cache `max-age=3600`) ; les direction vont aussi dans arrowCache
+            // (ImageData décodée). Une fois le préchargement fini, le player
+            // tourne sur du local pur, pas de fetch sidecar par step.
+            //
+            // Tokens de session : un changement de variable annule l'ancien
+            // prefetch et en relance un autre.
+            let prefetchSession = 0;
+
+            function loadImgQuiet(url) {
+                return new Promise(resolve => {
+                    const i = new Image();
+                    i.crossOrigin = 'anonymous';
+                    i.onload  = () => resolve();
+                    i.onerror = () => resolve(); // best effort : retry géré ailleurs
+                    i.src = url;
+                });
+            }
+
+            async function startPrefetch() {
+                const session  = ++prefetchSession;
+                const variable = document.getElementById('f-variable').value;
+                if (!manifest || !variable) return;
+
+                const steps = manifest.steps_hours || [];
+                if (steps.length === 0) return;
+
+                // Ordre malin : à partir du step courant, puis on wrap au début.
+                // Comme ça l'utilisateur a tout de suite du cache devant lui.
+                const fromIx = currentStepIx | 0;
+                const ordered = steps.slice(fromIx).concat(steps.slice(0, fromIx));
+
+                const total = ordered.length;
+                let done = 0;
+                const pill = document.getElementById('s-cache');
+                pill.textContent = `cache 0/${total}`;
+                pill.className = 'pill warn';
+
+                const queue = ordered.slice();
+                const CONCURRENT = 2;  // gentle avec le sidecar (PHP-FPM est limité)
+
+                async function worker() {
+                    while (queue.length) {
+                        if (session !== prefetchSession) return;
+                        const stepH = queue.shift();
+
+                        // 1. PNG du variable courant → cache navigateur uniquement
+                        await loadImgQuiet(`${ROUTES.overlay}/${encodeURIComponent(variable)}/${stepH}.png`);
+                        if (session !== prefetchSession) return;
+
+                        // 2. PNG direction → décodé en ImageData dans arrowCache
+                        if (!arrowCache.has(stepH)) {
+                            try { await loadDirectionImage(stepH); } catch (e) { /* retry géré par drawArrows */ }
+                        }
+                        if (session !== prefetchSession) return;
+
+                        done++;
+                        pill.textContent = `cache ${done}/${total}`;
+                    }
+                }
+
+                await Promise.all(Array.from({length: CONCURRENT}, worker));
+
+                if (session === prefetchSession) {
+                    pill.textContent = `cache prêt (${total})`;
+                    pill.className = 'pill ok';
+                }
             }
 
             // ── Sélecteurs jour / heure + player ───────────────────
@@ -781,6 +855,7 @@
             document.getElementById('f-variable').addEventListener('change', () => {
                 renderLegend();
                 drawOverlay();
+                startPrefetch();    // recommence le warm pour la nouvelle variable
             });
             document.getElementById('f-show-arrows').addEventListener('change', () => {
                 drawArrows();
