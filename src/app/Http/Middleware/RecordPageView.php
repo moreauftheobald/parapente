@@ -115,7 +115,7 @@ class RecordPageView
     private function shouldSkipPath(string $path): bool
     {
         // Préfixes à ignorer
-        foreach (['/livewire', '/_debugbar', '/_ignition', '/telescope', '/horizon', '/storage/', '/icons-cache/'] as $prefix) {
+        foreach (['/livewire', '/_debugbar', '/_ignition', '/telescope', '/horizon', '/storage/', '/icons-cache/', '/carte-meteo/overlay/'] as $prefix) {
             if (str_starts_with($path, $prefix)) return true;
         }
         // L'admin lui-même ne nous intéresse pas pour la fréquentation
