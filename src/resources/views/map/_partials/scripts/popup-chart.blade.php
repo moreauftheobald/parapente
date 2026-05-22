@@ -1,7 +1,76 @@
+// ── Tooltip survol pour les graphes de synthèse ──────────────
+// Curseur vertical + tooltip flottant (réutilise l'overlay Alpine
+// `app.tooltip` du panneau droit). Distinct du système multi-modèles
+// de scripts/tooltip.blade.php : ici on a juste min/moy/max + direction
+// pour le créneau pointé, pas la grille complète des modèles.
+function attachSynthTooltip(svgEl, dayData, opts) {
+    if (!svgEl || !opts.app || !dayData || !dayData.length) return;
+
+    const N      = dayData.length;
+    const W      = 428;
+    const PITCH  = Math.floor((W - 20) / N);
+    const startX = 10;
+    const yTop   = opts.cursorTopY;
+    const yBot   = opts.cursorBotY;
+
+    const { mk } = svgHelpers(svgEl);
+    const cursor = mk('line', {
+        x1:-10, y1:yTop, x2:-10, y2:yBot,
+        stroke:'rgba(255,255,255,.45)', 'stroke-width':1,
+        'stroke-dasharray':'3,3', 'pointer-events':'none'
+    });
+    const overlay = mk('rect', {
+        x:startX, y:yTop, width:N * PITCH, height:yBot - yTop,
+        fill:'transparent', 'pointer-events':'all', style:'cursor:crosshair;'
+    });
+
+    const app = opts.app;
+
+    overlay.addEventListener('mousemove', (e) => {
+        const rect   = svgEl.getBoundingClientRect();
+        const scaleX = rect.width > 0 ? W / rect.width : 1;
+        const localX = (e.clientX - rect.left) * scaleX;
+
+        let bestIdx = 0, bestDist = Infinity;
+        for (let i = 0; i < N; i++) {
+            const cx = startX + i * PITCH + PITCH/2;
+            const d  = Math.abs(localX - cx);
+            if (d < bestDist) { bestDist = d; bestIdx = i; }
+        }
+        const h       = dayData[bestIdx];
+        const xCursor = startX + bestIdx * PITCH + PITCH/2;
+        cursor.setAttribute('x1', xCursor);
+        cursor.setAttribute('x2', xCursor);
+
+        const content = opts.buildRows(h);
+        // Format heure : la donnée arrive en "HH:MM" → on affiche "HHhMM"
+        const hourLabel = (h.hour || '').slice(0, 5).replace(':', 'h');
+        app.tooltip.hour      = hourLabel || '—';
+        app.tooltip.consensus = content.consensus ?? null;
+        app.tooltip.rows      = content.rows ?? [];
+        app.tooltip.visible   = true;
+
+        // Position au curseur, évite les bords
+        const tw = 240, th = Math.min(220, (content.rows.length + (content.consensus ? 1 : 0)) * 20 + 60);
+        let tx = e.clientX + 14;
+        let ty = e.clientY + 14;
+        if (tx + tw > window.innerWidth)  tx = e.clientX - tw - 14;
+        if (ty + th > window.innerHeight) ty = e.clientY - th - 14;
+        app.tooltip.x = Math.max(8, tx);
+        app.tooltip.y = Math.max(8, ty);
+    });
+
+    overlay.addEventListener('mouseleave', () => {
+        cursor.setAttribute('x1', -10);
+        cursor.setAttribute('x2', -10);
+        app.tooltip.visible = false;
+    });
+}
+
 // ── Génération du SVG du popup ───────────────────────────────
 // Distinct des graphes du panel (logique différente : tuiles
 // nuageuses + 3 barres vent par heure + flèche direction).
-function buildChartSVG(dayData, siteInfo) {
+function buildChartSVG(dayData, siteInfo, app) {
     const svgEl = document.getElementById('chart-svg');
     if (!svgEl || !dayData || !dayData.length) return;
     while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
@@ -116,6 +185,23 @@ function buildChartSVG(dayData, siteInfo) {
         const anchor = i === 0 ? null : (i === N-1 ? 'end' : 'middle');
         txt(x, WIND_HRS_Y, dayData[i]?.hour?.slice(0,2)+'h', FS_SM, '#cbd5e1', anchor);
     }
+
+    // ── Tooltip survol (curseur vertical + valeurs Min/Moy/Max + direction)
+    attachSynthTooltip(svgEl, dayData, {
+        app,
+        cursorTopY: WIND_LBL_Y + 6,
+        cursorBotY: BASE_Y,
+        buildRows: (h) => {
+            const rows = [];
+            if (h.wind_max != null) rows.push({ id:'max', color:'#f97316', name:'Max',    value: Math.round(h.wind_max) + ' km/h' });
+            if (h.wind_min != null) rows.push({ id:'min', color:'#3b82f6', name:'Min',    value: Math.round(h.wind_min) + ' km/h' });
+            if (h.wind_dir != null) rows.push({ id:'dir', color:'#94a3b8', name:'Direction', value: Math.round(h.wind_dir) + '° ' + degToCompass(h.wind_dir) });
+            return {
+                consensus: h.wind_avg != null ? h.wind_avg.toFixed(1) + ' km/h' : null,
+                rows
+            };
+        }
+    });
 }
 
 // ── Bargraph « plafond de vol estimé » ──────────────────────
@@ -125,7 +211,7 @@ function buildChartSVG(dayData, siteInfo) {
 // Repère pointillé à l'altitude du décollage ; barre consensus rouge
 // si le plafond passe sous cette altitude. Plafonds null (ciel
 // dégagé) ⇒ tiret « — ».
-function buildCeilingSVG(dayData, siteInfo) {
+function buildCeilingSVG(dayData, siteInfo, app) {
     const svgEl = document.getElementById('ceiling-svg');
     if (!svgEl) return;
     while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
@@ -208,4 +294,23 @@ function buildCeilingSVG(dayData, siteInfo) {
         const anchor = i === 0 ? null : (i === N-1 ? 'end' : 'middle');
         txt(x, BASE_Y+12, dayData[i]?.hour?.slice(0,2)+'h', FS_SM, '#cbd5e1', anchor);
     }
+
+    // ── Tooltip survol (curseur vertical + plafond Min/Moy/Max) ──
+    attachSynthTooltip(svgEl, dayData, {
+        app,
+        cursorTopY: TOP_Y,
+        cursorBotY: BASE_Y,
+        buildRows: (h) => {
+            const rows = [];
+            const fmt = v => v != null ? Math.round(v) + ' m' : '—';
+            if (h.cloud_base_max != null) rows.push({ id:'max', color:'#f97316', name:'Max', value: fmt(h.cloud_base_max) });
+            if (h.cloud_base_min != null) rows.push({ id:'min', color:'#3b82f6', name:'Min', value: fmt(h.cloud_base_min) });
+            // Repère altitude décollage : utile pour comparer en un coup d'œil.
+            if (alt != null) rows.push({ id:'alt', color:'#fbbf24', name:'Décollage', value: alt + ' m' });
+            return {
+                consensus: h.cloud_base != null ? fmt(h.cloud_base) : null,
+                rows
+            };
+        }
+    });
 }

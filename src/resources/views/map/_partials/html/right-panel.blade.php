@@ -38,6 +38,9 @@
                                 <template x-if="siteOrientationLabel">
                                     <span class="rp-meta"><span class="rp-dot">·</span><span>Orient. <span x-text="siteOrientationLabel"></span></span></span>
                                 </template>
+                                <template x-if="selectedFeature?.altitude != null">
+                                    <span class="rp-meta"><span class="rp-dot">·</span><span>Alt. <span class="mono" x-text="selectedFeature.altitude + ' m'"></span></span></span>
+                                </template>
                                 <template x-if="panelSunWindow">
                                     <span class="rp-meta">
                                         <span class="rp-dot">·</span>

@@ -378,8 +378,8 @@ function mapApp(){return{
         const day=this.days[this.selectedDayIdx]?.raw;
         const dayData=this.chartData.days?.[day]??[];
         this.$nextTick(()=>{
-            buildChartSVG(dayData,this.chartData.site);
-            buildCeilingSVG(dayData,this.chartData.site);
+            buildChartSVG(dayData,this.chartData.site,this);
+            buildCeilingSVG(dayData,this.chartData.site,this);
         });
     },
     get chartHasData(){
