@@ -153,9 +153,8 @@
                 Fond
                 <select id="f-basemap">
                     <option value="topo" selected>OpenTopoMap (relief)</option>
-                    <option value="gray">Esri Light Gray (N&amp;B)</option>
                     <option value="osm">OSM standard</option>
-                    <option value="satellite">Satellite</option>
+                    <option value="satellite">Satellite + noms</option>
                     <option value="light">Clair</option>
                     <option value="dark">Sombre</option>
                 </select>
@@ -229,32 +228,50 @@
             // Cohérent avec map/_partials/scripts/config.blade.php (carte de
             // volabilité). Le défaut est OpenTopoMap : son relief ombré +
             // contraste naturel se lisent très bien sous les overlays
-            // semi-transparents. Esri Light Gray Canvas est l'alternative
-            // N&B très contrastée, gratuite sans clé — c'est le fond
-            // pensé par Esri pour servir de support à des overlays de
-            // données (équivalent libre de Stamen Toner Lite, qui passe
-            // depuis 2023 par Stadia avec clé API requise en prod).
+            // semi-transparents. Le mode satellite combine deux couches
+            // Esri — l'image (World_Imagery) ET un calque de noms
+            // (World_Boundaries_and_Places) servi en transparent, pour
+            // garder villes, frontières et toponymes lisibles.
             const TILE_LAYERS = {
                 topo:      { url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',                                                  subdomains: 'abc'  },
-                gray:      { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', subdomains: '' },
                 osm:       { url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                                                subdomains: 'abc'  },
-                satellite: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',     subdomains: ''     },
+                satellite: {
+                    url:       'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                    subdomains: '',
+                    labelsUrl: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+                },
                 light:     { url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',                          subdomains: 'abcd' },
                 dark:      { url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',                                     subdomains: 'abcd' },
             };
-            let currentTile = L.tileLayer(TILE_LAYERS.topo.url, {
-                maxZoom: 18,
-                subdomains: TILE_LAYERS.topo.subdomains,
-            }).addTo(map);
+
+            // Pane dédié aux labels carto : entre le pane d'overlay et celui
+            // des flèches, pour que les noms de villes restent lisibles
+            // par-dessus les couches d'info (vent, précipitations, etc.).
+            map.createPane('wm-labels');
+            map.getPane('wm-labels').style.zIndex = 380;
+            map.getPane('wm-labels').style.pointerEvents = 'none';
+
+            let currentTile   = null;
+            let currentLabels = null;
 
             function setBaseLayer(theme) {
+                if (currentTile)   { map.removeLayer(currentTile);   currentTile = null; }
+                if (currentLabels) { map.removeLayer(currentLabels); currentLabels = null; }
+
                 const cfg = TILE_LAYERS[theme] || TILE_LAYERS.topo;
-                map.removeLayer(currentTile);
                 currentTile = L.tileLayer(cfg.url, {
                     maxZoom: 18,
                     subdomains: cfg.subdomains,
                 }).addTo(map);
+
+                if (cfg.labelsUrl) {
+                    currentLabels = L.tileLayer(cfg.labelsUrl, {
+                        maxZoom: 18,
+                        pane: 'wm-labels',
+                    }).addTo(map);
+                }
             }
+            setBaseLayer('topo');
 
             // Opacité de l'overlay info, contrôlée par le slider. On stocke
             // dans une variable pour pouvoir la ré-appliquer à chaque redraw
