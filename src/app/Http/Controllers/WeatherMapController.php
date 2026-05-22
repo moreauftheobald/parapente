@@ -43,12 +43,16 @@ class WeatherMapController extends Controller
     /**
      * Proxy de `/v1/overlay` — manifest global du sidecar.
      *
-     * Cache Redis 10 min : le run du sidecar n'est mis à jour qu'une fois
-     * par heure, donc 10 min absorbe les rafales sans hammeriser.
+     * Cache Redis 10 min des résultats SUCCÈS uniquement. Une réponse en
+     * erreur ne doit jamais être cachée : sinon une hoquette ponctuelle
+     * du sidecar bloque la carte pendant 10 min même quand il va déjà mieux.
      */
     public function manifestIndex(): JsonResponse
     {
-        $payload = Cache::remember('weather-map.index.v1', now()->addMinutes(10), function (): array {
+        $cacheKey = 'weather-map.index.v1';
+        $payload  = Cache::get($cacheKey);
+
+        if ($payload === null) {
             $base    = rtrim(config('services.consensus_grid.base_url'), '/');
             $timeout = (int) config('services.consensus_grid.timeout', 10);
 
@@ -56,18 +60,19 @@ class WeatherMapController extends Controller
                 $resp = Http::timeout($timeout)->acceptJson()->get("{$base}/v1/overlay");
             } catch (\Throwable $e) {
                 Log::warning('consensus-grid index unreachable', ['error' => $e->getMessage()]);
-                return ['_error' => 'sidecar_unreachable'];
+                return response()->json(['error' => 'sidecar_unreachable'], 502);
             }
 
             if (! $resp->ok()) {
-                return ['_error' => 'sidecar_http_'.$resp->status()];
+                return response()->json(['error' => 'sidecar_http_'.$resp->status()], 502);
             }
 
-            return $resp->json() ?? ['_error' => 'sidecar_invalid_json'];
-        });
+            $payload = $resp->json();
+            if (! is_array($payload)) {
+                return response()->json(['error' => 'sidecar_invalid_json'], 502);
+            }
 
-        if (isset($payload['_error'])) {
-            return response()->json(['error' => $payload['_error']], 502);
+            Cache::put($cacheKey, $payload, now()->addMinutes(10));
         }
 
         return response()->json($payload);
