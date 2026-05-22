@@ -31,14 +31,24 @@
             letter-spacing: 0.05em; color: #64748b;
         }
         #wm-toolbar select,
-        #wm-toolbar input[type="range"] {
+        #wm-toolbar input[type="range"],
+        #wm-toolbar button {
             background: #1e293b; color: #e2e8f0;
             border: 1px solid #334155;
             border-radius: 6px;
             font-size: 12px; padding: 4px 8px;
-            min-width: 180px;
+            min-width: 90px;
         }
-        #wm-toolbar select:focus { outline: none; border-color: #0ea5e9; }
+        #wm-toolbar select:focus,
+        #wm-toolbar button:focus { outline: none; border-color: #0ea5e9; }
+        #wm-toolbar button {
+            cursor: pointer; min-width: 80px;
+            display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+        }
+        #wm-toolbar button:hover { background: #334155; }
+        #wm-toolbar button.playing {
+            background: #0c4a6e; border-color: #0ea5e9; color: #7dd3fc;
+        }
         #wm-toolbar .chk {
             flex-direction: row; align-items: center; gap: 6px;
             color: #cbd5e1; cursor: pointer;
@@ -143,12 +153,28 @@
                 <input type="checkbox" id="f-dark-mode">
                 <span><i class="fa-solid fa-moon"></i> Fond sombre</span>
             </label>
-            <label class="field" style="flex:1 1 320px; max-width:560px;">
-                Pas de temps
-                <div style="display:flex; gap:8px; align-items:center;">
-                    <input type="range" id="f-step" min="0" max="0" value="0" step="1" disabled>
-                    <span id="wm-step-label">—</span>
-                </div>
+            <label class="field" style="min-width:160px;">
+                Jour
+                <select id="f-day"><option>—</option></select>
+            </label>
+            <label class="field" style="min-width:90px;">
+                Heure
+                <select id="f-hour"><option>—</option></select>
+            </label>
+            <label class="field">
+                Lecture
+                <button type="button" id="f-play" title="Lecture / Pause (espace)">
+                    <i class="fa-solid fa-play"></i><span id="f-play-label">Play</span>
+                </button>
+            </label>
+            <label class="field" style="min-width:110px;">
+                Cadence
+                <select id="f-speed">
+                    <option value="500">0.5 s / h</option>
+                    <option value="1000" selected>1 s / h</option>
+                    <option value="2000">2 s / h</option>
+                    <option value="5000">5 s / h</option>
+                </select>
             </label>
 
             <div id="wm-status">
@@ -233,6 +259,9 @@
             let bounds   = null;       // L.LatLngBounds calculé une fois
             let overlay  = null;       // L.ImageOverlay actif
             let currentStepIx = 0;     // index dans manifest.steps_hours
+            let stepIndex = [];        // [{ stepH, dateKey, hourStr }, …]
+            let stepsByDay = {};       // { dateKey: [{ stepH, hourStr, ix }, …] }
+            let playTimer = null;      // setInterval du player
 
             // ── Helpers --------------------------------------------
             function variableInfo(name) {
@@ -272,14 +301,40 @@
                 'hsv':       'linear-gradient(to right, red, yellow, lime, cyan, blue, magenta, red)',
             };
 
-            function fmtStepLabel(stepHours) {
-                if (!manifest || !manifest.run_init_iso) return `+${stepHours} h`;
+            // Convertit un step (heures depuis run_init UTC) en (dateKey, hour)
+            // exprimés en heure de Paris. dateKey = "YYYY-MM-DD" (Paris).
+            function stepToParisDateHour(stepHours) {
+                if (!manifest || !manifest.run_init_iso) return null;
                 const base = new Date(manifest.run_init_iso);
                 const dt = new Date(base.getTime() + stepHours * 3600_000);
-                // Format local Paris (le sidecar travaille en UTC)
-                const opts = { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' };
-                const txt = dt.toLocaleString('fr-FR', opts);
-                return `<span class="h">+${stepHours} h</span> ${txt}`;
+                // Parts en TZ Paris : on construit un sub-format ISO "fr-CA"
+                // (qui sort YYYY-MM-DD) + format hour:minute en clair.
+                const dateKey = dt.toLocaleDateString('fr-CA', { timeZone: 'Europe/Paris' });
+                const hourStr = dt.toLocaleTimeString('fr-FR', {
+                    timeZone: 'Europe/Paris',
+                    hour: '2-digit', minute: '2-digit', hour12: false,
+                });
+                return { dateKey, hourStr, dt };
+            }
+
+            // Libellé humain pour un dateKey ISO Paris (relatif quand utile).
+            function fmtDayLabel(dateKey) {
+                // Aujourd'hui / Demain / sinon nom complet
+                const now = new Date();
+                const todayKey = now.toLocaleDateString('fr-CA', { timeZone: 'Europe/Paris' });
+                const tomorrow = new Date(now.getTime() + 86_400_000);
+                const tomorrowKey = tomorrow.toLocaleDateString('fr-CA', { timeZone: 'Europe/Paris' });
+                // Pour le label long, on reconstruit une Date à midi Paris pour
+                // éviter les surprises de DST sur le formatage.
+                const [y, m, d] = dateKey.split('-').map(Number);
+                const sample = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+                const txt = sample.toLocaleDateString('fr-FR', {
+                    timeZone: 'Europe/Paris',
+                    weekday: 'long', day: '2-digit', month: 'long',
+                });
+                if (dateKey === todayKey)    return `Aujourd'hui · ${txt}`;
+                if (dateKey === tomorrowKey) return `Demain · ${txt}`;
+                return txt;
             }
 
             // ── Flèches de vent : lecture client-side du PNG ───────
@@ -332,24 +387,41 @@
                 });
             }
 
-            async function loadDirectionImage(stepH) {
-                if (arrowCache.has(stepH)) return arrowCache.get(stepH);
-                const url = `${ROUTES.overlay}/wind_direction_10m/${stepH}.png`;
-                const img = await new Promise((resolve, reject) => {
+            function loadImage(url) {
+                return new Promise((resolve, reject) => {
                     const i = new Image();
                     i.crossOrigin = 'anonymous';
                     i.onload  = () => resolve(i);
-                    i.onerror = (e) => reject(new Error('image load failed'));
+                    i.onerror = () => reject(new Error('image load failed: ' + url));
                     i.src = url;
                 });
-                if (!arrowCanvas) arrowCanvas = document.createElement('canvas');
-                arrowCanvas.width  = img.width;
-                arrowCanvas.height = img.height;
-                const ctx = arrowCanvas.getContext('2d', { willReadFrequently: true });
-                ctx.drawImage(img, 0, 0);
-                const data = ctx.getImageData(0, 0, img.width, img.height);
-                arrowCache.set(stepH, data);
-                return data;
+            }
+
+            // Retry 2× avec backoff + cache-buster — même problématique que
+            // l'overlay : le PNG des flèches peut échouer si le sidecar
+            // hoquette ou si l'Image est interrompue par un scrub rapide.
+            async function loadDirectionImage(stepH) {
+                if (arrowCache.has(stepH)) return arrowCache.get(stepH);
+                const base = `${ROUTES.overlay}/wind_direction_10m/${stepH}.png`;
+                let lastErr = null;
+                for (let attempt = 0; attempt < 3; attempt++) {
+                    const url = attempt === 0 ? base : `${base}?r=${Date.now()}_${attempt}`;
+                    try {
+                        const img = await loadImage(url);
+                        if (!arrowCanvas) arrowCanvas = document.createElement('canvas');
+                        arrowCanvas.width  = img.width;
+                        arrowCanvas.height = img.height;
+                        const ctx = arrowCanvas.getContext('2d', { willReadFrequently: true });
+                        ctx.drawImage(img, 0, 0);
+                        const data = ctx.getImageData(0, 0, img.width, img.height);
+                        arrowCache.set(stepH, data);
+                        return data;
+                    } catch (e) {
+                        lastErr = e;
+                        await new Promise(r => setTimeout(r, 300 * (attempt + 1)));
+                    }
+                }
+                throw lastErr;
             }
 
             // Calcule la zone et la grille où placer des flèches : intersection
@@ -533,20 +605,20 @@
                     });
 
 
-                // Steps
-                const stepInput = document.getElementById('f-step');
+                // Steps → table indexée par (dateKey, hourStr)
                 const steps = manifest.steps_hours || [];
-                if (steps.length > 0) {
-                    stepInput.disabled = false;
-                    stepInput.min = 0;
-                    stepInput.max = steps.length - 1;
-                    if (currentStepIx >= steps.length) currentStepIx = 0;
-                    stepInput.value = currentStepIx;
-                    document.getElementById('wm-step-label').innerHTML = fmtStepLabel(steps[currentStepIx]);
-                } else {
-                    stepInput.disabled = true;
-                    document.getElementById('wm-step-label').textContent = '—';
-                }
+                stepsByDay = {};   // { dateKey: [{ stepH, hourStr, ix }, …] }
+                stepIndex = [];    // [{ stepH, dateKey, hourStr }, …] (aligné sur steps)
+                steps.forEach((stepH, ix) => {
+                    const info = stepToParisDateHour(stepH);
+                    if (!info) return;
+                    stepIndex[ix] = { stepH, dateKey: info.dateKey, hourStr: info.hourStr };
+                    if (!stepsByDay[info.dateKey]) stepsByDay[info.dateKey] = [];
+                    stepsByDay[info.dateKey].push({ stepH, hourStr: info.hourStr, ix });
+                });
+
+                if (currentStepIx >= stepIndex.length) currentStepIx = 0;
+                populateDayHourSelects();
 
                 // Bounds
                 const b = manifest.bbox;
@@ -613,9 +685,9 @@
                 drawArrows();
             }
 
-            // Debounce du redraw — le slider fire un `input` à chaque
-            // déplacement, on évite d'enchaîner les fetch PNG qui se
-            // marchent dessus et font clignoter / disparaître l'overlay.
+            // Debounce du redraw lors de changements rapprochés (player rapide,
+            // etc.). Évite d'enchaîner les fetch PNG qui se marchent dessus
+            // et font clignoter l'overlay.
             let stepTimer = null;
             function scheduleRedraw(delay) {
                 clearTimeout(stepTimer);
@@ -633,6 +705,78 @@
                 arrowsTimer = setTimeout(drawArrows, 100);
             }
 
+            // ── Sélecteurs jour / heure + player ───────────────────
+            function populateDayHourSelects() {
+                const daySel = document.getElementById('f-day');
+                const days = Object.keys(stepsByDay).sort();
+                daySel.innerHTML = '';
+                days.forEach(dk => {
+                    const opt = document.createElement('option');
+                    opt.value = dk;
+                    opt.textContent = fmtDayLabel(dk);
+                    daySel.appendChild(opt);
+                });
+                // Aligne les sélecteurs sur l'index courant
+                syncSelectsToStep();
+            }
+
+            function populateHourSelect(dateKey, preferredHour) {
+                const hourSel = document.getElementById('f-hour');
+                const list = stepsByDay[dateKey] || [];
+                hourSel.innerHTML = '';
+                list.forEach(s => {
+                    const opt = document.createElement('option');
+                    opt.value = s.hourStr;
+                    opt.textContent = s.hourStr;
+                    opt.dataset.ix = s.ix;
+                    hourSel.appendChild(opt);
+                });
+                // Sélectionne preferredHour si dispo, sinon la première
+                if (preferredHour && list.some(s => s.hourStr === preferredHour)) {
+                    hourSel.value = preferredHour;
+                }
+            }
+
+            function syncSelectsToStep() {
+                const cur = stepIndex[currentStepIx];
+                if (!cur) return;
+                document.getElementById('f-day').value = cur.dateKey;
+                populateHourSelect(cur.dateKey, cur.hourStr);
+                document.getElementById('f-hour').value = cur.hourStr;
+            }
+
+            function gotoStep(ix, opts = {}) {
+                if (ix < 0 || ix >= stepIndex.length) return;
+                currentStepIx = ix;
+                if (!opts.skipSync) syncSelectsToStep();
+                scheduleRedraw(opts.delay ?? 0);
+            }
+
+            function playPause() {
+                const btn   = document.getElementById('f-play');
+                const label = document.getElementById('f-play-label');
+                if (playTimer) {
+                    clearInterval(playTimer);
+                    playTimer = null;
+                    btn.classList.remove('playing');
+                    btn.querySelector('i').className = 'fa-solid fa-play';
+                    label.textContent = 'Play';
+                    return;
+                }
+                const delay = parseInt(document.getElementById('f-speed').value, 10) || 1000;
+                btn.classList.add('playing');
+                btn.querySelector('i').className = 'fa-solid fa-pause';
+                label.textContent = 'Pause';
+                playTimer = setInterval(() => {
+                    const next = (currentStepIx + 1) % stepIndex.length;
+                    gotoStep(next);
+                }, delay);
+            }
+
+            function stopPlaying() {
+                if (playTimer) playPause();
+            }
+
             // ── Listeners ──────────────────────────────────────────
             document.getElementById('f-variable').addEventListener('change', () => {
                 renderLegend();
@@ -644,16 +788,37 @@
             document.getElementById('f-dark-mode').addEventListener('change', (e) => {
                 setBaseLayer(e.target.checked ? 'dark' : 'light');
             });
-            document.getElementById('f-step').addEventListener('input', (e) => {
-                currentStepIx = parseInt(e.target.value, 10) || 0;
-                if (manifest && manifest.steps_hours) {
-                    // Label : feedback instantané (pas de debounce)
-                    document.getElementById('wm-step-label').innerHTML =
-                        fmtStepLabel(manifest.steps_hours[currentStepIx]);
-                    // Overlay + flèches : debounce 150ms (laisse le temps au
-                    // doigt de finir son geste avant de fetch).
-                    scheduleRedraw(150);
-                }
+            // Changement manuel de jour → met en pause, conserve l'heure si
+            // dispo, sinon va sur la 1re heure du jour choisi.
+            document.getElementById('f-day').addEventListener('change', (e) => {
+                stopPlaying();
+                const dk = e.target.value;
+                const cur = stepIndex[currentStepIx];
+                const preferred = cur ? cur.hourStr : null;
+                populateHourSelect(dk, preferred);
+                const hourSel = document.getElementById('f-hour');
+                const ix = parseInt(hourSel.options[hourSel.selectedIndex].dataset.ix, 10);
+                gotoStep(ix, { skipSync: true });
+            });
+            document.getElementById('f-hour').addEventListener('change', (e) => {
+                stopPlaying();
+                const opt = e.target.options[e.target.selectedIndex];
+                const ix = parseInt(opt.dataset.ix, 10);
+                gotoStep(ix, { skipSync: true });
+            });
+            document.getElementById('f-play').addEventListener('click', playPause);
+            // Changement de cadence pendant la lecture : on relance le timer
+            // pour appliquer immédiatement la nouvelle vitesse.
+            document.getElementById('f-speed').addEventListener('change', () => {
+                if (playTimer) { playPause(); playPause(); }
+            });
+            // Espace = play/pause (sauf si focus dans un select)
+            window.addEventListener('keydown', (e) => {
+                if (e.code !== 'Space') return;
+                const tag = (document.activeElement && document.activeElement.tagName) || '';
+                if (tag === 'SELECT' || tag === 'INPUT' || tag === 'TEXTAREA') return;
+                e.preventDefault();
+                playPause();
             });
 
             // Pan/zoom → recalcule la grille des flèches (densité = écran).
