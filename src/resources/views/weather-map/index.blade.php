@@ -152,7 +152,8 @@
             <label class="field">
                 Fond
                 <select id="f-basemap">
-                    <option value="topo" selected>Topographique</option>
+                    <option value="topo" selected>OpenTopoMap (relief)</option>
+                    <option value="toner">Stamen Toner (N&amp;B)</option>
                     <option value="osm">OSM standard</option>
                     <option value="satellite">Satellite</option>
                     <option value="light">Clair</option>
@@ -226,15 +227,23 @@
             }).setView([46.5, 2.5], 6);
 
             // Cohérent avec map/_partials/scripts/config.blade.php (carte de
-            // volabilité) — mêmes fonds, mêmes URLs. Le défaut est topo
-            // (OpenTopoMap) car son relief + bon contraste se lisent bien
-            // sous les overlays semi-transparents.
+            // volabilité). Le défaut est OpenTopoMap : son relief ombré +
+            // contraste naturel se lisent très bien sous les overlays semi-
+            // transparents. Stamen Toner (servi par Stadia depuis 2023)
+            // est l'alternative N&B très contrastée — idéale pour lire des
+            // overlays denses (vent / précipitations / nuages).
+            //
+            // Stadia : pas de clé API requise pour les domaines de dev /
+            // les usages modestes ; pour de la prod à fort trafic, voir
+            // https://docs.stadiamaps.com/authentication/ (gratuit jusqu'à
+            // 200 000 tiles/mois).
             const TILE_LAYERS = {
-                topo:      { url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',                   subdomains: 'abc'  },
-                osm:       { url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                 subdomains: 'abc'  },
-                satellite: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', subdomains: '' },
-                light:     { url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', subdomains: 'abcd' },
-                dark:      { url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',      subdomains: 'abcd' },
+                topo:      { url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',                                                subdomains: 'abc'  },
+                toner:     { url: 'https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}{r}.png',                              subdomains: ''     },
+                osm:       { url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                                              subdomains: 'abc'  },
+                satellite: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',   subdomains: ''     },
+                light:     { url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',                        subdomains: 'abcd' },
+                dark:      { url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',                                   subdomains: 'abcd' },
             };
             let currentTile = L.tileLayer(TILE_LAYERS.topo.url, {
                 maxZoom: 18,
