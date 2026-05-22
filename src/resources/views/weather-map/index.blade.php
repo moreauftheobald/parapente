@@ -749,7 +749,7 @@
                 pill.className = 'pill warn';
 
                 const queue = ordered.slice();
-                const CONCURRENT = 2;  // gentle avec le sidecar (PHP-FPM est limité)
+                const CONCURRENT = 4;  // nginx proxy_cache encaisse, plus de bottleneck PHP-FPM
 
                 async function worker() {
                     while (queue.length) {

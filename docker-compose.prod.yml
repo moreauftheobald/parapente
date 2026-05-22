@@ -13,6 +13,8 @@ volumes:
     external: false
   redis-parapente:
     external: false
+  nginx-weather-cache:
+    external: false       # Cache disque des overlays consensus-grid
 
 services:
 
@@ -55,12 +57,14 @@ services:
       - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/log:/var/log/nginx/
       - ./src:/var/www/html:rw
+      - nginx-weather-cache:/var/cache/nginx/weather
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
     # Pas de ports exposés — NPM atteint ce conteneur via le réseau proxy
     networks:
       - parapente-internal-pod
       - proxy                 # Visible par Nginx Proxy Manager
+      - meteo-net             # Accès direct au sidecar consensus-grid (cache PNG)
     restart: unless-stopped
     depends_on:
       - parapente-php
