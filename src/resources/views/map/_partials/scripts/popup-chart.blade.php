@@ -186,6 +186,24 @@ function buildChartSVG(dayData, siteInfo, app) {
         txt(x, WIND_HRS_Y, dayData[i]?.hour?.slice(0,2)+'h', FS_SM, '#cbd5e1', anchor);
     }
 
+    // ── Tooltip survol zone nuageuse (3 tuiles : haute / moyenne / basse)
+    attachSynthTooltip(svgEl, dayData, {
+        app,
+        cursorTopY: 5,
+        cursorBotY: SEP_Y,
+        buildRows: (h) => {
+            const fmt = v => v != null ? Math.round(v) + '%' : '—';
+            return {
+                consensus: null,
+                rows: [
+                    { id:'high', color:'#94a3b8', name:'▲ Hautes',   value: fmt(h.cloud_high) },
+                    { id:'mid',  color:'#cbd5e1', name:'▬ Moyennes', value: fmt(h.cloud_mid)  },
+                    { id:'low',  color:'#4b8db5', name:'▼ Basses',   value: fmt(h.cloud_low)  },
+                ]
+            };
+        }
+    });
+
     // ── Tooltip survol (curseur vertical + valeurs Min/Moy/Max + direction)
     attachSynthTooltip(svgEl, dayData, {
         app,
