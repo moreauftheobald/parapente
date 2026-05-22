@@ -134,4 +134,28 @@ class WeatherMapController extends Controller
             'payload' => $resp->ok() ? $resp->json() : null,
         ]);
     }
+
+    /**
+     * Proxy de `/progress` — état du run consensus en cours.
+     *
+     * Aucun cache : le payload change en continu pendant un run actif
+     * (chunks, variable courante, elapsed_s). Le front poll toutes les
+     * 30 s pour afficher un badge "run en cours".
+     */
+    public function progress(): JsonResponse
+    {
+        $base = rtrim(config('services.consensus_grid.base_url'), '/');
+
+        try {
+            $resp = Http::timeout(3)->acceptJson()->get("{$base}/progress");
+        } catch (\Throwable $e) {
+            return response()->json(['status' => 'unreachable'], 200);
+        }
+
+        if (! $resp->ok()) {
+            return response()->json(['status' => 'http_'.$resp->status()], 200);
+        }
+
+        return response()->json($resp->json() ?? ['status' => 'idle']);
+    }
 }

@@ -180,6 +180,7 @@
             <div id="wm-status">
                 <span class="pill" id="s-sidecar">sidecar —</span>
                 <span class="pill" id="s-run">run —</span>
+                <span class="pill" id="s-progress" style="display:none"></span>
                 <span class="pill" id="s-cache">cache —</span>
                 <span class="pill" id="s-overlay">overlay —</span>
                 <span class="pill" id="s-arrows">flèches —</span>
@@ -201,6 +202,7 @@
                 manifest: @json(route('weather-map.manifest')),
                 overlay:  @json(url('/carte-meteo/overlay')),  // + /{variable}/{step}.png
                 health:   @json(route('weather-map.health')),
+                progress: @json(route('weather-map.progress')),
             };
 
             // ── Carte Leaflet ──────────────────────────────────────
@@ -263,6 +265,15 @@
             let stepIndex = [];        // [{ stepH, dateKey, hourStr }, …]
             let stepsByDay = {};       // { dateKey: [{ stepH, hourStr, ix }, …] }
             let playTimer = null;      // setInterval du player
+
+            // Construit l'URL d'un PNG d'overlay avec le cache-buster ?run=.
+            // Le sidecar ignore ce paramètre ; nginx l'inclut dans la clé
+            // de cache. Conséquence : un nouveau run → URL différente →
+            // cache miss naturel, sans purge explicite ni risque de stale.
+            function pngUrl(variable, stepH) {
+                const run = (manifest && manifest.run_init_unix) || 0;
+                return `${ROUTES.overlay}/${encodeURIComponent(variable)}/${stepH}.png?run=${run}`;
+            }
 
             // ── Helpers --------------------------------------------
             function variableInfo(name) {
@@ -398,14 +409,14 @@
                 });
             }
 
-            // Retry 3× avec backoff sur la MÊME URL — pas de cache-buster,
-            // sinon on bypasse le proxy_cache nginx et on tape le sidecar
-            // au lieu de servir depuis le cache (= ce qui faisait planter
-            // les flèches pendant le play). nginx dédupliquera les retries
-            // identiques via `proxy_cache_lock`.
+            // Retry 3× avec backoff sur la MÊME URL — l'URL inclut déjà
+            // ?run=<run_init_unix> via pngUrl(), qui change automati-
+            // quement à chaque nouveau run du sidecar (= invalidation
+            // implicite). nginx dédupliquera les retries identiques via
+            // `proxy_cache_lock`.
             async function loadDirectionImage(stepH) {
                 if (arrowCache.has(stepH)) return arrowCache.get(stepH);
-                const url = `${ROUTES.overlay}/wind_direction_10m/${stepH}.png`;
+                const url = pngUrl('wind_direction_10m', stepH);
                 let lastErr = null;
                 for (let attempt = 0; attempt < 3; attempt++) {
                     try {
@@ -543,7 +554,7 @@
                 if (!manifest || !bounds) return;
                 const variable = document.getElementById('f-variable').value;
                 const stepH    = manifest.steps_hours[currentStepIx] ?? 0;
-                const url      = `${ROUTES.overlay}/${encodeURIComponent(variable)}/${stepH}.png`;
+                const url      = pngUrl(variable, stepH);
                 overlayUrl = url;
                 overlayRetryDone = false;
 
@@ -708,6 +719,74 @@
                 startPrefetch();    // warm le cache navigateur en tâche de fond
             }
 
+            // Détection live d'un nouveau run du sidecar : on poll le
+            // manifest toutes les 60 s, et si `run_init_unix` change, on
+            // purge le cache local (arrowCache) et on relance le draw
+            // + le prefetch pour fetch les nouvelles URL (qui contiennent
+            // le nouveau run en query-string, donc cache miss naturel).
+            async function checkForNewRun() {
+                if (!manifest) return;
+                try {
+                    const resp = await fetch(ROUTES.manifest, {
+                        headers: { 'Accept': 'application/json' },
+                        credentials: 'same-origin',
+                    });
+                    if (!resp.ok) return;
+                    const fresh = await resp.json();
+                    if (fresh.run_init_unix && fresh.run_init_unix !== manifest.run_init_unix) {
+                        console.info('Nouveau run sidecar détecté', fresh.run_init_iso);
+                        manifest = fresh;
+                        arrowCache.clear();       // ImageData de l'ancien run, plus valide
+                        renderLegend();           // pour mettre à jour le timestamp run
+                        // Synchronise le pill `run` avec la nouvelle valeur
+                        const init = new Date(manifest.run_init_iso);
+                        const txt  = init.toLocaleString('fr-FR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', timeZone:'Europe/Paris' });
+                        const pill = document.getElementById('s-run');
+                        pill.textContent = `run : ${txt}`;
+                        pill.className = 'pill ok';
+                        // Re-rendu de l'overlay courant (nouvelle URL → nouveau fetch)
+                        drawOverlay();
+                        drawArrows();
+                        startPrefetch();
+                    }
+                } catch (e) { /* silencieux, on retentera */ }
+            }
+
+            // Badge `/progress` : affiche l'avancement d'un run consensus
+            // en cours côté sidecar. Caché en `idle` / `completed`.
+            async function refreshProgress() {
+                let p;
+                try {
+                    const r = await fetch(ROUTES.progress, {
+                        headers: { 'Accept': 'application/json' },
+                        credentials: 'same-origin',
+                    });
+                    p = await r.json();
+                } catch (e) { return; }
+
+                const pill = document.getElementById('s-progress');
+                if (!p || p.status === 'idle' || p.status === 'completed') {
+                    pill.style.display = 'none';
+                    return;
+                }
+                if (p.status === 'failed') {
+                    pill.style.display = '';
+                    pill.textContent = `run échec : ${p.error || '?'}`;
+                    pill.className = 'pill err';
+                    return;
+                }
+                if (p.status === 'running') {
+                    pill.style.display = '';
+                    const pct = (p.variables_total > 0)
+                        ? Math.round(100 * (p.variables_done || 0) / p.variables_total)
+                        : 0;
+                    const elapsed = Math.round((p.elapsed_s || 0) / 60);
+                    const cur = p.current_variable || '…';
+                    pill.textContent = `run en cours : ${cur} (${pct}%, ${elapsed} min)`;
+                    pill.className = 'pill warn';
+                }
+            }
+
             // Debounce du redraw lors de changements rapprochés (player rapide,
             // etc.). Évite d'enchaîner les fetch PNG qui se marchent dessus
             // et font clignoter l'overlay.
@@ -770,10 +849,12 @@
                 pill.className = 'pill warn';
 
                 const queue = ordered.slice();
-                // 1 seul worker pour ne pas surcharger le sidecar pendant
-                // le premier remplissage du proxy_cache nginx. Une fois
-                // toutes les URLs en cache (~30 s), tout est instantané.
-                const CONCURRENT = 1;
+                // Sidecar tient maintenant la concurrence (PNG pré-rendus
+                // sur disque depuis la phase 2 du sidecar). 4 workers
+                // saturent le browser pool (~6 connexions HTTP/1.1 par
+                // origin) tout en gardant 2 slots pour la navigation
+                // interactive de l'utilisateur.
+                const CONCURRENT = 4;
 
                 async function worker() {
                     while (queue.length) {
@@ -781,7 +862,7 @@
                         const stepH = queue.shift();
 
                         // 1. PNG du variable courant → cache navigateur uniquement
-                        await loadImgQuiet(`${ROUTES.overlay}/${encodeURIComponent(variable)}/${stepH}.png`);
+                        await loadImgQuiet(pngUrl(variable, stepH));
                         if (session !== prefetchSession) return;
 
                         // 2. PNG direction → décodé en ImageData dans arrowCache
@@ -927,8 +1008,11 @@
 
             // Premier rendu
             refreshHealth();
+            refreshProgress();
             loadManifest();
-            setInterval(refreshHealth, 60_000);
+            setInterval(refreshHealth,   60_000);
+            setInterval(refreshProgress, 30_000);   // suit un run actif côté sidecar
+            setInterval(checkForNewRun,  60_000);   // détecte la bascule de run
         })();
     </script>
     @endpush

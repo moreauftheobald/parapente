@@ -55,7 +55,8 @@ Route::middleware(['auth', 'admin'])->group(function () {
     Route::get('/carte-meteo/overlay/{variable}/{step}.png', [WeatherMapController::class, 'overlay'])
         ->where(['variable' => '[a-z][a-z0-9_]+', 'step' => '[0-9]+'])
         ->name('weather-map.overlay');
-    Route::get('/carte-meteo/health', [WeatherMapController::class, 'health'])->name('weather-map.health');
+    Route::get('/carte-meteo/health',   [WeatherMapController::class, 'health'])->name('weather-map.health');
+    Route::get('/carte-meteo/progress', [WeatherMapController::class, 'progress'])->name('weather-map.progress');
 });
 
 // Tampon d'icônes SpotAir : Nginx sert les fichiers déjà présents
