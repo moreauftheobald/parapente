@@ -127,6 +127,10 @@
                 <select id="f-variable"><option>Chargement…</option></select>
             </label>
             <label class="field chk">
+                <input type="checkbox" id="f-show-arrows" checked>
+                <span><i class="fa-solid fa-arrow-right-long"></i> Flèches de vent</span>
+            </label>
+            <label class="field chk">
                 <input type="checkbox" id="f-dark-mode">
                 <span><i class="fa-solid fa-moon"></i> Fond sombre</span>
             </label>
@@ -142,6 +146,7 @@
                 <span class="pill" id="s-sidecar">sidecar —</span>
                 <span class="pill" id="s-run">run —</span>
                 <span class="pill" id="s-overlay">overlay —</span>
+                <span class="pill" id="s-arrows">flèches —</span>
             </div>
         </div>
 
@@ -190,6 +195,12 @@
             map.createPane('wm-overlay');
             map.getPane('wm-overlay').style.zIndex = 350;
             map.getPane('wm-overlay').style.pointerEvents = 'none';
+
+            // Pane des flèches (au-dessus de l'overlay)
+            map.createPane('wm-arrows');
+            map.getPane('wm-arrows').style.zIndex = 400;
+            map.getPane('wm-arrows').style.pointerEvents = 'none';
+            const arrowsLayer = L.layerGroup([], { pane: 'wm-arrows' }).addTo(map);
 
             setTimeout(() => map.invalidateSize(), 0);
             window.addEventListener('resize', () => map.invalidateSize());
@@ -262,6 +273,123 @@
                 return `<span class="h">+${stepHours} h</span> ${txt}`;
             }
 
+            // ── Flèches de vent : lecture client-side du PNG ───────
+            // wind_direction_10m est colorisé avec la cmap HSV de matplotlib.
+            // La cmap HSV mappe linéairement input → teinte H (0-360°). Donc
+            // chaque pixel RGB s'inverse en H qui EST l'angle de direction
+            // (en convention météo FROM). On dessine une flèche pour un
+            // échantillon de la grille (12×9 par défaut).
+            const ARROW_COLS = 12;
+            const ARROW_ROWS = 9;
+            let arrowCanvas = null;       // canvas offscreen pour decode pixels
+            const arrowCache = new Map(); // step → ImageData
+
+            function rgbToHue(r, g, b) {
+                r /= 255; g /= 255; b /= 255;
+                const max = Math.max(r, g, b);
+                const min = Math.min(r, g, b);
+                if (max === min) return null; // gris / transparent → pas de direction
+                const d = max - min;
+                let h;
+                if (max === r)      h = ((g - b) / d) % 6;
+                else if (max === g) h = (b - r) / d + 2;
+                else                h = (r - g) / d + 4;
+                h *= 60;
+                if (h < 0) h += 360;
+                return h;
+            }
+
+            function makeArrowIcon(direction) {
+                // Flèche pointant où le vent VA (= direction FROM + 180°).
+                // SVG triangle vers le haut, ancré au centre, rotation CSS.
+                const angle = (direction + 180) % 360;
+                const svg = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22"
+                         style="transform: rotate(${angle}deg); transform-origin: 11px 11px;">
+                        <path d="M11 3 L15 13 L11 11 L7 13 Z"
+                              fill="rgba(15,23,42,0.85)"
+                              stroke="rgba(255,255,255,0.9)" stroke-width="0.8" stroke-linejoin="round"/>
+                    </svg>`;
+                return L.divIcon({
+                    className: 'wm-arrow-icon',
+                    html: svg,
+                    iconSize: [22, 22],
+                    iconAnchor: [11, 11],
+                });
+            }
+
+            async function loadDirectionImage(stepH) {
+                if (arrowCache.has(stepH)) return arrowCache.get(stepH);
+                const url = `${ROUTES.overlay}/wind_direction_10m/${stepH}.png`;
+                const img = await new Promise((resolve, reject) => {
+                    const i = new Image();
+                    i.crossOrigin = 'anonymous';
+                    i.onload  = () => resolve(i);
+                    i.onerror = (e) => reject(new Error('image load failed'));
+                    i.src = url;
+                });
+                if (!arrowCanvas) arrowCanvas = document.createElement('canvas');
+                arrowCanvas.width  = img.width;
+                arrowCanvas.height = img.height;
+                const ctx = arrowCanvas.getContext('2d', { willReadFrequently: true });
+                ctx.drawImage(img, 0, 0);
+                const data = ctx.getImageData(0, 0, img.width, img.height);
+                arrowCache.set(stepH, data);
+                return data;
+            }
+
+            async function drawArrows() {
+                arrowsLayer.clearLayers();
+
+                const pill = document.getElementById('s-arrows');
+                if (!document.getElementById('f-show-arrows').checked) {
+                    pill.textContent = 'flèches off';
+                    pill.className = 'pill';
+                    return;
+                }
+                if (!manifest || !bounds) return;
+
+                const stepH = manifest.steps_hours[currentStepIx] ?? 0;
+                let pixels;
+                try {
+                    pixels = await loadDirectionImage(stepH);
+                } catch (e) {
+                    pill.textContent = 'flèches HS (chargement)';
+                    pill.className = 'pill err';
+                    return;
+                }
+
+                const { lat_min, lat_max, lon_min, lon_max } = manifest.bbox;
+                const W = pixels.width, H = pixels.height;
+                const arr = pixels.data; // RGBA
+                let drawn = 0;
+
+                for (let row = 0; row < ARROW_ROWS; row++) {
+                    // 0.5 → centre de la cellule, évite les bords
+                    const lat = lat_max - ((row + 0.5) / ARROW_ROWS) * (lat_max - lat_min);
+                    const py  = Math.min(H - 1, Math.max(0, Math.round(((lat_max - lat) / (lat_max - lat_min)) * (H - 1))));
+                    for (let col = 0; col < ARROW_COLS; col++) {
+                        const lng = lon_min + ((col + 0.5) / ARROW_COLS) * (lon_max - lon_min);
+                        const px  = Math.min(W - 1, Math.max(0, Math.round(((lng - lon_min) / (lon_max - lon_min)) * (W - 1))));
+                        const idx = (py * W + px) * 4;
+                        const r = arr[idx], g = arr[idx + 1], b = arr[idx + 2], a = arr[idx + 3];
+                        if (a < 32) continue; // pixel transparent (hors couverture)
+                        const hue = rgbToHue(r, g, b);
+                        if (hue === null) continue;
+                        L.marker([lat, lng], {
+                            icon: makeArrowIcon(hue),
+                            pane: 'wm-arrows',
+                            interactive: false,
+                            keyboard: false,
+                        }).addTo(arrowsLayer);
+                        drawn++;
+                    }
+                }
+
+                pill.textContent = `flèches : ${drawn} pts`;
+                pill.className = 'pill ok';
+            }
+
             // ── Rendu de l'overlay courant ─────────────────────────
             function drawOverlay() {
                 if (!manifest || !bounds) return;
@@ -310,15 +438,20 @@
             function populateUI() {
                 if (!manifest) return;
 
-                // Variables
+                // Variables — on filtre wind_direction_10m : sa palette HSV est
+                // codée en couleurs vives peu lisibles à l'œil, et de toute façon
+                // elle sert de source data pour la couche flèches (cf. drawArrows).
                 const sel = document.getElementById('f-variable');
                 sel.innerHTML = '';
-                (manifest.variables || []).forEach(v => {
-                    const opt = document.createElement('option');
-                    opt.value = v.name;
-                    opt.textContent = variableLabel(v.name);
-                    sel.appendChild(opt);
-                });
+                (manifest.variables || [])
+                    .filter(v => v.name !== 'wind_direction_10m')
+                    .forEach(v => {
+                        const opt = document.createElement('option');
+                        opt.value = v.name;
+                        opt.textContent = variableLabel(v.name);
+                        sel.appendChild(opt);
+                    });
+
 
                 // Steps
                 const stepInput = document.getElementById('f-step');
@@ -397,12 +530,16 @@
                 populateUI();
                 renderLegend();
                 drawOverlay();
+                drawArrows();
             }
 
             // ── Listeners ──────────────────────────────────────────
             document.getElementById('f-variable').addEventListener('change', () => {
                 renderLegend();
                 drawOverlay();
+            });
+            document.getElementById('f-show-arrows').addEventListener('change', () => {
+                drawArrows();
             });
             document.getElementById('f-dark-mode').addEventListener('change', (e) => {
                 setBaseLayer(e.target.checked ? 'dark' : 'light');
@@ -413,6 +550,7 @@
                     document.getElementById('wm-step-label').innerHTML =
                         fmtStepLabel(manifest.steps_hours[currentStepIx]);
                     drawOverlay();
+                    drawArrows();
                 }
             });
 
