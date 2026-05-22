@@ -450,7 +450,14 @@
                 return { latS, latN, lonW, lonE, cols, rows };
             }
 
+            // Token de séquence pour drawArrows : si l'utilisateur change
+            // de step pendant qu'on attend le PNG direction, on annule
+            // le rendu en cours (évite des arrows fantômes ou un clear
+            // qui efface ceux du nouveau step).
+            let arrowsDrawSeq = 0;
+
             async function drawArrows() {
+                const mySeq = ++arrowsDrawSeq;
                 arrowsLayer.clearLayers();
 
                 const pill = document.getElementById('s-arrows');
@@ -473,10 +480,13 @@
                 try {
                     pixels = await loadDirectionImage(stepH);
                 } catch (e) {
-                    pill.textContent = 'flèches HS (chargement)';
+                    if (mySeq !== arrowsDrawSeq) return; // step changé entre temps
+                    console.warn('drawArrows: direction PNG failed', stepH, e);
+                    pill.textContent = 'flèches HS';
                     pill.className = 'pill err';
                     return;
                 }
+                if (mySeq !== arrowsDrawSeq) return; // step changé pendant l'await
 
                 const { lat_min, lat_max, lon_min, lon_max } = manifest.bbox;
                 const { latS, latN, lonW, lonE, cols, rows } = grid;
@@ -485,7 +495,6 @@
                 let drawn = 0;
 
                 for (let row = 0; row < rows; row++) {
-                    // 0.5 → centre de la cellule de la grille viewport
                     const lat = latN - ((row + 0.5) / rows) * (latN - latS);
                     const py  = Math.min(H - 1, Math.max(0, Math.round(((lat_max - lat) / (lat_max - lat_min)) * (H - 1))));
                     for (let col = 0; col < cols; col++) {
@@ -493,7 +502,7 @@
                         const px  = Math.min(W - 1, Math.max(0, Math.round(((lng - lon_min) / (lon_max - lon_min)) * (W - 1))));
                         const idx = (py * W + px) * 4;
                         const r = arr[idx], g = arr[idx + 1], b = arr[idx + 2], a = arr[idx + 3];
-                        if (a < 32) continue; // pixel transparent (hors couverture)
+                        if (a < 32) continue;
                         const hue = rgbToHue(r, g, b);
                         if (hue === null) continue;
                         L.marker([lat, lng], {
@@ -506,6 +515,10 @@
                     }
                 }
 
+                if (mySeq !== arrowsDrawSeq) {
+                    arrowsLayer.clearLayers();
+                    return;
+                }
                 pill.textContent = `flèches : ${drawn} pts`;
                 pill.className = 'pill ok';
             }
@@ -757,7 +770,10 @@
                 pill.className = 'pill warn';
 
                 const queue = ordered.slice();
-                const CONCURRENT = 4;  // nginx proxy_cache encaisse, plus de bottleneck PHP-FPM
+                // 1 seul worker pour ne pas surcharger le sidecar pendant
+                // le premier remplissage du proxy_cache nginx. Une fois
+                // toutes les URLs en cache (~30 s), tout est instantané.
+                const CONCURRENT = 1;
 
                 async function worker() {
                     while (queue.length) {
