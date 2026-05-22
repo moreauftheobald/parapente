@@ -9,75 +9,53 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Carte météo — vue Leaflet avec overlays issus du sidecar `consensus-grid`.
  *
- * Le sidecar calcule un consensus multi-modèles pré-cuit toutes les heures
- * et expose :
- *   - GET /v1/overlay/{variable}            → manifest JSON (steps + bounds)
- *   - GET /v1/overlay/{variable}/{step}.png → tuile PNG d'un pas de temps
+ * Le sidecar (FastAPI) calcule un consensus multi-modèles pré-cuit toutes
+ * les heures et expose :
+ *   - GET /v1/overlay                       → index JSON (run_init, bbox, steps, variables + palettes)
+ *   - GET /v1/overlay/{variable}            → manifest JSON d'une variable
+ *   - GET /v1/overlay/{variable}/{step}.png → PNG RGBA (step = entier d'heures depuis run_init)
  *   - GET /v1/forecast                      → équivalent Open-Meteo
  *   - GET /health, /progress
  *
- * Laravel ne contacte JAMAIS le sidecar depuis le navigateur :
- *   - manifest : proxifié (JSON court, mis en cache Redis 10 min)
- *   - PNG     : proxifié en streaming (cache HTTP côté navigateur)
+ * Le front fait un unique appel /carte-meteo/index puis tape les PNG via
+ * /carte-meteo/overlay/{variable}/{step}.png. Tout passe par Laravel —
+ * ça permet de cacher, contrôler les accès, et évite d'exposer le port
+ * 8082 publiquement.
  */
 class WeatherMapController extends Controller
 {
     /**
-     * Liste des variables exposées dans la toolbar du front.
-     *
-     * - `kind=info`   : couche d'information (PNG colorisée — vent moyen, etc.)
-     * - `kind=arrows` : surcouche de flèches de vent
-     *
-     * À ajuster quand le sidecar exposera de nouvelles variables.
+     * Validation des noms de variables (whitelist regex plutôt que liste
+     * en dur — comme ça les nouvelles variables ajoutées au sidecar
+     * apparaissent automatiquement dans l'UI sans déploiement Laravel).
      */
-    private const VARIABLES = [
-        'wind_speed_avg' => ['label' => 'Vent moyen 10 m',  'kind' => 'info',   'unit' => 'km/h'],
-        'wind_gust'      => ['label' => 'Rafales 10 m',     'kind' => 'info',   'unit' => 'km/h'],
-        'precipitation'  => ['label' => 'Précipitations',   'kind' => 'info',   'unit' => 'mm/h'],
-        'cloud_cover'    => ['label' => 'Couverture nuageuse', 'kind' => 'info', 'unit' => '%'],
-        'wind_arrows'    => ['label' => 'Flèches de vent',  'kind' => 'arrows', 'unit' => null],
-    ];
+    private const VARIABLE_PATTERN = '/^[a-z][a-z0-9_]{1,63}$/';
 
     public function index()
     {
-        return view('weather-map.index', [
-            'variables' => self::VARIABLES,
-        ]);
+        return view('weather-map.index');
     }
 
     /**
-     * Proxy du manifest `/v1/overlay/{variable}` du sidecar.
+     * Proxy de `/v1/overlay` — manifest global du sidecar.
      *
-     * Le manifest est court et change au plus une fois par heure (run du
-     * sidecar) → cache Redis 10 min pour absorber les rafales sans
-     * hammeriser le conteneur.
+     * Cache Redis 10 min : le run du sidecar n'est mis à jour qu'une fois
+     * par heure, donc 10 min absorbe les rafales sans hammeriser.
      */
-    public function manifest(string $variable): JsonResponse
+    public function manifestIndex(): JsonResponse
     {
-        if (! isset(self::VARIABLES[$variable])) {
-            return response()->json(['error' => 'unknown variable'], 404);
-        }
-
-        $key = "weather-map.manifest.v1.{$variable}";
-
-        $payload = Cache::remember($key, now()->addMinutes(10), function () use ($variable): array {
+        $payload = Cache::remember('weather-map.index.v1', now()->addMinutes(10), function (): array {
             $base    = rtrim(config('services.consensus_grid.base_url'), '/');
             $timeout = (int) config('services.consensus_grid.timeout', 10);
 
             try {
-                $resp = Http::timeout($timeout)
-                    ->acceptJson()
-                    ->get("{$base}/v1/overlay/{$variable}");
+                $resp = Http::timeout($timeout)->acceptJson()->get("{$base}/v1/overlay");
             } catch (\Throwable $e) {
-                Log::warning('consensus-grid manifest unreachable', [
-                    'variable' => $variable,
-                    'error'    => $e->getMessage(),
-                ]);
+                Log::warning('consensus-grid index unreachable', ['error' => $e->getMessage()]);
                 return ['_error' => 'sidecar_unreachable'];
             }
 
@@ -96,20 +74,18 @@ class WeatherMapController extends Controller
     }
 
     /**
-     * Proxy streamé de `/v1/overlay/{variable}/{step}.png`.
+     * Proxy de `/v1/overlay/{variable}/{step}.png`.
      *
-     * Pas de cache Laravel ici : les PNG peuvent être lourds et le navigateur
-     * mémorise déjà via Cache-Control. Le navigateur appelle un step précis,
-     * qui change rarement (par run du sidecar) — donc cache long côté client.
+     * Step est un entier d'heures depuis `run_init` (0..120 typiquement).
+     * Le PNG d'un run donné ne change plus jamais — on laisse le navigateur
+     * cacher agressivement.
      */
-    public function overlay(string $variable, string $step): Response|StreamedResponse
+    public function overlay(string $variable, string $step): Response
     {
-        if (! isset(self::VARIABLES[$variable])) {
-            return response('unknown variable', 404);
+        if (! preg_match(self::VARIABLE_PATTERN, $variable)) {
+            return response('invalid variable', 400);
         }
-        // Le step est passé tel quel au sidecar — on contraint juste à
-        // un format raisonnable pour éviter les abus (chemins, etc.).
-        if (! preg_match('/^[A-Za-z0-9_\-:.]+$/', $step)) {
+        if (! ctype_digit($step) || strlen($step) > 4) {
             return response('invalid step', 400);
         }
 
@@ -117,9 +93,7 @@ class WeatherMapController extends Controller
         $timeout = (int) config('services.consensus_grid.timeout', 10);
 
         try {
-            $resp = Http::timeout($timeout)
-                ->withOptions(['stream' => true])
-                ->get("{$base}/v1/overlay/{$variable}/{$step}.png");
+            $resp = Http::timeout($timeout)->get("{$base}/v1/overlay/{$variable}/{$step}.png");
         } catch (\Throwable $e) {
             Log::warning('consensus-grid overlay unreachable', [
                 'variable' => $variable,
@@ -133,24 +107,18 @@ class WeatherMapController extends Controller
             return response('sidecar HTTP '.$resp->status(), 502);
         }
 
-        $body = $resp->body();
-
-        return response($body, 200, [
+        return response($resp->body(), 200, [
             'Content-Type'  => 'image/png',
-            'Cache-Control' => 'public, max-age=600',
+            'Cache-Control' => 'public, max-age=3600',
         ]);
     }
 
-    /**
-     * Health-check léger pour le badge d'état dans la toolbar.
-     */
     public function health(): JsonResponse
     {
-        $base    = rtrim(config('services.consensus_grid.base_url'), '/');
-        $timeout = 3;
+        $base = rtrim(config('services.consensus_grid.base_url'), '/');
 
         try {
-            $resp = Http::timeout($timeout)->acceptJson()->get("{$base}/health");
+            $resp = Http::timeout(3)->acceptJson()->get("{$base}/health");
         } catch (\Throwable $e) {
             return response()->json(['ok' => false, 'reason' => 'unreachable'], 200);
         }

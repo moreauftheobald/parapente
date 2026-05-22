@@ -51,9 +51,9 @@ Route::middleware(['auth', 'admin'])->group(function () {
     // Carte météo (overlays consensus-grid). Admin-only le temps de
     // stabiliser l'intégration du sidecar.
     Route::get('/carte-meteo', [WeatherMapController::class, 'index'])->name('weather-map.index');
-    Route::get('/carte-meteo/overlay/{variable}',         [WeatherMapController::class, 'manifest'])->name('weather-map.manifest');
+    Route::get('/carte-meteo/manifest', [WeatherMapController::class, 'manifestIndex'])->name('weather-map.manifest');
     Route::get('/carte-meteo/overlay/{variable}/{step}.png', [WeatherMapController::class, 'overlay'])
-        ->where(['step' => '[A-Za-z0-9_\-:.]+'])
+        ->where(['variable' => '[a-z][a-z0-9_]+', 'step' => '[0-9]+'])
         ->name('weather-map.overlay');
     Route::get('/carte-meteo/health', [WeatherMapController::class, 'health'])->name('weather-map.health');
 });

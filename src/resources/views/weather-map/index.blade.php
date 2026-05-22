@@ -36,7 +36,7 @@
             border: 1px solid #334155;
             border-radius: 6px;
             font-size: 12px; padding: 4px 8px;
-            min-width: 160px;
+            min-width: 180px;
         }
         #wm-toolbar select:focus { outline: none; border-color: #0ea5e9; }
         #wm-toolbar .chk {
@@ -44,8 +44,9 @@
             color: #cbd5e1; cursor: pointer;
         }
         #wm-toolbar input[type="range"] {
-            min-width: 220px; padding: 0;
+            min-width: 240px; padding: 0;
         }
+        #wm-toolbar input[type="range"]:disabled { opacity: .4; }
 
         #wm-status {
             margin-left: auto;
@@ -66,6 +67,7 @@
             font-size: 11px; color: #cbd5e1;
             min-width: 130px; text-align: center;
         }
+        #wm-step-label .h { color: #94a3b8; font-size: 10px; }
 
         #wm-map {
             flex: 1 1 auto;
@@ -83,19 +85,29 @@
             font-size: 11px;
             color: #cbd5e1;
             box-shadow: 0 4px 16px rgba(0,0,0,.4);
-            max-width: 240px;
+            min-width: 220px; max-width: 280px;
             pointer-events: auto;
         }
         .wm-legend h4 {
             font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
             color: #64748b; margin: 0 0 6px 0;
         }
-        .wm-legend .row {
-            display: flex; align-items: center; gap: 8px;
-            margin: 2px 0;
+        .wm-legend .scale {
+            height: 12px; border-radius: 3px;
+            border: 1px solid rgba(255,255,255,.1);
+            background: linear-gradient(to right, #00ff00, #ffff00, #ff0000); /* dégradé fallback */
+        }
+        .wm-legend .axis {
+            display: flex; justify-content: space-between;
+            font-family: 'DM Mono', monospace; font-size: 10px;
+            color: #94a3b8; margin-top: 4px;
+        }
+        .wm-legend .meta {
+            color: #94a3b8; font-size: 10px; margin-top: 6px;
+            line-height: 1.4;
         }
 
-        /* Contrôles Leaflet — esprit dark cohérent avec model-grid */
+        /* Contrôles Leaflet — esprit dark */
         .leaflet-control-zoom a {
             background: #1e293b !important; color: #94a3b8 !important;
             border-color: #334155 !important;
@@ -110,26 +122,15 @@
         {{-- Toolbar --}}
         <div id="wm-toolbar">
             <label class="field">
-                Couche d'info
-                <select id="f-info-variable">
-                    @foreach ($variables as $key => $v)
-                        @if ($v['kind'] === 'info')
-                            <option value="{{ $key }}" data-unit="{{ $v['unit'] }}">
-                                {{ $v['label'] }}
-                            </option>
-                        @endif
-                    @endforeach
-                </select>
-            </label>
-            <label class="field chk">
-                <input type="checkbox" id="f-show-arrows" checked>
-                <span><i class="fa-solid fa-arrow-right-long"></i> Flèches de vent</span>
+                Variable
+                {{-- Peuplé dynamiquement depuis le manifest du sidecar --}}
+                <select id="f-variable"><option>Chargement…</option></select>
             </label>
             <label class="field chk">
                 <input type="checkbox" id="f-dark-mode">
                 <span><i class="fa-solid fa-moon"></i> Fond sombre</span>
             </label>
-            <label class="field" style="flex:1 1 280px; max-width:520px;">
+            <label class="field" style="flex:1 1 320px; max-width:560px;">
                 Pas de temps
                 <div style="display:flex; gap:8px; align-items:center;">
                     <input type="range" id="f-step" min="0" max="0" value="0" step="1" disabled>
@@ -139,27 +140,24 @@
 
             <div id="wm-status">
                 <span class="pill" id="s-sidecar">sidecar —</span>
-                <span class="pill" id="s-info">info —</span>
-                <span class="pill" id="s-arrows">flèches —</span>
+                <span class="pill" id="s-run">run —</span>
+                <span class="pill" id="s-overlay">overlay —</span>
             </div>
         </div>
 
-        {{-- Carte (la légende est ajoutée comme L.Control dynamique) --}}
         <div id="wm-map"></div>
     </div>
 
     @push('scripts')
     <script>
         (function init() {
-            // window.L est exposé par resources/js/app.js (Vite bundle).
-            // En cas de race rare où ce script s'exécute avant, on attend.
             if (typeof window.L === 'undefined') {
                 setTimeout(init, 50);
                 return;
             }
 
             const ROUTES = {
-                manifest: @json(url('/carte-meteo/overlay')),  // + /{variable}
+                manifest: @json(route('weather-map.manifest')),
                 overlay:  @json(url('/carte-meteo/overlay')),  // + /{variable}/{step}.png
                 health:   @json(route('weather-map.health')),
             };
@@ -188,12 +186,10 @@
                 }).addTo(map);
             }
 
-            // Pane dédiés pour contrôler l'ordre de superposition
-            map.createPane('wm-info');
-            map.getPane('wm-info').style.zIndex = 350;
-            map.createPane('wm-arrows');
-            map.getPane('wm-arrows').style.zIndex = 360;
-            map.getPane('wm-arrows').style.pointerEvents = 'none';
+            // Pane dédié pour l'overlay (au-dessus des tiles, sous les contrôles)
+            map.createPane('wm-overlay');
+            map.getPane('wm-overlay').style.zIndex = 350;
+            map.getPane('wm-overlay').style.pointerEvents = 'none';
 
             setTimeout(() => map.invalidateSize(), 0);
             window.addEventListener('resize', () => map.invalidateSize());
@@ -212,194 +208,152 @@
             const legend = new LegendControl();
             legend.addTo(map);
 
-            // ── Overlays (ImageOverlay rebuild à chaque step/var) ─
-            let infoOverlay   = null;
-            let arrowsOverlay = null;
+            // ── État global ────────────────────────────────────────
+            let manifest = null;       // payload brut /v1/overlay
+            let bounds   = null;       // L.LatLngBounds calculé une fois
+            let overlay  = null;       // L.ImageOverlay actif
+            let currentStepIx = 0;     // index dans manifest.steps_hours
 
-            // Manifests par variable : { bounds: L.LatLngBounds, steps: [{step, label}], variable }
-            const manifestCache = new Map();
-
-            // Normalise les bounds renvoyés par le sidecar.
-            // Accepte : {north,south,east,west} | [[s,w],[n,e]] | [s,w,n,e]
-            function parseBounds(b) {
-                if (!b) return null;
-                if (Array.isArray(b) && b.length === 4 && typeof b[0] === 'number') {
-                    return L.latLngBounds([b[0], b[1]], [b[2], b[3]]);
-                }
-                if (Array.isArray(b) && b.length === 2 && Array.isArray(b[0])) {
-                    return L.latLngBounds(b[0], b[1]);
-                }
-                if (typeof b === 'object' && b.north != null) {
-                    return L.latLngBounds([b.south, b.west], [b.north, b.east]);
-                }
-                return null;
+            // ── Helpers --------------------------------------------
+            function variableInfo(name) {
+                if (!manifest) return null;
+                return (manifest.variables || []).find(v => v.name === name) || null;
             }
 
-            // Normalise la liste des steps. Accepte plusieurs formes.
-            function parseSteps(raw) {
-                if (!Array.isArray(raw)) return [];
-                return raw.map((s, i) => {
-                    if (typeof s === 'string' || typeof s === 'number') {
-                        return { step: String(s), label: String(s) };
-                    }
-                    const step  = s.step ?? s.id ?? s.key ?? String(i);
-                    const label = s.valid_at ?? s.label ?? s.time ?? String(step);
-                    return { step: String(step), label: String(label) };
-                });
+            // Libellé humain pour une variable. Le sidecar ne renvoie pas
+            // de label FR — on les map ici. Les variables non listées
+            // tombent sur le nom technique (fallback).
+            const VAR_LABELS = {
+                wind_speed_10m:              'Vent moyen 10 m (km/h)',
+                wind_gusts_10m:              'Rafales 10 m (km/h)',
+                wind_direction_10m:          'Direction du vent (°)',
+                precipitation:               'Précipitations (mm/h)',
+                relative_humidity_2m:        'Humidité relative 2 m (%)',
+                temperature_2m:              'Température 2 m (°C)',
+                cloud_cover_low:             'Nuages bas (%)',
+                cloud_cover_mid:             'Nuages moyens (%)',
+                cloud_cover_high:            'Nuages hauts (%)',
+                qui_vole_models_count:       'Modèles disponibles',
+                qui_vole_models_converging:  'Modèles convergents',
+            };
+            function variableLabel(name) {
+                return VAR_LABELS[name] || name;
             }
 
-            async function loadManifest(variable) {
-                if (manifestCache.has(variable)) return manifestCache.get(variable);
-                let resp;
-                try {
-                    resp = await fetch(`${ROUTES.manifest}/${encodeURIComponent(variable)}`, {
-                        headers: { 'Accept': 'application/json' },
-                        credentials: 'same-origin',
-                    });
-                } catch (e) {
-                    return { error: 'network', message: String(e) };
-                }
-                if (!resp.ok) {
-                    return { error: 'http_' + resp.status };
-                }
-                const json = await resp.json();
-                const bounds = parseBounds(json.bounds);
-                const steps  = parseSteps(json.steps);
-                const parsed = { variable, bounds, steps };
-                manifestCache.set(variable, parsed);
-                return parsed;
+            // Dégradés CSS pour la légende — calqués (à la louche) sur les
+            // colormaps matplotlib utilisées côté sidecar. Sert juste à
+            // donner un repère visuel ; la vérité-terrain reste le PNG.
+            const CMAP_CSS = {
+                'RdYlGn_r':  'linear-gradient(to right, #006837, #a6d96a, #ffffbf, #fdae61, #d73027)',
+                'RdYlGn':    'linear-gradient(to right, #d73027, #fdae61, #ffffbf, #a6d96a, #006837)',
+                'Blues':     'linear-gradient(to right, #f7fbff, #6baed6, #08306b)',
+                'Greys':     'linear-gradient(to right, #ffffff, #969696, #000000)',
+                'RdBu_r':    'linear-gradient(to right, #053061, #67a9cf, #f7f7f7, #ef8a62, #67001f)',
+                'hsv':       'linear-gradient(to right, red, yellow, lime, cyan, blue, magenta, red)',
+            };
+
+            function fmtStepLabel(stepHours) {
+                if (!manifest || !manifest.run_init_iso) return `+${stepHours} h`;
+                const base = new Date(manifest.run_init_iso);
+                const dt = new Date(base.getTime() + stepHours * 3600_000);
+                // Format local Paris (le sidecar travaille en UTC)
+                const opts = { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' };
+                const txt = dt.toLocaleString('fr-FR', opts);
+                return `<span class="h">+${stepHours} h</span> ${txt}`;
             }
 
-            function overlayUrl(variable, step) {
-                return `${ROUTES.overlay}/${encodeURIComponent(variable)}/${encodeURIComponent(step)}.png`;
-            }
+            // ── Rendu de l'overlay courant ─────────────────────────
+            function drawOverlay() {
+                if (!manifest || !bounds) return;
+                const variable = document.getElementById('f-variable').value;
+                const stepH    = manifest.steps_hours[currentStepIx] ?? 0;
+                const url      = `${ROUTES.overlay}/${encodeURIComponent(variable)}/${stepH}.png`;
 
-            // ── Slider / steps ─────────────────────────────────────
-            // Source de vérité = manifest de la couche d'info (= step
-            // commun aux deux overlays). On suppose que les flèches
-            // ont les mêmes pas — sinon le manifest des flèches sera
-            // utilisé pour la flèche correspondante.
-            let currentSteps  = [];
-            let currentStepIx = 0;
-            const stepInput   = document.getElementById('f-step');
-            const stepLabel   = document.getElementById('wm-step-label');
-
-            function setStepRange(steps) {
-                currentSteps = steps;
-                if (!steps.length) {
-                    stepInput.disabled = true;
-                    stepInput.min = 0; stepInput.max = 0; stepInput.value = 0;
-                    stepLabel.textContent = '—';
-                    return;
-                }
-                stepInput.disabled = false;
-                stepInput.min = 0;
-                stepInput.max = steps.length - 1;
-                if (currentStepIx >= steps.length) currentStepIx = 0;
-                stepInput.value = currentStepIx;
-                stepLabel.textContent = steps[currentStepIx].label;
-            }
-
-            // ── Rendu d'un overlay ─────────────────────────────────
-            async function renderInfo() {
-                const variable = document.getElementById('f-info-variable').value;
-                document.getElementById('s-info').textContent = `info : ${variable}`;
-                const m = await loadManifest(variable);
-                if (m.error) {
-                    if (infoOverlay) { map.removeLayer(infoOverlay); infoOverlay = null; }
-                    document.getElementById('s-info').className = 'pill err';
-                    document.getElementById('s-info').textContent = `info HS (${m.error})`;
-                    setStepRange([]);
-                    return;
-                }
-                document.getElementById('s-info').className = 'pill ok';
-                setStepRange(m.steps);
-                drawInfo(m);
-                renderLegend(variable);
-            }
-
-            function drawInfo(manifest) {
-                if (!manifest.bounds || !manifest.steps.length) {
-                    if (infoOverlay) { map.removeLayer(infoOverlay); infoOverlay = null; }
-                    return;
-                }
-                const step = manifest.steps[currentStepIx] || manifest.steps[0];
-                const url  = overlayUrl(manifest.variable, step.step);
-                if (infoOverlay) {
-                    infoOverlay.setUrl(url);
-                    infoOverlay.setBounds(manifest.bounds);
+                if (overlay) {
+                    overlay.setUrl(url);
+                    overlay.setBounds(bounds);
                 } else {
-                    infoOverlay = L.imageOverlay(url, manifest.bounds, {
+                    overlay = L.imageOverlay(url, bounds, {
                         opacity: 0.65,
-                        pane: 'wm-info',
+                        pane: 'wm-overlay',
                         interactive: false,
                     }).addTo(map);
                 }
-            }
 
-            async function renderArrows() {
-                const show = document.getElementById('f-show-arrows').checked;
-                if (!show) {
-                    if (arrowsOverlay) { map.removeLayer(arrowsOverlay); arrowsOverlay = null; }
-                    document.getElementById('s-arrows').textContent = 'flèches off';
-                    document.getElementById('s-arrows').className = 'pill';
-                    return;
-                }
-                const m = await loadManifest('wind_arrows');
-                if (m.error) {
-                    if (arrowsOverlay) { map.removeLayer(arrowsOverlay); arrowsOverlay = null; }
-                    document.getElementById('s-arrows').textContent = `flèches HS (${m.error})`;
-                    document.getElementById('s-arrows').className = 'pill err';
-                    return;
-                }
-                document.getElementById('s-arrows').textContent = `flèches : ${m.steps.length} steps`;
-                document.getElementById('s-arrows').className = 'pill ok';
-                drawArrows(m);
-            }
-
-            function drawArrows(manifest) {
-                if (!manifest.bounds || !manifest.steps.length) {
-                    if (arrowsOverlay) { map.removeLayer(arrowsOverlay); arrowsOverlay = null; }
-                    return;
-                }
-                // On essaie d'aligner le step sur celui de la couche info ;
-                // sinon on prend le premier disponible.
-                const ix = Math.min(currentStepIx, manifest.steps.length - 1);
-                const step = manifest.steps[ix];
-                const url  = overlayUrl(manifest.variable, step.step);
-                if (arrowsOverlay) {
-                    arrowsOverlay.setUrl(url);
-                    arrowsOverlay.setBounds(manifest.bounds);
-                } else {
-                    arrowsOverlay = L.imageOverlay(url, manifest.bounds, {
-                        opacity: 0.85,
-                        pane: 'wm-arrows',
-                        interactive: false,
-                    }).addTo(map);
-                }
+                const pill = document.getElementById('s-overlay');
+                pill.textContent = `${variable} · +${stepH} h`;
+                pill.className = 'pill ok';
             }
 
             // ── Légende ────────────────────────────────────────────
-            // À enrichir une fois qu'on connaîtra les palettes exactes
-            // du sidecar (probablement encodées dans les PNG eux-mêmes).
-            function renderLegend(variable) {
-                const sel = document.getElementById('f-info-variable');
-                const opt = sel.options[sel.selectedIndex];
-                const unit = opt ? opt.getAttribute('data-unit') : '';
-                let html = `<h4>${opt ? opt.textContent.trim() : variable}</h4>`;
-                html += `<div style="color:#94a3b8; font-size:10px; line-height:1.4;">`
-                     + `Palette définie par le sidecar consensus-grid. `
-                     + `Unité : ${unit || '—'}.`
-                     + `</div>`;
-                html += '<div style="height:1px; background:#1e293b; margin:8px 0"></div>';
-                html += '<h4>Flèches de vent</h4>';
-                html += `<div style="color:#94a3b8; font-size:10px;">`
-                     + `Direction et intensité aux nœuds de la grille.`
-                     + `</div>`;
+            function renderLegend() {
+                const variable = document.getElementById('f-variable').value;
+                const info = variableInfo(variable);
+                if (!info) {
+                    legend.update('<em style="color:#64748b">Pas de variable sélectionnée</em>');
+                    return;
+                }
+                const grad = CMAP_CSS[info.cmap] || CMAP_CSS['RdYlGn_r'];
+                let html = `<h4>${variableLabel(variable)}</h4>`;
+                html += `<div class="scale" style="background:${grad}"></div>`;
+                html += `<div class="axis"><span>${info.vmin}</span><span>${info.vmax}</span></div>`;
+                html += `<div class="meta">Palette : <code>${info.cmap}</code></div>`;
+                if (manifest && manifest.run_init_iso) {
+                    const init = new Date(manifest.run_init_iso);
+                    const txt  = init.toLocaleString('fr-FR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', timeZone:'Europe/Paris' });
+                    html += `<div class="meta">Run : ${txt} (heure de Paris)</div>`;
+                }
                 legend.update(html);
             }
 
-            // ── Health badge ───────────────────────────────────────
+            // ── Peuplement de la toolbar à partir du manifest ──────
+            function populateUI() {
+                if (!manifest) return;
+
+                // Variables
+                const sel = document.getElementById('f-variable');
+                sel.innerHTML = '';
+                (manifest.variables || []).forEach(v => {
+                    const opt = document.createElement('option');
+                    opt.value = v.name;
+                    opt.textContent = variableLabel(v.name);
+                    sel.appendChild(opt);
+                });
+
+                // Steps
+                const stepInput = document.getElementById('f-step');
+                const steps = manifest.steps_hours || [];
+                if (steps.length > 0) {
+                    stepInput.disabled = false;
+                    stepInput.min = 0;
+                    stepInput.max = steps.length - 1;
+                    if (currentStepIx >= steps.length) currentStepIx = 0;
+                    stepInput.value = currentStepIx;
+                    document.getElementById('wm-step-label').innerHTML = fmtStepLabel(steps[currentStepIx]);
+                } else {
+                    stepInput.disabled = true;
+                    document.getElementById('wm-step-label').textContent = '—';
+                }
+
+                // Bounds
+                const b = manifest.bbox;
+                if (b && b.lat_min != null) {
+                    bounds = L.latLngBounds([b.lat_min, b.lon_min], [b.lat_max, b.lon_max]);
+                    // Au premier chargement, on centre la vue sur la bbox
+                    if (!overlay) map.fitBounds(bounds, { padding: [20, 20], maxZoom: 7 });
+                }
+
+                // Run info
+                if (manifest.run_init_iso) {
+                    const init = new Date(manifest.run_init_iso);
+                    const txt  = init.toLocaleString('fr-FR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', timeZone:'Europe/Paris' });
+                    const pill = document.getElementById('s-run');
+                    pill.textContent = `run : ${txt}`;
+                    pill.className = 'pill ok';
+                }
+            }
+
+            // ── Health ─────────────────────────────────────────────
             async function refreshHealth() {
                 try {
                     const r = await fetch(ROUTES.health, {
@@ -422,33 +376,49 @@
                 }
             }
 
+            async function loadManifest() {
+                let resp;
+                try {
+                    resp = await fetch(ROUTES.manifest, {
+                        headers: { 'Accept': 'application/json' },
+                        credentials: 'same-origin',
+                    });
+                } catch (e) {
+                    document.getElementById('s-overlay').textContent = 'manifest injoignable';
+                    document.getElementById('s-overlay').className = 'pill err';
+                    return;
+                }
+                if (!resp.ok) {
+                    document.getElementById('s-overlay').textContent = `manifest HS (${resp.status})`;
+                    document.getElementById('s-overlay').className = 'pill err';
+                    return;
+                }
+                manifest = await resp.json();
+                populateUI();
+                renderLegend();
+                drawOverlay();
+            }
+
             // ── Listeners ──────────────────────────────────────────
-            document.getElementById('f-info-variable').addEventListener('change', () => {
-                // On purge le cache du manifest pour la variable courante
-                // pas nécessaire (manifests stables), juste un re-render.
-                renderInfo();
+            document.getElementById('f-variable').addEventListener('change', () => {
+                renderLegend();
+                drawOverlay();
             });
-            document.getElementById('f-show-arrows').addEventListener('change', renderArrows);
             document.getElementById('f-dark-mode').addEventListener('change', (e) => {
                 setBaseLayer(e.target.checked ? 'dark' : 'light');
             });
-            stepInput.addEventListener('input', () => {
-                currentStepIx = parseInt(stepInput.value, 10) || 0;
-                if (currentSteps[currentStepIx]) {
-                    stepLabel.textContent = currentSteps[currentStepIx].label;
+            document.getElementById('f-step').addEventListener('input', (e) => {
+                currentStepIx = parseInt(e.target.value, 10) || 0;
+                if (manifest && manifest.steps_hours) {
+                    document.getElementById('wm-step-label').innerHTML =
+                        fmtStepLabel(manifest.steps_hours[currentStepIx]);
+                    drawOverlay();
                 }
-                // Re-applique les overlays sur le nouveau step
-                const v = document.getElementById('f-info-variable').value;
-                const m = manifestCache.get(v);
-                if (m) drawInfo(m);
-                const a = manifestCache.get('wind_arrows');
-                if (a && document.getElementById('f-show-arrows').checked) drawArrows(a);
             });
 
             // Premier rendu
             refreshHealth();
-            renderInfo().then(() => renderArrows());
-            // Refresh périodique du health (toutes les 60 s)
+            loadManifest();
             setInterval(refreshHealth, 60_000);
         })();
     </script>
