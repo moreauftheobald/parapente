@@ -398,15 +398,16 @@
                 });
             }
 
-            // Retry 2× avec backoff + cache-buster — même problématique que
-            // l'overlay : le PNG des flèches peut échouer si le sidecar
-            // hoquette ou si l'Image est interrompue par un scrub rapide.
+            // Retry 3× avec backoff sur la MÊME URL — pas de cache-buster,
+            // sinon on bypasse le proxy_cache nginx et on tape le sidecar
+            // au lieu de servir depuis le cache (= ce qui faisait planter
+            // les flèches pendant le play). nginx dédupliquera les retries
+            // identiques via `proxy_cache_lock`.
             async function loadDirectionImage(stepH) {
                 if (arrowCache.has(stepH)) return arrowCache.get(stepH);
-                const base = `${ROUTES.overlay}/wind_direction_10m/${stepH}.png`;
+                const url = `${ROUTES.overlay}/wind_direction_10m/${stepH}.png`;
                 let lastErr = null;
                 for (let attempt = 0; attempt < 3; attempt++) {
-                    const url = attempt === 0 ? base : `${base}?r=${Date.now()}_${attempt}`;
                     try {
                         const img = await loadImage(url);
                         if (!arrowCanvas) arrowCanvas = document.createElement('canvas');
@@ -510,14 +511,20 @@
             }
 
             // ── Rendu de l'overlay courant ─────────────────────────
-            // L'URL en cours est gardée pour pouvoir retry sur erreur — quand
-            // le user scrub vite, le navigateur annule la requête en cours
-            // (img.src réassigné) et Leaflet émet `error`. Idem si le sidecar
-            // hoquette sous charge. On retry 2× avec backoff + cache-buster
-            // pour bypasser une éventuelle entrée d'échec en cache navigateur.
+            // Avec le proxy_cache nginx, les PNG sont quasi instantanés en
+            // cache hit. Quand le user scrub vite, `overlay.setUrl(newURL)`
+            // annule la requête précédente → Leaflet émet `error` pour ce
+            // load annulé. On ne doit PAS retry sur ces erreurs-là (sinon
+            // on clobber le rendu avec une URL périmée).
+            //
+            // Stratégie : on garde la dernière URL souhaitée (`overlayUrl`).
+            // Sur error, on compare l'URL effectivement chargée par Leaflet
+            // à la dernière souhaitée — si elles diffèrent, c'est une
+            // annulation, on ignore. Si elles correspondent, c'est un vrai
+            // échec réseau → retry une fois sur la même URL (le cache nginx
+            // dédupliquera côté serveur).
             let overlayUrl = null;
-            let overlayRetryCount = 0;
-            const OVERLAY_MAX_RETRIES = 2;
+            let overlayRetryDone = false;
 
             function drawOverlay() {
                 if (!manifest || !bounds) return;
@@ -525,7 +532,7 @@
                 const stepH    = manifest.steps_hours[currentStepIx] ?? 0;
                 const url      = `${ROUTES.overlay}/${encodeURIComponent(variable)}/${stepH}.png`;
                 overlayUrl = url;
-                overlayRetryCount = 0;
+                overlayRetryDone = false;
 
                 if (overlay) {
                     overlay.setUrl(url);
@@ -537,26 +544,27 @@
                         className: 'wm-overlay-img',
                     }).addTo(map);
 
-                    overlay.on('error', () => {
-                        if (overlayRetryCount >= OVERLAY_MAX_RETRIES) {
+                    overlay.on('error', (e) => {
+                        // e.sourceTarget ou overlay._url contient l'URL qui a échoué.
+                        // Si c'est une URL périmée (le user a déjà passé au suivant),
+                        // on ignore — le prochain setUrl fera le boulot.
+                        const failedUrl = (e && e.sourceTarget && e.sourceTarget._url) || (overlay && overlay._url);
+                        if (failedUrl !== overlayUrl) return;
+                        if (overlayRetryDone) {
                             const p = document.getElementById('s-overlay');
-                            p.textContent = 'overlay HS (réessaie)';
+                            p.textContent = 'overlay HS';
                             p.className = 'pill err';
                             return;
                         }
-                        overlayRetryCount++;
-                        // Backoff + cache-buster pour forcer un nouveau fetch
-                        // (sinon le navigateur peut servir un échec en négatif).
-                        const bust = `?r=${Date.now()}`;
+                        // Un seul retry, même URL (nginx dédupliquera).
+                        overlayRetryDone = true;
                         setTimeout(() => {
-                            if (overlay && overlayUrl) overlay.setUrl(overlayUrl + bust);
-                        }, 400 * overlayRetryCount);
+                            if (overlay && overlayUrl === failedUrl) overlay.setUrl(overlayUrl);
+                        }, 400);
                     });
                     overlay.on('load', () => {
-                        overlayRetryCount = 0;
+                        overlayRetryDone = false;
                         const p = document.getElementById('s-overlay');
-                        // Mémorise l'état OK seulement si on est encore sur la
-                        // même URL (pas un load tardif d'une URL périmée).
                         if (p) { p.className = 'pill ok'; }
                     });
                 }
