@@ -76,6 +76,15 @@
             background: #020617;
         }
 
+        /* Rendu pixelisé de l'overlay météo : Leaflet l'agrandit avec un
+           filtrage bilinéaire par défaut, ce qui floute la vraie résolution
+           ~2.77 km/pixel du modèle. On rend chaque cellule comme un bloc
+           net (cf. la même approche que les tuiles raster MET / Windy). */
+        .wm-overlay-img {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges; /* fallback Firefox */
+        }
+
         /* Légende — L.Control bottomleft */
         .wm-legend {
             background: rgba(15,23,42,0.95);
@@ -277,10 +286,13 @@
             // wind_direction_10m est colorisé avec la cmap HSV de matplotlib.
             // La cmap HSV mappe linéairement input → teinte H (0-360°). Donc
             // chaque pixel RGB s'inverse en H qui EST l'angle de direction
-            // (en convention météo FROM). On dessine une flèche pour un
-            // échantillon de la grille (12×9 par défaut).
-            const ARROW_COLS = 12;
-            const ARROW_ROWS = 9;
+            // (en convention météo FROM).
+            //
+            // Densité adaptative : on espace les flèches d'environ ARROW_PX_SPACING
+            // pixels écran, recalculé à chaque pan/zoom. Plafonné à ARROW_MAX
+            // pour éviter de noyer la carte (et économiser le rendu DOM).
+            const ARROW_PX_SPACING = 60;
+            const ARROW_MAX        = 1500;
             let arrowCanvas = null;       // canvas offscreen pour decode pixels
             const arrowCache = new Map(); // step → ImageData
 
@@ -338,6 +350,30 @@
                 return data;
             }
 
+            // Calcule la zone et la grille où placer des flèches : intersection
+            // (viewport ∩ bbox du modèle), avec une densité ≈ ARROW_PX_SPACING
+            // pixels écran entre deux flèches.
+            function computeArrowGrid() {
+                if (!manifest || !bounds) return null;
+                const m = map.getBounds();
+                const b = manifest.bbox;
+                const latS = Math.max(m.getSouth(), b.lat_min);
+                const latN = Math.min(m.getNorth(), b.lat_max);
+                const lonW = Math.max(m.getWest(),  b.lon_min);
+                const lonE = Math.min(m.getEast(),  b.lon_max);
+                if (latS >= latN || lonW >= lonE) return null;
+
+                const swPx = map.latLngToContainerPoint([latS, lonW]);
+                const nePx = map.latLngToContainerPoint([latN, lonE]);
+                const pxW = Math.abs(nePx.x - swPx.x);
+                const pxH = Math.abs(swPx.y - nePx.y);
+                let cols = Math.max(2, Math.round(pxW / ARROW_PX_SPACING));
+                let rows = Math.max(2, Math.round(pxH / ARROW_PX_SPACING));
+                // Cap dur sur le total — au-delà ça noie la carte et plombe le DOM.
+                while (cols * rows > ARROW_MAX) { cols = Math.floor(cols * 0.9); rows = Math.floor(rows * 0.9); }
+                return { latS, latN, lonW, lonE, cols, rows };
+            }
+
             async function drawArrows() {
                 arrowsLayer.clearLayers();
 
@@ -348,6 +384,13 @@
                     return;
                 }
                 if (!manifest || !bounds) return;
+
+                const grid = computeArrowGrid();
+                if (!grid) {
+                    pill.textContent = 'flèches : hors zone';
+                    pill.className = 'pill warn';
+                    return;
+                }
 
                 const stepH = manifest.steps_hours[currentStepIx] ?? 0;
                 let pixels;
@@ -360,16 +403,17 @@
                 }
 
                 const { lat_min, lat_max, lon_min, lon_max } = manifest.bbox;
+                const { latS, latN, lonW, lonE, cols, rows } = grid;
                 const W = pixels.width, H = pixels.height;
                 const arr = pixels.data; // RGBA
                 let drawn = 0;
 
-                for (let row = 0; row < ARROW_ROWS; row++) {
-                    // 0.5 → centre de la cellule, évite les bords
-                    const lat = lat_max - ((row + 0.5) / ARROW_ROWS) * (lat_max - lat_min);
+                for (let row = 0; row < rows; row++) {
+                    // 0.5 → centre de la cellule de la grille viewport
+                    const lat = latN - ((row + 0.5) / rows) * (latN - latS);
                     const py  = Math.min(H - 1, Math.max(0, Math.round(((lat_max - lat) / (lat_max - lat_min)) * (H - 1))));
-                    for (let col = 0; col < ARROW_COLS; col++) {
-                        const lng = lon_min + ((col + 0.5) / ARROW_COLS) * (lon_max - lon_min);
+                    for (let col = 0; col < cols; col++) {
+                        const lng = lonW + ((col + 0.5) / cols) * (lonE - lonW);
                         const px  = Math.min(W - 1, Math.max(0, Math.round(((lng - lon_min) / (lon_max - lon_min)) * (W - 1))));
                         const idx = (py * W + px) * 4;
                         const r = arr[idx], g = arr[idx + 1], b = arr[idx + 2], a = arr[idx + 3];
@@ -405,6 +449,7 @@
                         opacity: 0.65,
                         pane: 'wm-overlay',
                         interactive: false,
+                        className: 'wm-overlay-img',
                     }).addTo(map);
                 }
 
@@ -533,6 +578,26 @@
                 drawArrows();
             }
 
+            // Debounce du redraw — le slider fire un `input` à chaque
+            // déplacement, on évite d'enchaîner les fetch PNG qui se
+            // marchent dessus et font clignoter / disparaître l'overlay.
+            let stepTimer = null;
+            function scheduleRedraw(delay) {
+                clearTimeout(stepTimer);
+                stepTimer = setTimeout(() => {
+                    drawOverlay();
+                    drawArrows();
+                }, delay);
+            }
+
+            // Redraw des flèches uniquement (sans recharger le PNG d'info)
+            // sur pan/zoom — la cache par step rend ça quasi instantané.
+            let arrowsTimer = null;
+            function scheduleArrowsRedraw() {
+                clearTimeout(arrowsTimer);
+                arrowsTimer = setTimeout(drawArrows, 100);
+            }
+
             // ── Listeners ──────────────────────────────────────────
             document.getElementById('f-variable').addEventListener('change', () => {
                 renderLegend();
@@ -547,12 +612,19 @@
             document.getElementById('f-step').addEventListener('input', (e) => {
                 currentStepIx = parseInt(e.target.value, 10) || 0;
                 if (manifest && manifest.steps_hours) {
+                    // Label : feedback instantané (pas de debounce)
                     document.getElementById('wm-step-label').innerHTML =
                         fmtStepLabel(manifest.steps_hours[currentStepIx]);
-                    drawOverlay();
-                    drawArrows();
+                    // Overlay + flèches : debounce 150ms (laisse le temps au
+                    // doigt de finir son geste avant de fetch).
+                    scheduleRedraw(150);
                 }
             });
+
+            // Pan/zoom → recalcule la grille des flèches (densité = écran).
+            // L'overlay PNG, lui, reste collé à sa bbox via Leaflet ; pas
+            // besoin de le redessiner.
+            map.on('moveend zoomend', scheduleArrowsRedraw);
 
             // Premier rendu
             refreshHealth();
