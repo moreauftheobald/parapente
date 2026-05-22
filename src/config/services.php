@@ -35,6 +35,16 @@ return [
         ],
     ],
 
+    'consensus_grid' => [
+        // Sidecar de calcul du consensus météo (grille pré-calculée
+        // toutes les heures, exposée en HTTP). Voir la doc du conteneur
+        // `consensus-grid` du docker-compose.
+        // - dev local : http://localhost:8082
+        // - prod docker-compose : http://consensus-grid:8082
+        'base_url' => env('CONSENSUS_GRID_BASE_URL', 'http://consensus-grid:8082'),
+        'timeout'  => (int) env('CONSENSUS_GRID_TIMEOUT', 10),
+    ],
+
     'geocoding' => [
         'geo_api_gouv' => [
             'base_url' => env('GEO_API_GOUV_BASE_URL', 'https://geo.api.gouv.fr'),

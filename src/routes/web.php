@@ -26,6 +26,7 @@ use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\IconCacheController;
 use App\Http\Controllers\MapController;
+use App\Http\Controllers\WeatherMapController;
 use App\Http\Controllers\WikiController;
 use App\Http\Controllers\User\ProfileController;
 use App\Http\Controllers\User\ScoringPageController;
@@ -34,7 +35,7 @@ use Illuminate\Support\Facades\Route;
 // Accueil — page d'atterrissage par défaut (articles / changelog + shell global)
 Route::get('/', [HomeController::class, 'index'])->name('home');
 
-// Carte météo (module 1)
+// Carte de volabilité (module 1)
 Route::get('/carte', [MapController::class, 'index'])->name('map');
 
 // Aide en ligne / pseudo-wiki (public)
@@ -46,6 +47,15 @@ Route::get('/aide/{slug}',   [WikiController::class, 'show'])->where('slug', '[a
 Route::middleware(['auth', 'admin'])->group(function () {
     Route::get('/carte-modeles',      [ModelGridController::class, 'index'])->name('model-grid.index');
     Route::get('/carte-modeles/data', [ModelGridController::class, 'data'])->name('model-grid.data');
+
+    // Carte météo (overlays consensus-grid). Admin-only le temps de
+    // stabiliser l'intégration du sidecar.
+    Route::get('/carte-meteo', [WeatherMapController::class, 'index'])->name('weather-map.index');
+    Route::get('/carte-meteo/overlay/{variable}',         [WeatherMapController::class, 'manifest'])->name('weather-map.manifest');
+    Route::get('/carte-meteo/overlay/{variable}/{step}.png', [WeatherMapController::class, 'overlay'])
+        ->where(['step' => '[A-Za-z0-9_\-:.]+'])
+        ->name('weather-map.overlay');
+    Route::get('/carte-meteo/health', [WeatherMapController::class, 'health'])->name('weather-map.health');
 });
 
 // Tampon d'icônes SpotAir : Nginx sert les fichiers déjà présents

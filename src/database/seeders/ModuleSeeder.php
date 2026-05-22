@@ -23,12 +23,21 @@ class ModuleSeeder extends Seeder
             ],
             [
                 'key'                   => 'map',
-                'label'                 => 'Carte météo',
+                'label'                 => 'Carte de volabilité',
                 'icon'                  => 'fa-solid fa-map-location-dot',
                 'route_name'            => 'map',
                 'access_level'          => 'guest',
                 'requires_registration' => false,
                 'sort_order'            => 20,
+            ],
+            [
+                'key'                   => 'weather-map',
+                'label'                 => 'Carte météo',
+                'icon'                  => 'fa-solid fa-cloud-sun',
+                'route_name'            => 'weather-map.index',
+                'access_level'          => 'admin',
+                'requires_registration' => true,
+                'sort_order'            => 25,
             ],
             [
                 'key'                   => 'logbook',

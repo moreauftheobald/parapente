@@ -1,6 +1,6 @@
 <x-app-shell
-    title="Carte météo parapente"
-    page-title="Carte météo"
+    title="Carte de volabilité parapente"
+    page-title="Carte de volabilité"
     x-data="mapApp()"
     right-class="w-full max-w-full lg:w-[clamp(420px,45vw,640px)] lg:max-w-[60vw] xl:w-[50vw] xl:max-w-[50vw]"
     main-class="overflow-hidden"
