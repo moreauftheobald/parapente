@@ -149,9 +149,23 @@
                 <input type="checkbox" id="f-show-arrows" checked>
                 <span><i class="fa-solid fa-arrow-right-long"></i> Flèches de vent</span>
             </label>
-            <label class="field chk">
-                <input type="checkbox" id="f-dark-mode">
-                <span><i class="fa-solid fa-moon"></i> Fond sombre</span>
+            <label class="field">
+                Fond
+                <select id="f-basemap">
+                    <option value="topo" selected>Topographique</option>
+                    <option value="osm">OSM standard</option>
+                    <option value="satellite">Satellite</option>
+                    <option value="light">Clair</option>
+                    <option value="dark">Sombre</option>
+                </select>
+            </label>
+            <label class="field" style="min-width:140px;">
+                Opacité
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <input type="range" id="f-opacity" min="0.1" max="1" step="0.05" value="0.5"
+                           style="min-width:90px;">
+                    <span id="f-opacity-label" style="font-family:'DM Mono',monospace; font-size:11px; color:#cbd5e1; min-width:32px; text-align:right;">50%</span>
+                </div>
             </label>
             <label class="field" style="min-width:160px;">
                 Jour
@@ -211,22 +225,35 @@
                 attributionControl: false,
             }).setView([46.5, 2.5], 6);
 
+            // Cohérent avec map/_partials/scripts/config.blade.php (carte de
+            // volabilité) — mêmes fonds, mêmes URLs. Le défaut est topo
+            // (OpenTopoMap) car son relief + bon contraste se lisent bien
+            // sous les overlays semi-transparents.
             const TILE_LAYERS = {
-                light: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-                dark:  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                topo:      { url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',                   subdomains: 'abc'  },
+                osm:       { url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                 subdomains: 'abc'  },
+                satellite: { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', subdomains: '' },
+                light:     { url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', subdomains: 'abcd' },
+                dark:      { url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',      subdomains: 'abcd' },
             };
-            let currentTile = L.tileLayer(TILE_LAYERS.light, {
+            let currentTile = L.tileLayer(TILE_LAYERS.topo.url, {
                 maxZoom: 18,
-                subdomains: 'abcd',
+                subdomains: TILE_LAYERS.topo.subdomains,
             }).addTo(map);
 
             function setBaseLayer(theme) {
+                const cfg = TILE_LAYERS[theme] || TILE_LAYERS.topo;
                 map.removeLayer(currentTile);
-                currentTile = L.tileLayer(TILE_LAYERS[theme] || TILE_LAYERS.light, {
+                currentTile = L.tileLayer(cfg.url, {
                     maxZoom: 18,
-                    subdomains: 'abcd',
+                    subdomains: cfg.subdomains,
                 }).addTo(map);
             }
+
+            // Opacité de l'overlay info, contrôlée par le slider. On stocke
+            // dans une variable pour pouvoir la ré-appliquer à chaque redraw
+            // (sinon créer un nouveau L.imageOverlay reset l'opacité au défaut).
+            let overlayOpacity = parseFloat(document.getElementById('f-opacity').value);
 
             // Pane dédié pour l'overlay (au-dessus des tiles, sous les contrôles)
             map.createPane('wm-overlay');
@@ -559,9 +586,10 @@
 
                 if (overlay) {
                     overlay.setUrl(url);
+                    overlay.setOpacity(overlayOpacity);
                 } else {
                     overlay = L.imageOverlay(url, bounds, {
-                        opacity: 0.65,
+                        opacity: overlayOpacity,
                         pane: 'wm-overlay',
                         interactive: false,
                         className: 'wm-overlay-img',
@@ -884,8 +912,14 @@
             document.getElementById('f-show-arrows').addEventListener('change', () => {
                 drawArrows();
             });
-            document.getElementById('f-dark-mode').addEventListener('change', (e) => {
-                setBaseLayer(e.target.checked ? 'dark' : 'light');
+            document.getElementById('f-basemap').addEventListener('change', (e) => {
+                setBaseLayer(e.target.value);
+            });
+            document.getElementById('f-opacity').addEventListener('input', (e) => {
+                overlayOpacity = parseFloat(e.target.value) || 0.5;
+                document.getElementById('f-opacity-label').textContent =
+                    Math.round(overlayOpacity * 100) + '%';
+                if (overlay) overlay.setOpacity(overlayOpacity);
             });
             // Changement manuel de jour → met en pause, conserve l'heure si
             // dispo, sinon va sur la 1re heure du jour choisi.
