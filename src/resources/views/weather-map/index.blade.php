@@ -312,9 +312,11 @@
             }
 
             function makeArrowIcon(direction) {
-                // Flèche pointant où le vent VA (= direction FROM + 180°).
-                // SVG triangle vers le haut, ancré au centre, rotation CSS.
-                const angle = (direction + 180) % 360;
+                // Convention parapente / manche à air : la flèche pointe vers
+                // D'OÙ vient le vent (= valeur de direction FROM directement,
+                // sans offset). Un pilote lit la manche à air comme "le vent
+                // vient de là", il atterrit face à elle.
+                const angle = ((direction % 360) + 360) % 360;
                 const svg = `
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22"
                          style="transform: rotate(${angle}deg); transform-origin: 11px 11px;">
@@ -435,15 +437,25 @@
             }
 
             // ── Rendu de l'overlay courant ─────────────────────────
+            // L'URL en cours est gardée pour pouvoir retry sur erreur — quand
+            // le user scrub vite, le navigateur annule la requête en cours
+            // (img.src réassigné) et Leaflet émet `error`. Idem si le sidecar
+            // hoquette sous charge. On retry 2× avec backoff + cache-buster
+            // pour bypasser une éventuelle entrée d'échec en cache navigateur.
+            let overlayUrl = null;
+            let overlayRetryCount = 0;
+            const OVERLAY_MAX_RETRIES = 2;
+
             function drawOverlay() {
                 if (!manifest || !bounds) return;
                 const variable = document.getElementById('f-variable').value;
                 const stepH    = manifest.steps_hours[currentStepIx] ?? 0;
                 const url      = `${ROUTES.overlay}/${encodeURIComponent(variable)}/${stepH}.png`;
+                overlayUrl = url;
+                overlayRetryCount = 0;
 
                 if (overlay) {
                     overlay.setUrl(url);
-                    overlay.setBounds(bounds);
                 } else {
                     overlay = L.imageOverlay(url, bounds, {
                         opacity: 0.65,
@@ -451,6 +463,29 @@
                         interactive: false,
                         className: 'wm-overlay-img',
                     }).addTo(map);
+
+                    overlay.on('error', () => {
+                        if (overlayRetryCount >= OVERLAY_MAX_RETRIES) {
+                            const p = document.getElementById('s-overlay');
+                            p.textContent = 'overlay HS (réessaie)';
+                            p.className = 'pill err';
+                            return;
+                        }
+                        overlayRetryCount++;
+                        // Backoff + cache-buster pour forcer un nouveau fetch
+                        // (sinon le navigateur peut servir un échec en négatif).
+                        const bust = `?r=${Date.now()}`;
+                        setTimeout(() => {
+                            if (overlay && overlayUrl) overlay.setUrl(overlayUrl + bust);
+                        }, 400 * overlayRetryCount);
+                    });
+                    overlay.on('load', () => {
+                        overlayRetryCount = 0;
+                        const p = document.getElementById('s-overlay');
+                        // Mémorise l'état OK seulement si on est encore sur la
+                        // même URL (pas un load tardif d'une URL périmée).
+                        if (p) { p.className = 'pill ok'; }
+                    });
                 }
 
                 const pill = document.getElementById('s-overlay');
