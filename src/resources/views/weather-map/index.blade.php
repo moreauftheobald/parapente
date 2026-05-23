@@ -361,8 +361,21 @@
                 qui_vole_models_count:       'Modèles disponibles',
                 qui_vole_models_converging:  'Modèles convergents',
             };
+
+            // Index tolérant pour le lookup : normalise (lowercase + retire
+            // les underscores) pour matcher des variantes comme `dewpoint_2m`
+            // ↔ `dew_point_2m`, `temperature_850hpa` ↔ `temperature_850hPa`,
+            // `qui_vol_storm_risk` ↔ `qui_vole_storm_risk`.
+            const _normalize = s => String(s).toLowerCase().replace(/_/g, '');
+            const VAR_LABELS_LOOSE = Object.fromEntries(
+                Object.entries(VAR_LABELS).map(([k, v]) => [_normalize(k), v])
+            );
+
             function variableLabel(name) {
-                return VAR_LABELS[name] || name;
+                if (!name) return '';
+                if (VAR_LABELS[name]) return VAR_LABELS[name];
+                const loose = VAR_LABELS_LOOSE[_normalize(name)];
+                return loose || name;
             }
 
             // Palette de repli **sémantique** par variable — utilisée quand
@@ -429,15 +442,21 @@
             //   2. nom sans suffixe `_alpha` (alpha-encodées du sidecar)
             //   3. palette par défaut sémantique pour cette variable
             //   4. fallback générique RdYlGn_r
+            // Même normalisation tolérante pour la palette de repli.
+            const VAR_DEFAULT_CMAP_LOOSE = Object.fromEntries(
+                Object.entries(VAR_DEFAULT_CMAP).map(([k, v]) => [_normalize(k), v])
+            );
+
             function cmapCss(cmapName, variableName) {
                 if (cmapName && CMAP_CSS[cmapName]) return CMAP_CSS[cmapName];
                 if (cmapName && cmapName.endsWith('_alpha')) {
                     const base = cmapName.slice(0, -'_alpha'.length);
                     if (CMAP_CSS[base]) return CMAP_CSS[base];
                 }
-                if (variableName && VAR_DEFAULT_CMAP[variableName]) {
-                    const fallback = VAR_DEFAULT_CMAP[variableName];
-                    if (CMAP_CSS[fallback]) return CMAP_CSS[fallback];
+                if (variableName) {
+                    const fb = VAR_DEFAULT_CMAP[variableName]
+                            || VAR_DEFAULT_CMAP_LOOSE[_normalize(variableName)];
+                    if (fb && CMAP_CSS[fb]) return CMAP_CSS[fb];
                 }
                 return CMAP_CSS['RdYlGn_r'];
             }
