@@ -506,8 +506,12 @@
             // Densité adaptative : on espace les flèches d'environ ARROW_PX_SPACING
             // pixels écran, recalculé à chaque pan/zoom. Plafonné à ARROW_MAX
             // pour éviter de noyer la carte (et économiser le rendu DOM).
-            const ARROW_PX_SPACING = 60;
-            const ARROW_MAX        = 1500;
+            //
+            // Espacement 30 px ≈ 1 flèche tous les ~1 cm écran (≈ ×4 de
+            // densité par rapport au réglage initial 60 px). Le SVG en stroke
+            // uniquement encaisse facilement, on plafonne à 6000 markers.
+            const ARROW_PX_SPACING = 30;
+            const ARROW_MAX        = 6000;
             let arrowCanvas = null;       // canvas offscreen pour decode pixels
             const arrowCache = new Map(); // step → ImageData
 
