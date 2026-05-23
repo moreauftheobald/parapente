@@ -87,8 +87,9 @@ src/                        ← Racine Laravel
 │   │   │   │                                users, sync, logs, articles, modules…)
 │   │   │   ├── HomeController.php        ← Page d'accueil (articles + épinglé « À la une »)
 │   │   │   ├── IconCacheController.php   ← Tampon disque icônes SpotAir
-│   │   │   ├── MapController.php         ← Vue carte
+│   │   │   ├── MapController.php         ← Vue carte de volabilité (/carte)
 │   │   │   ├── ModelGridController.php   ← Module « Carte des modèles » (admin-only, FF_model_reliability.md)
+│   │   │   ├── WeatherMapController.php  ← Module « Carte météo » (admin-only, proxy sidecar consensus-grid)
 │   │   │   └── WikiController.php        ← Pseudo-wiki / aide en ligne (/aide)
 │   │   ├── Requests/Api/
 │   │   │   ├── ScoringRules.php           ← Catalogue de règles validation partagé
@@ -360,7 +361,11 @@ Notes :
 
 ---
 
-## Module 1 — Carte météo (IMPLÉMENTÉ)
+## Module 1 — Carte de volabilité (IMPLÉMENTÉ)
+
+> Anciennement « Carte météo » jusqu'au 2026-05-23. Renommée pour
+> distinguer du nouveau module « Carte météo » (cf. plus bas) qui
+> superpose des overlays consensus-grid sur une vue Leaflet.
 
 ### Vue carte (`map/index.blade.php`)
 
@@ -794,6 +799,188 @@ visibility module + middleware.
 > suffisante (intégration future FFVL) : aller dans
 > `/admin/modules` et passer `access_level` à `'user'` ou `'guest'`.
 > Aucun code à modifier.
+
+---
+
+## Module — Carte météo (`/carte-meteo`, IMPLÉMENTÉ)
+
+> Renommage : ce qu'on appelait « Carte météo » jusqu'au 2026-05-23
+> est désormais « Carte de volabilité ». Le module décrit ici est le
+> NOUVEAU module qui visualise les overlays météo bruts du sidecar
+> `parapente-consensus-grid`.
+
+Module front qui superpose des overlays raster (vent, températures,
+nuages, indicateurs convectifs, plafond de vol estimé, risque orageux…)
+sur une carte Leaflet. Les couches viennent d'un sidecar Python
+`consensus-grid` qui produit toutes les heures un NetCDF de consensus
+multi-modèles + 1 PNG pré-rendu par (variable × step horaire).
+
+**Module en table `modules`** : key=`weather-map`, route=`weather-map.index`,
+`access_level='admin'` (caché aux non-admins le temps que les couches
+soient stabilisées).
+
+### Architecture côté Laravel — `WeatherMapController`
+
+Quatre routes, toutes sous middleware `['auth', 'admin']` :
+
+| Route | Rôle |
+|---|---|
+| `GET /carte-meteo` | Vue Blade (Leaflet plein écran). |
+| `GET /carte-meteo/manifest` | Proxy de `/v1/overlay` du sidecar. **Cache Redis 10 min uniquement sur succès** ; les erreurs ne sont jamais cachées (évite qu'un hoquet sidecar fige la carte pour 10 min). |
+| `GET /carte-meteo/overlay/{variable}/{step}.png` | Fallback dev (en prod, nginx intercepte avant que PHP soit appelé — cf. plus bas). |
+| `GET /carte-meteo/health` | Proxy `/health`, polled toutes les 60 s côté front. |
+| `GET /carte-meteo/progress` | Proxy `/progress`, polled toutes les 30 s pour le badge « run en cours ». |
+
+**Config** : `services.consensus_grid.base_url` (variable d'env
+`CONSENSUS_GRID_BASE_URL`, défaut `http://consensus-grid:8082`) et
+`CONSENSUS_GRID_TIMEOUT`. Routes déclarées sous le groupe
+`middleware(['auth', 'admin'])` de `routes/web.php` à côté de
+`carte-modeles`.
+
+### Architecture nginx — `proxy_pass` direct vers le sidecar
+
+```nginx
+location ~ ^/carte-meteo/overlay/(.+)$ {
+    set $consensus_grid_upstream "consensus-grid:8082";
+    proxy_pass http://$consensus_grid_upstream/v1/overlay/$1$is_args$args;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $host;
+    ...
+    access_log off;
+}
+```
+
+Trois subtilités structurantes :
+
+1. **Forme regex + URI explicite** : la combinaison `rewrite + proxy_pass http://$variable;` est buggée dans certaines versions de nginx (renvoie 500 silencieusement). On utilise donc une `location ~ ^…(.+)$` avec capture, et on injecte explicitement `$1$is_args$args` dans l'URL en aval pour préserver la query string (notamment `?run=…`).
+2. **DNS dynamique** : `resolver 127.0.0.11 valid=10s;` au scope serveur. Couplé à `proxy_pass http://$variable;`, nginx re-résout le DNS Docker à chaque cycle au lieu de geler l'IP au démarrage. Sans ça, tout `docker compose recreate consensus-grid` cassait les overlays jusqu'au prochain restart nginx.
+3. **Pas de cache nginx** : le sidecar pré-rend les PNG sur disque et les sert en ~5 ms via `FileResponse`. Le HTTP cache navigateur (`Cache-Control: public, max-age=3600`) + le cache-buster `?run=<run_init_unix>` côté front suffisent. Pas de `proxy_cache_path`, pas de volume dédié.
+
+Conteneur `parapente_nginx` attaché à `meteo-net` dans
+`docker-compose.prod.yml` pour pouvoir résoudre `consensus-grid:8082`.
+Le sidecar doit lui-même déclarer `meteo-net` comme `external: true`
+dans son propre `docker-compose.prod.yml` pour que l'alias court
+`consensus-grid` soit enregistré au démarrage.
+
+### Front (`weather-map/index.blade.php`)
+
+Une seule vue Blade, un seul script inline, pas de prefetcher
+asynchrone (le sidecar est assez rapide pour servir à la demande).
+
+**Toolbar** : sélecteur de variable (peuplé dynamiquement depuis le
+manifest), sélecteur de fond, slider d'opacité, sélecteurs Jour+Heure,
+bouton Play/Pause + cadence (0.5/1/2/5 s par créneau, raccourci
+clavier Espace).
+
+**Fonds de carte (5 options)** :
+| Clé | Label | URL |
+|---|---|---|
+| `topo` | OpenTopoMap (relief) | `tile.opentopomap.org` (défaut) |
+| `osm` | OSM standard | `tile.openstreetmap.org` |
+| `satellite` | Satellite + noms | `World_Imagery` Esri + overlay `World_Boundaries_and_Places` (pane `wm-labels` z-index 380 pour rester lisible sous l'overlay météo z-index 350) |
+| `light` | Clair | CartoDB Voyager |
+| `dark` | Sombre | CartoDB dark_all |
+
+**Étages de panes Leaflet** (z-index) :
+- `200` (tiles, défaut Leaflet) — fond de carte
+- `350` `wm-overlay` — PNG d'overlay météo (avec `image-rendering: pixelated`
+  pour ne pas flouter la résolution native du modèle)
+- `380` `wm-labels` — labels du satellite (uniquement actif en mode
+  Satellite + noms)
+- `400` `wm-arrows` — flèches de vent vectorielles SVG
+
+**Flèches de vent** : décodées **côté navigateur** depuis le PNG
+`wind_direction_10m`. La cmap HSV de matplotlib mappe linéairement
+input → teinte H (0–360°), donc `RGB → H = direction FROM`. Canvas
+offscreen, `getImageData`, sampling à une densité adaptative au
+viewport (1 flèche / ~30 px écran, plafonnée à 6000 markers, redessinées
+à chaque pan/zoom debouncé). SVG minimaliste en stroke (path
+`M11 18 V4 M6 10 L11 4 L16 10`, halo blanc + trait sombre) — beaucoup
+plus léger à rendre que l'ancien polygon plein. Cache mémoire
+`arrowCache` indexé par step (ImageData décodée), purgé au changement
+de run du sidecar.
+
+**Légende** :
+- Lit `palette.stops` du manifest sidecar pour construire un
+  `linear-gradient` CSS exact, quelle que soit la cmap matplotlib
+  (built-in ou custom). Trois emplacements possibles tolérés :
+  `info.cmap_stops`, `info.stops`, `info.palette.stops`.
+- **Détection des cmaps alpha-encoded** (`clouds_alpha`, `cape_alpha`,
+  `cin_alpha`, etc.) : le sidecar ne peut pas exposer le canal alpha
+  dans le sampling, toutes les stops ressortent avec la même couleur
+  RGB. Le front détecte ce cas (`uniqueColors.size === 1`) et affiche
+  un fondu `transparent → couleur opaque` qui rend correctement la
+  sémantique « basse intensité = transparent, haute intensité = opaque ».
+- 5 graduations linéaires évenly-spaced (4 pour `qui_vole_storm_risk`
+  qui est catégoriel 0..3).
+- Vents : conversion m/s → km/h à l'affichage (× 3.6, entiers).
+  Le PNG reste mappé sur la grille m/s côté sidecar, seul l'axe de
+  la légende est converti.
+- Fallback : `CMAP_CSS` (table CSS hardcodée matplotlib standards)
+  + `VAR_DEFAULT_CMAP` (palette sémantique par variable, ex.
+  `precipitation` → toujours rendu en `Blues`, peu importe ce que
+  raconte le manifest). Évite qu'un overlay bleu se retrouve avec
+  une légende vert→rouge.
+- Tous les libellés et palettes ont un **lookup tolérant** (lowercase
+  + retrait des underscores) — résiste aux dérives de nommage style
+  `temperature_850hpa` vs `temperature_850hPa`, `dewpoint_2m` vs
+  `dew_point_2m`.
+
+**Player horaire** : `setInterval` qui incrémente `currentStepIx`,
+boucle à la fin de la prévision (~120 h). Sélecteurs Jour/Heure
+synchronisés en live ; les manipulations manuelles mettent en pause.
+Token de séquence dans `drawArrows` pour éviter les rendus périmés
+lors de scrubs rapides.
+
+**Détection live de nouveau run** : poll du manifest toutes les 60 s,
+si `run_init_unix` change → purge `arrowCache`, redraw overlay + flèches,
+les URLs incluent `?run=<run_init_unix>` donc le navigateur invalide
+automatiquement son HTTP cache.
+
+**Badge `/progress`** : pendant qu'un run consensus tourne côté
+sidecar, affiche `run en cours : variable (xx %, N min)`. Caché en
+`idle` / `completed` / `failed` (sauf en cas d'erreur, où il bascule
+en rouge avec le détail).
+
+### Variables exposées (~22 layers)
+
+Le sélecteur de variable filtre `wind_direction_10m` (consommé en
+interne pour les flèches, pas montré comme couche d'info indépendante).
+Les autres sont organisés par catégories dans `VAR_LABELS` :
+
+- **Surface 10 m / 2 m** : `wind_speed_10m`, `wind_gusts_10m`,
+  `precipitation`, `relative_humidity_2m`, `temperature_2m`,
+  `dew_point_2m`, `cloud_cover_{low,mid,high}`
+- **Altitude ~1500 m / 850 hPa** : `temperature_850hPa`,
+  `wind_speed_850hPa`, `wind_direction_850hPa`
+- **Indicateurs convectifs / orageux** : `cape`, `convective_inhibition`,
+  `lifted_index`, `convective_precipitation`, `boundary_layer_height`
+- **Variables propriétaires Qui-Vole** : `qui_vole_cloud_base` (plafond
+  de vol estimé via Espy côté sidecar), `qui_vole_storm_risk` (0..3),
+  `qui_vole_models_count`, `qui_vole_models_converging`
+
+Tous les labels sont en français parapente : « Vent au sol — moyen
+(km/h) », « Plafond thermique — couche limite (m) », « Base des nuages —
+plafond de vol (m) », « Indice de stabilité — LI (K) », etc. La conversion
+m/s → km/h pour les vents se fait à l'affichage uniquement.
+
+### Points d'attention
+
+- **Le sidecar doit être sur `meteo-net`** (et déclarer cet alias DNS
+  via `networks.meteo-net.external: true` dans son propre compose).
+  Sinon, `consensus-grid` n'est pas résolvable depuis nginx.
+- **`wind_direction_10m` reste avec cmap HSV** côté sidecar — c'est la
+  source de données pour la couche flèches client-side. Si la cmap
+  change, le décodeur RGB → angle casse silencieusement.
+- **`palette.stops` est best-effort** : si le sidecar évolue sans
+  exposer les stops, le front retombe sur sa table CSS hardcodée +
+  palette sémantique par variable (donc pas de régression mais légende
+  approximative).
+- L'overlay PNG utilise `image-rendering: pixelated` pour ne pas
+  flouter la résolution native du modèle. Ne pas migrer vers un
+  filtrage lissé sans accord — c'est volontaire pour montrer la maille
+  effective ~2.5 km de la grille consensus.
 
 ---
 

@@ -11,6 +11,142 @@ Conventions :
 
 ---
 
+## 2026-05-23 — Nouvelle « Carte météo » (overlays consensus-grid) + renommage de l'ancienne carte
+
+L'ancienne carte (`/carte`) est renommée **« Carte de volabilité »** et
+un nouveau module **« Carte météo »** (`/carte-meteo`) est introduit,
+alimenté par un sidecar Python `consensus-grid` qui pré-calcule un
+consensus multi-modèles toutes les heures et expose des overlays PNG
+pré-rendus. Page admin-only le temps de stabiliser l'intégration.
+
+### Ajouté
+
+- **Module `weather-map`** dans la table `modules`, libellé « Carte
+  météo », route `weather-map.index`, `access_level = 'admin'`.
+  Migration `2026_05_22_100000_rename_map_and_add_weather_map_module.php`
+  (idempotente, renomme aussi `map` → « Carte de volabilité »).
+- **Vue `weather-map/index.blade.php`** — Leaflet plein écran avec :
+  - Sélecteur de fond (OpenTopoMap (défaut, relief), OSM standard,
+    Satellite + noms (Esri World_Imagery + World_Boundaries_and_Places
+    en pane séparé z-index 380 pour rester lisible sous l'overlay),
+    Clair (Voyager), Sombre (CartoDB dark_all)).
+  - Sélecteur de variable peuplé dynamiquement depuis le manifest du
+    sidecar (~22 layers : surface 10 m / 2 m, altitude 850 hPa,
+    CAPE / CIN / Lifted Index / précip. convectives / couche limite,
+    et variables propriétaires `qui_vole_cloud_base`, `qui_vole_storm_risk`,
+    `qui_vole_models_count/converging`).
+  - **Slider d'opacité** (10–100 %, défaut 50 %).
+  - **Player horaire** : sélecteurs *Jour* + *Heure* (libellés relatifs
+    « Aujourd'hui · vendredi 22 mai », heure de Paris), bouton ▶ Play / ⏸ Pause,
+    sélecteur de cadence (0.5 / 1 / 2 / 5 s par créneau). Espace = play/pause.
+  - **Flèches de vent vectorielles** décodées en canvas côté navigateur
+    depuis le PNG `wind_direction_10m` (cmap HSV bijective angle ↔ teinte,
+    pas d'endpoint séparé côté sidecar). Densité adaptative au viewport
+    (1 flèche / ~30 px écran, plafonnée à 6000 markers), redessinées au
+    pan/zoom. SVG minimaliste « → » en stroke avec halo blanc.
+  - **Légende dynamique** : lit `palette.stops` du manifest sidecar pour
+    construire un `linear-gradient` CSS exact, peu importe la cmap
+    matplotlib (built-in ou custom comme `wind_speed_parapente`).
+    Détection auto des cmaps alpha-encoded (toutes les stops avec la
+    même couleur RGB ⇒ fondu transparent → opaque). 5 graduations
+    évenly-spaced (4 pour `qui_vole_storm_risk`). Vents convertis
+    m/s → km/h à l'affichage.
+  - **Badge `/progress`** : pendant qu'un run consensus tourne côté
+    sidecar, affiche `run en cours : variable (xx %, N min)`. Caché
+    en `idle` / `completed`.
+  - **Détection live de nouveau run** : poll du manifest toutes les
+    60 s, bascule automatique des URLs (cache-buster `?run=<run_init_unix>`)
+    sans rechargement de la page.
+
+- **`WeatherMapController`** — 4 routes Laravel, toutes sous middleware
+  `['auth', 'admin']` :
+  - `GET /carte-meteo` → vue Blade
+  - `GET /carte-meteo/manifest` → proxy de `/v1/overlay` du sidecar
+    (cache Redis 10 min sur succès uniquement, jamais sur erreur)
+  - `GET /carte-meteo/overlay/{variable}/{step}.png` → fallback dev /
+    en prod nginx intercepte avant que PHP soit appelé
+  - `GET /carte-meteo/health` → proxy de `/health` (refresh 60 s côté
+    front pour le pill `sidecar`)
+  - `GET /carte-meteo/progress` → proxy de `/progress` (refresh 30 s)
+- **Config** : `services.consensus_grid.base_url`
+  (`CONSENSUS_GRID_BASE_URL`, défaut `http://consensus-grid:8082`)
+  et `CONSENSUS_GRID_TIMEOUT`.
+
+- **nginx prod** : un bloc `location ~ ^/carte-meteo/overlay/(.+)$`
+  proxifie directement les PNG vers le sidecar (sans PHP) via
+  `proxy_pass http://$consensus_grid_upstream/v1/overlay/$1$is_args$args`.
+  Pattern regex + capture + URI explicite + `$is_args$args` pour
+  préserver la query string. Resolver Docker (`127.0.0.11`) en scope
+  serveur, ce qui re-résout le DNS à chaque requête → la recréation
+  du conteneur sidecar ne fige plus l'IP côté nginx. Pas de cache
+  nginx (le sidecar sert les PNG en ~5 ms via FileResponse, le HTTP
+  cache navigateur suffit). Conteneur `parapente_nginx` ajouté au
+  réseau Docker `meteo-net` dans `docker-compose.prod.yml`.
+
+- **Carte de volabilité (panneau droit)** :
+  - Altitude du site affichée dans l'en-tête, à côté du nom / niveau /
+    orientation / fenêtre solaire.
+  - **Tooltips au survol** des trois zones du graphe « Synthèse » :
+    tuiles nuageuses (▲ Hautes / ▬ Moyennes / ▼ Basses), barres de
+    vent (Moy / Max / Min / Direction avec rose des vents), plafond
+    estimé (Moy / Max / Min + rappel altitude du décollage). Curseur
+    vertical en pointillés + tooltip flottant Alpine qui réutilise
+    `app.tooltip` du système multi-modèles. Token de séquence sur
+    `drawArrows` pour éviter les rendus périmés lors de scrubs rapides.
+
+### Modifié
+
+- Module `map` (`/carte`) renommé en **« Carte de volabilité »**
+  (label uniquement, route inchangée pour ne pas casser les signets).
+- Middleware `RecordPageView` : ajout de `/carte-meteo/overlay/` à la
+  liste des préfixes ignorés pour ne pas polluer les KPI de trafic
+  (migration data `2026_05_22_120000_purge_weather_map_overlay_page_views.php`
+  purge rétroactivement les éventuelles entrées historiques, calquée
+  sur la purge `/icons-cache/` de mai).
+
+### Déploiement
+
+- `docker-compose.prod.yml` : `parapente-nginx` attaché à `meteo-net`
+  pour pouvoir résoudre `consensus-grid:8082` côté upstream.
+- Le sidecar `parapente-consensus-grid` doit également déclarer
+  `meteo-net` comme réseau externe dans son propre `docker-compose.prod.yml`
+  pour que le DNS Docker enregistre l'alias court `consensus-grid` au
+  démarrage (sinon il faut `docker network connect --alias consensus-grid`
+  manuellement après chaque recréation).
+- Pas de migration applicative supplémentaire requise au-delà des deux
+  migrations citées ci-dessus.
+
+### Notes contrat sidecar
+
+Format du manifest `/v1/overlay/{variable}` consommé par la légende :
+
+```json
+{
+  "palette": {
+    "cmap": "wind_speed_parapente",
+    "vmin": 0.0,
+    "vmax": 11.111,
+    "stops": [
+      {"t": 0.0,   "color": "#190091"},
+      ...
+      {"t": 1.0,   "color": "#fc0320"}
+    ]
+  }
+}
+```
+
+Le front cherche les stops à trois emplacements (`info.cmap_stops`,
+`info.stops`, `info.palette.stops`) pour tolérer une légère dérive
+de contrat. Fallback final sur l'ancienne table CSS hardcodée
+(`CMAP_CSS`) si rien n'est trouvé — aucune régression en cas de
+rollback. Les cmaps alpha-encoded (clouds_alpha, cape_alpha, etc.)
+sortent toutes les stops avec la même couleur RGB côté sidecar
+(l'alpha est dropped au sampling matplotlib) ; le front détecte ce
+cas et affiche un fondu transparent → opaque qui rend correctement
+la sémantique de la couche.
+
+---
+
 ## 2026-05-19 — Nouveau module front « Carte des modèles » + écran horizon
 
 Suite immédiate de la phase 2.5 livrée la veille. Deux ajouts
