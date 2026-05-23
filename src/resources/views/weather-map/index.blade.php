@@ -531,13 +531,27 @@
                 // D'OÙ vient le vent (= valeur de direction FROM directement,
                 // sans offset). Un pilote lit la manche à air comme "le vent
                 // vient de là", il atterrit face à elle.
+                //
+                // Dessin minimaliste type "→" : un trait droit + une pointe
+                // en V au sommet. Deux passes :
+                //   - un stroke blanc épais en dessous = halo de contraste
+                //     (lisible sur basemap sombre, satellite, OSM clair)
+                //   - un stroke noir-bleuté plus fin par-dessus = forme nette
+                // Beaucoup plus léger à rendre que l'ancien polygon plein.
+                //
+                // Avec `transform-origin: 11px 11px` (centre exact), rotation
+                // CSS positive horaire :
+                //   angle = 0   → pointe en haut    (= Nord, wind FROM N)
+                //   angle = 90  → pointe à droite   (= Est,  wind FROM E)
+                //   angle = 180 → pointe en bas     (= Sud,  wind FROM S)
+                //   angle = 270 → pointe à gauche   (= Ouest, wind FROM W)
                 const angle = ((direction % 360) + 360) % 360;
+                const path = 'M11 18 V4 M6 10 L11 4 L16 10';
                 const svg = `
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22"
                          style="transform: rotate(${angle}deg); transform-origin: 11px 11px;">
-                        <path d="M11 3 L15 13 L11 11 L7 13 Z"
-                              fill="rgba(15,23,42,0.85)"
-                              stroke="rgba(255,255,255,0.9)" stroke-width="0.8" stroke-linejoin="round"/>
+                        <path d="${path}" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="3"   stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="${path}" fill="none" stroke="rgba(15,23,42,0.95)"   stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>`;
                 return L.divIcon({
                     className: 'wm-arrow-icon',
