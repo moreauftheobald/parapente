@@ -334,15 +334,30 @@
             // de label FR — on les map ici. Les variables non listées
             // tombent sur le nom technique (fallback).
             const VAR_LABELS = {
-                wind_speed_10m:              'Vent moyen 10 m (km/h)',
-                wind_gusts_10m:              'Rafales 10 m (km/h)',
-                wind_direction_10m:          'Direction du vent (°)',
+                // ── Couches de surface (10 m / 2 m) ─────────────────
+                wind_speed_10m:              'Vent moyen 10 m (m/s)',
+                wind_gusts_10m:              'Rafales 10 m (m/s)',
+                wind_direction_10m:          'Direction du vent 10 m (°)',
                 precipitation:               'Précipitations (mm/h)',
                 relative_humidity_2m:        'Humidité relative 2 m (%)',
                 temperature_2m:              'Température 2 m (°C)',
+                dew_point_2m:                'Point de rosée 2 m (°C)',
                 cloud_cover_low:             'Nuages bas (%)',
                 cloud_cover_mid:             'Nuages moyens (%)',
                 cloud_cover_high:            'Nuages hauts (%)',
+                // ── Couches d'altitude (850 hPa ≈ 1500 m) ───────────
+                temperature_850hPa:          'Température 850 hPa (°C)',
+                wind_speed_850hPa:           'Vent 850 hPa (m/s)',
+                wind_direction_850hPa:       'Direction du vent 850 hPa (°)',
+                // ── Indicateurs convectifs ──────────────────────────
+                cape:                        'CAPE — énergie convective (J/kg)',
+                convective_inhibition:       'CIN — inhibition convective (J/kg)',
+                lifted_index:                'Lifted Index — stabilité (K)',
+                convective_precipitation:    'Précip. convectives (mm/h)',
+                boundary_layer_height:       'Hauteur de la couche limite (m)',
+                // ── Variables propriétaires Qui-Vole ────────────────
+                qui_vole_cloud_base:         'Plafond de vol estimé (m AMSL)',
+                qui_vole_storm_risk:         'Risque orageux (0 nul → 3 fort)',
                 qui_vole_models_count:       'Modèles disponibles',
                 qui_vole_models_converging:  'Modèles convergents',
             };
@@ -353,14 +368,43 @@
             // Dégradés CSS pour la légende — calqués (à la louche) sur les
             // colormaps matplotlib utilisées côté sidecar. Sert juste à
             // donner un repère visuel ; la vérité-terrain reste le PNG.
+            // Pour les colormaps custom à canal alpha (clouds_alpha, etc.),
+            // on simule en superposant la teinte sur un damier transparent.
             const CMAP_CSS = {
-                'RdYlGn_r':  'linear-gradient(to right, #006837, #a6d96a, #ffffbf, #fdae61, #d73027)',
-                'RdYlGn':    'linear-gradient(to right, #d73027, #fdae61, #ffffbf, #a6d96a, #006837)',
-                'Blues':     'linear-gradient(to right, #f7fbff, #6baed6, #08306b)',
-                'Greys':     'linear-gradient(to right, #ffffff, #969696, #000000)',
-                'RdBu_r':    'linear-gradient(to right, #053061, #67a9cf, #f7f7f7, #ef8a62, #67001f)',
-                'hsv':       'linear-gradient(to right, red, yellow, lime, cyan, blue, magenta, red)',
+                // ── matplotlib séquentielles linéaires ───────────────
+                'RdYlGn_r':   'linear-gradient(to right, #006837, #a6d96a, #ffffbf, #fdae61, #d73027)',
+                'RdYlGn':     'linear-gradient(to right, #d73027, #fdae61, #ffffbf, #a6d96a, #006837)',
+                'Blues':      'linear-gradient(to right, #f7fbff, #6baed6, #08306b)',
+                'Blues_r':    'linear-gradient(to right, #08306b, #6baed6, #f7fbff)',
+                'Reds':       'linear-gradient(to right, #fff5f0, #fb6a4a, #67000d)',
+                'Greys':      'linear-gradient(to right, #ffffff, #969696, #000000)',
+                'RdBu_r':     'linear-gradient(to right, #053061, #67a9cf, #f7f7f7, #ef8a62, #67001f)',
+                'RdBu':       'linear-gradient(to right, #67001f, #ef8a62, #f7f7f7, #67a9cf, #053061)',
+                'BrBG':       'linear-gradient(to right, #543005, #dfc27d, #f5f5f5, #80cdc1, #003c30)',
+                'viridis':    'linear-gradient(to right, #440154, #3b528b, #21918c, #5ec962, #fde725)',
+                'hsv':        'linear-gradient(to right, red, yellow, lime, cyan, blue, magenta, red)',
+                // ── customs alpha-encodées (sidecar) ─────────────────
+                // Nom exact dans le manifest susceptible de varier — on
+                // résout via cmapCss() qui matche aussi en heuristique.
+                'clouds_alpha':         'linear-gradient(to right, rgba(255,255,255,0), rgba(255,255,255,1))',
+                'rain_alpha':           'linear-gradient(to right, rgba(8,48,107,0), rgba(8,48,107,1))',
+                'precipitation_alpha':  'linear-gradient(to right, rgba(8,48,107,0), rgba(8,48,107,1))',
+                'storm_alpha':          'linear-gradient(to right, rgba(34,197,94,0), rgba(250,204,21,0.5), rgba(249,115,22,0.8), rgba(220,38,38,1))',
             };
+
+            // Résout un dégradé CSS à partir du nom de cmap renvoyé par le
+            // manifest, avec heuristique de repli pour les noms custom du
+            // sidecar (préfixe/suffixe _alpha, _r, etc.).
+            function cmapCss(cmapName) {
+                if (!cmapName) return CMAP_CSS['RdYlGn_r'];
+                if (CMAP_CSS[cmapName]) return CMAP_CSS[cmapName];
+                // Heuristique : si on connaît la base sans suffixe _alpha
+                if (cmapName.endsWith('_alpha')) {
+                    const base = cmapName.slice(0, -'_alpha'.length);
+                    if (CMAP_CSS[base]) return CMAP_CSS[base];
+                }
+                return CMAP_CSS['RdYlGn_r']; // fallback neutre
+            }
 
             // Convertit un step (heures depuis run_init UTC) en (dateKey, hour)
             // exprimés en heure de Paris. dateKey = "YYYY-MM-DD" (Paris).
@@ -656,10 +700,14 @@
                     legend.update('<em style="color:#64748b">Pas de variable sélectionnée</em>');
                     return;
                 }
-                const grad = CMAP_CSS[info.cmap] || CMAP_CSS['RdYlGn_r'];
+                const grad = cmapCss(info.cmap);
                 let html = `<h4>${variableLabel(variable)}</h4>`;
                 html += `<div class="scale" style="background:${grad}"></div>`;
-                html += `<div class="axis"><span>${info.vmin}</span><span>${info.vmax}</span></div>`;
+                // Pour les variables catégorielles (qui_vole_storm_risk : 0..3),
+                // on affiche les bornes en entiers, sinon en notation décimale.
+                const isInteger = (variable === 'qui_vole_storm_risk');
+                const fmt = isInteger ? (v => String(Math.round(v))) : (v => String(v));
+                html += `<div class="axis"><span>${fmt(info.vmin)}</span><span>${fmt(info.vmax)}</span></div>`;
                 html += `<div class="meta">Palette : <code>${info.cmap}</code></div>`;
                 if (manifest && manifest.run_init_iso) {
                     const init = new Date(manifest.run_init_iso);
