@@ -335,28 +335,28 @@
             // tombent sur le nom technique (fallback).
             const VAR_LABELS = {
                 // ── Couches de surface (10 m / 2 m) ─────────────────
-                wind_speed_10m:              'Vent moyen 10 m (m/s)',
-                wind_gusts_10m:              'Rafales 10 m (m/s)',
-                wind_direction_10m:          'Direction du vent 10 m (°)',
+                wind_speed_10m:              'Vent au sol — moyen (m/s)',
+                wind_gusts_10m:              'Vent au sol — rafales (m/s)',
+                wind_direction_10m:          'Vent au sol — direction (°)',
                 precipitation:               'Précipitations (mm/h)',
-                relative_humidity_2m:        'Humidité relative 2 m (%)',
-                temperature_2m:              'Température 2 m (°C)',
-                dew_point_2m:                'Point de rosée 2 m (°C)',
-                cloud_cover_low:             'Nuages bas (%)',
-                cloud_cover_mid:             'Nuages moyens (%)',
-                cloud_cover_high:            'Nuages hauts (%)',
-                // ── Couches d'altitude (850 hPa ≈ 1500 m) ───────────
-                temperature_850hPa:          'Température 850 hPa (°C)',
-                wind_speed_850hPa:           'Vent 850 hPa (m/s)',
-                wind_direction_850hPa:       'Direction du vent 850 hPa (°)',
-                // ── Indicateurs convectifs ──────────────────────────
-                cape:                        'CAPE — énergie convective (J/kg)',
-                convective_inhibition:       'CIN — inhibition convective (J/kg)',
-                lifted_index:                'Lifted Index — stabilité (K)',
-                convective_precipitation:    'Précip. convectives (mm/h)',
-                boundary_layer_height:       'Hauteur de la couche limite (m)',
+                relative_humidity_2m:        'Humidité de l\'air (%)',
+                temperature_2m:              'Température au sol (°C)',
+                dew_point_2m:                'Point de rosée (°C)',
+                cloud_cover_low:             'Couverture nuageuse — basse (%)',
+                cloud_cover_mid:             'Couverture nuageuse — moyenne (%)',
+                cloud_cover_high:            'Couverture nuageuse — haute (%)',
+                // ── Couches d'altitude (~1500 m / 850 hPa) ──────────
+                temperature_850hPa:          'Température à 1500 m (°C)',
+                wind_speed_850hPa:           'Vent à 1500 m — moyen (m/s)',
+                wind_direction_850hPa:       'Vent à 1500 m — direction (°)',
+                // ── Indicateurs convectifs / orageux ────────────────
+                cape:                        'Énergie convective — CAPE (J/kg)',
+                convective_inhibition:       'Inhibition convective — CIN (J/kg)',
+                lifted_index:                'Indice de stabilité — LI (K)',
+                convective_precipitation:    'Précipitations orageuses (mm/h)',
+                boundary_layer_height:       'Plafond thermique — couche limite (m)',
                 // ── Variables propriétaires Qui-Vole ────────────────
-                qui_vole_cloud_base:         'Plafond de vol estimé (m AMSL)',
+                qui_vole_cloud_base:         'Base des nuages — plafond de vol (m)',
                 qui_vole_storm_risk:         'Risque orageux (0 nul → 3 fort)',
                 qui_vole_models_count:       'Modèles disponibles',
                 qui_vole_models_converging:  'Modèles convergents',
@@ -364,6 +364,37 @@
             function variableLabel(name) {
                 return VAR_LABELS[name] || name;
             }
+
+            // Palette de repli **sémantique** par variable — utilisée quand
+            // le `cmap` renvoyé par le manifest est un nom custom inconnu
+            // (typiquement les `*_alpha` du sidecar). On donne ici LA palette
+            // qui doit être visuellement affichée dans la légende, indépen-
+            // damment du nom technique de la cmap. Ainsi un overlay bleu de
+            // précipitations affiche bien une légende bleue, pas vert→rouge.
+            const VAR_DEFAULT_CMAP = {
+                wind_speed_10m:              'RdYlGn_r',
+                wind_gusts_10m:              'RdYlGn_r',
+                wind_direction_10m:          'hsv',
+                precipitation:               'Blues',
+                relative_humidity_2m:        'Blues',
+                temperature_2m:              'RdBu_r',
+                dew_point_2m:                'BrBG',
+                cloud_cover_low:             'Greys',
+                cloud_cover_mid:             'Greys',
+                cloud_cover_high:            'Greys',
+                temperature_850hPa:          'RdBu_r',
+                wind_speed_850hPa:           'RdYlGn_r',
+                wind_direction_850hPa:       'hsv',
+                cape:                        'Reds',
+                convective_inhibition:       'Blues',
+                lifted_index:                'RdBu_r',
+                convective_precipitation:    'Reds',
+                boundary_layer_height:       'viridis',
+                qui_vole_cloud_base:         'Blues_r',
+                qui_vole_storm_risk:         'storm_alpha',
+                qui_vole_models_count:       'RdYlGn',
+                qui_vole_models_converging:  'RdYlGn',
+            };
 
             // Dégradés CSS pour la légende — calqués (à la louche) sur les
             // colormaps matplotlib utilisées côté sidecar. Sert juste à
@@ -384,26 +415,31 @@
                 'viridis':    'linear-gradient(to right, #440154, #3b528b, #21918c, #5ec962, #fde725)',
                 'hsv':        'linear-gradient(to right, red, yellow, lime, cyan, blue, magenta, red)',
                 // ── customs alpha-encodées (sidecar) ─────────────────
-                // Nom exact dans le manifest susceptible de varier — on
-                // résout via cmapCss() qui matche aussi en heuristique.
+                // Nom exact dans le manifest susceptible de varier — résolu
+                // via cmapCss() qui matche aussi en heuristique (suffixe
+                // _alpha, _r, etc.) puis tombe sur VAR_DEFAULT_CMAP.
                 'clouds_alpha':         'linear-gradient(to right, rgba(255,255,255,0), rgba(255,255,255,1))',
                 'rain_alpha':           'linear-gradient(to right, rgba(8,48,107,0), rgba(8,48,107,1))',
                 'precipitation_alpha':  'linear-gradient(to right, rgba(8,48,107,0), rgba(8,48,107,1))',
                 'storm_alpha':          'linear-gradient(to right, rgba(34,197,94,0), rgba(250,204,21,0.5), rgba(249,115,22,0.8), rgba(220,38,38,1))',
             };
 
-            // Résout un dégradé CSS à partir du nom de cmap renvoyé par le
-            // manifest, avec heuristique de repli pour les noms custom du
-            // sidecar (préfixe/suffixe _alpha, _r, etc.).
-            function cmapCss(cmapName) {
-                if (!cmapName) return CMAP_CSS['RdYlGn_r'];
-                if (CMAP_CSS[cmapName]) return CMAP_CSS[cmapName];
-                // Heuristique : si on connaît la base sans suffixe _alpha
-                if (cmapName.endsWith('_alpha')) {
+            // Résout un dégradé CSS pour la légende. Ordre de résolution :
+            //   1. nom exact du manifest dans CMAP_CSS
+            //   2. nom sans suffixe `_alpha` (alpha-encodées du sidecar)
+            //   3. palette par défaut sémantique pour cette variable
+            //   4. fallback générique RdYlGn_r
+            function cmapCss(cmapName, variableName) {
+                if (cmapName && CMAP_CSS[cmapName]) return CMAP_CSS[cmapName];
+                if (cmapName && cmapName.endsWith('_alpha')) {
                     const base = cmapName.slice(0, -'_alpha'.length);
                     if (CMAP_CSS[base]) return CMAP_CSS[base];
                 }
-                return CMAP_CSS['RdYlGn_r']; // fallback neutre
+                if (variableName && VAR_DEFAULT_CMAP[variableName]) {
+                    const fallback = VAR_DEFAULT_CMAP[variableName];
+                    if (CMAP_CSS[fallback]) return CMAP_CSS[fallback];
+                }
+                return CMAP_CSS['RdYlGn_r'];
             }
 
             // Convertit un step (heures depuis run_init UTC) en (dateKey, hour)
@@ -700,7 +736,7 @@
                     legend.update('<em style="color:#64748b">Pas de variable sélectionnée</em>');
                     return;
                 }
-                const grad = cmapCss(info.cmap);
+                const grad = cmapCss(info.cmap, variable);
                 let html = `<h4>${variableLabel(variable)}</h4>`;
                 html += `<div class="scale" style="background:${grad}"></div>`;
                 // Pour les variables catégorielles (qui_vole_storm_risk : 0..3),
