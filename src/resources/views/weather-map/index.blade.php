@@ -335,8 +335,8 @@
             // tombent sur le nom technique (fallback).
             const VAR_LABELS = {
                 // ── Couches de surface (10 m / 2 m) ─────────────────
-                wind_speed_10m:              'Vent au sol — moyen (m/s)',
-                wind_gusts_10m:              'Vent au sol — rafales (m/s)',
+                wind_speed_10m:              'Vent au sol — moyen (km/h)',
+                wind_gusts_10m:              'Vent au sol — rafales (km/h)',
                 wind_direction_10m:          'Vent au sol — direction (°)',
                 precipitation:               'Précipitations (mm/h)',
                 relative_humidity_2m:        'Humidité de l\'air (%)',
@@ -347,7 +347,7 @@
                 cloud_cover_high:            'Couverture nuageuse — haute (%)',
                 // ── Couches d'altitude (~1500 m / 850 hPa) ──────────
                 temperature_850hPa:          'Température à 1500 m (°C)',
-                wind_speed_850hPa:           'Vent à 1500 m — moyen (m/s)',
+                wind_speed_850hPa:           'Vent à 1500 m — moyen (km/h)',
                 wind_direction_850hPa:       'Vent à 1500 m — direction (°)',
                 // ── Indicateurs convectifs / orageux ────────────────
                 cape:                        'Énergie convective — CAPE (J/kg)',
@@ -825,11 +825,26 @@
 
                 let html = `<h4>${variableLabel(variable)}</h4>`;
                 html += `<div class="scale" style="background:${grad}"></div>`;
-                // Pour les variables catégorielles (qui_vole_storm_risk : 0..3),
-                // on affiche les bornes en entiers, sinon en notation décimale.
-                const isInteger = (variable === 'qui_vole_storm_risk');
-                const fmt = isInteger ? (v => String(Math.round(v))) : (v => String(v));
-                html += `<div class="axis"><span>${fmt(info.vmin)}</span><span>${fmt(info.vmax)}</span></div>`;
+
+                // Formatage des bornes vmin/vmax. Le sidecar stocke en SI
+                // (vent en m/s, température en °C, etc.) mais on affiche
+                // en unités usuelles parapente :
+                //   - vents : conversion m/s → km/h (× 3.6), entiers
+                //   - catégoriel storm_risk : entiers 0..3
+                //   - tout le reste : 1 décimale si non entier, sinon brut
+                const WIND_SPEED_VARS = ['wind_speed_10m', 'wind_gusts_10m', 'wind_speed_850hPa'];
+                let vmin = info.vmin, vmax = info.vmax;
+                let fmt;
+                if (WIND_SPEED_VARS.includes(variable)) {
+                    vmin = info.vmin * 3.6;
+                    vmax = info.vmax * 3.6;
+                    fmt  = v => String(Math.round(v));
+                } else if (variable === 'qui_vole_storm_risk') {
+                    fmt  = v => String(Math.round(v));
+                } else {
+                    fmt  = v => Number.isInteger(v) ? String(v) : v.toFixed(1).replace(/\.0$/, '');
+                }
+                html += `<div class="axis"><span>${fmt(vmin)}</span><span>${fmt(vmax)}</span></div>`;
                 html += `<div class="meta">Palette : <code>${info.cmap}</code>${stops ? ' · ' + stops.length + ' stops' : ''}</div>`;
                 if (manifest && manifest.run_init_iso) {
                     const init = new Date(manifest.run_init_iso);
