@@ -766,6 +766,51 @@
             }
 
             // ── Légende ────────────────────────────────────────────
+
+            // Récupère les stops de cmap renvoyés par le sidecar dans
+            // le manifest, quelle que soit la forme. Le sidecar peut
+            // exposer le champ à plusieurs niveaux selon l'endpoint :
+            //   - /v1/overlay              → info.cmap_stops  ou  info.stops
+            //   - /v1/overlay/{variable}   → info.palette.stops
+            // On tente les trois localisations possibles, et on retombe
+            // sur l'ancienne table CMAP_CSS si rien n'est trouvé.
+            function getCmapStops(info) {
+                if (!info) return null;
+                const s = info.cmap_stops || info.stops
+                       || (info.palette && info.palette.stops);
+                return Array.isArray(s) && s.length >= 2 ? s : null;
+            }
+
+            // Convertit un hex `#rrggbb` en {r,g,b} entiers 0..255.
+            function hexToRgb(hex) {
+                const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || '');
+                if (!m) return { r: 0, g: 0, b: 0 };
+                return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) };
+            }
+
+            // Convertit la liste de stops en linear-gradient CSS.
+            //
+            // Cas particulier alpha-encoded : si toutes les stops ont la
+            // MÊME couleur RGB, c'est qu'on est sur une cmap qui ne varie
+            // que par alpha (clouds_alpha, cape_alpha, etc.) et que le
+            // sidecar a dropped le canal alpha au sampling. On bascule
+            // alors sur un fondu "transparent → couleur opaque" qui rend
+            // visuellement le bon message (basse intensité = transparent,
+            // haute intensité = opaque).
+            function stopsToCss(stops) {
+                if (!stops || stops.length < 2) return null;
+
+                const uniqueColors = new Set(stops.map(s => (s.color || '').toLowerCase()));
+                if (uniqueColors.size === 1) {
+                    const { r, g, b } = hexToRgb(stops[0].color);
+                    return `linear-gradient(to right, rgba(${r},${g},${b},0), rgba(${r},${g},${b},1))`;
+                }
+
+                const sorted = [...stops].sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
+                const parts = sorted.map(s => `${s.color} ${(((s.t ?? 0)) * 100).toFixed(1)}%`);
+                return `linear-gradient(to right, ${parts.join(', ')})`;
+            }
+
             function renderLegend() {
                 const variable = document.getElementById('f-variable').value;
                 const info = variableInfo(variable);
@@ -773,7 +818,11 @@
                     legend.update('<em style="color:#64748b">Pas de variable sélectionnée</em>');
                     return;
                 }
-                const grad = cmapCss(info.cmap, variable);
+                // 1. priorité : stops fournies par le sidecar (= vérité-terrain)
+                // 2. fallback : table CSS hardcodée + heuristique par variable
+                const stops = getCmapStops(info);
+                const grad  = (stops && stopsToCss(stops)) || cmapCss(info.cmap, variable);
+
                 let html = `<h4>${variableLabel(variable)}</h4>`;
                 html += `<div class="scale" style="background:${grad}"></div>`;
                 // Pour les variables catégorielles (qui_vole_storm_risk : 0..3),
@@ -781,7 +830,7 @@
                 const isInteger = (variable === 'qui_vole_storm_risk');
                 const fmt = isInteger ? (v => String(Math.round(v))) : (v => String(v));
                 html += `<div class="axis"><span>${fmt(info.vmin)}</span><span>${fmt(info.vmax)}</span></div>`;
-                html += `<div class="meta">Palette : <code>${info.cmap}</code></div>`;
+                html += `<div class="meta">Palette : <code>${info.cmap}</code>${stops ? ' · ' + stops.length + ' stops' : ''}</div>`;
                 if (manifest && manifest.run_init_iso) {
                     const init = new Date(manifest.run_init_iso);
                     const txt  = init.toLocaleString('fr-FR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', timeZone:'Europe/Paris' });
