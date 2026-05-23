@@ -833,18 +833,31 @@
                 //   - catégoriel storm_risk : entiers 0..3
                 //   - tout le reste : 1 décimale si non entier, sinon brut
                 const WIND_SPEED_VARS = ['wind_speed_10m', 'wind_gusts_10m', 'wind_speed_850hPa'];
+                const isWindSpeed = WIND_SPEED_VARS.includes(variable);
+                const isStormRisk = variable === 'qui_vole_storm_risk';
+
                 let vmin = info.vmin, vmax = info.vmax;
                 let fmt;
-                if (WIND_SPEED_VARS.includes(variable)) {
+                if (isWindSpeed) {
                     vmin = info.vmin * 3.6;
                     vmax = info.vmax * 3.6;
                     fmt  = v => String(Math.round(v));
-                } else if (variable === 'qui_vole_storm_risk') {
+                } else if (isStormRisk) {
                     fmt  = v => String(Math.round(v));
                 } else {
                     fmt  = v => Number.isInteger(v) ? String(v) : v.toFixed(1).replace(/\.0$/, '');
                 }
-                html += `<div class="axis"><span>${fmt(vmin)}</span><span>${fmt(vmax)}</span></div>`;
+
+                // 5 graduations évenly-spaced (vmin + 3 intermédiaires + vmax).
+                // Cas storm_risk : 4 graduations (0/1/2/3) pour matcher les
+                // niveaux catégoriels du risque orageux.
+                const nTicks = isStormRisk ? 4 : 5;
+                const ticks = [];
+                for (let i = 0; i < nTicks; i++) {
+                    const t = i / (nTicks - 1);
+                    ticks.push(vmin + t * (vmax - vmin));
+                }
+                html += '<div class="axis">' + ticks.map(t => `<span>${fmt(t)}</span>`).join('') + '</div>';
                 html += `<div class="meta">Palette : <code>${info.cmap}</code>${stops ? ' · ' + stops.length + ' stops' : ''}</div>`;
                 if (manifest && manifest.run_init_iso) {
                     const init = new Date(manifest.run_init_iso);
