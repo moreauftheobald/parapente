@@ -152,9 +152,9 @@
             <label class="field">
                 Fond
                 <select id="f-basemap">
-                    <option value="topo" selected>OpenTopoMap (relief)</option>
+                    <option value="satellite" selected>Satellite + noms</option>
+                    <option value="topo">OpenTopoMap (relief)</option>
                     <option value="osm">OSM standard</option>
-                    <option value="satellite">Satellite + noms</option>
                     <option value="light">Clair</option>
                     <option value="dark">Sombre</option>
                 </select>
@@ -271,7 +271,7 @@
                     }).addTo(map);
                 }
             }
-            setBaseLayer('topo');
+            setBaseLayer('satellite');
 
             // Opacité de l'overlay info, contrôlée par le slider. On stocke
             // dans une variable pour pouvoir la ré-appliquer à chaque redraw
