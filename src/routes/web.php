@@ -47,17 +47,21 @@ Route::get('/aide/{slug}',   [WikiController::class, 'show'])->where('slug', '[a
 Route::middleware(['auth', 'admin'])->group(function () {
     Route::get('/carte-modeles',      [ModelGridController::class, 'index'])->name('model-grid.index');
     Route::get('/carte-modeles/data', [ModelGridController::class, 'data'])->name('model-grid.data');
-
-    // Carte météo (overlays consensus-grid). Admin-only le temps de
-    // stabiliser l'intégration du sidecar.
-    Route::get('/carte-meteo', [WeatherMapController::class, 'index'])->name('weather-map.index');
-    Route::get('/carte-meteo/manifest', [WeatherMapController::class, 'manifestIndex'])->name('weather-map.manifest');
-    Route::get('/carte-meteo/overlay/{variable}/{step}.png', [WeatherMapController::class, 'overlay'])
-        ->where(['variable' => '[a-z][a-z0-9_]+', 'step' => '[0-9]+'])
-        ->name('weather-map.overlay');
-    Route::get('/carte-meteo/health',   [WeatherMapController::class, 'health'])->name('weather-map.health');
-    Route::get('/carte-meteo/progress', [WeatherMapController::class, 'progress'])->name('weather-map.progress');
 });
+
+// Carte météo (overlays consensus-grid). Pas de middleware d'auth ici —
+// la visibilité dans le menu est gérée par le champ `access_level` du
+// module en table `modules` (cf. `Module::isVisibleFor()` + filtre dans
+// `App\Support\Navigation::modules()`). Passer le module en `guest` /
+// `user` / `admin` côté `/admin/modules` se reflète immédiatement sans
+// changement de code.
+Route::get('/carte-meteo', [WeatherMapController::class, 'index'])->name('weather-map.index');
+Route::get('/carte-meteo/manifest', [WeatherMapController::class, 'manifestIndex'])->name('weather-map.manifest');
+Route::get('/carte-meteo/overlay/{variable}/{step}.png', [WeatherMapController::class, 'overlay'])
+    ->where(['variable' => '[a-z][a-z0-9_]+', 'step' => '[0-9]+'])
+    ->name('weather-map.overlay');
+Route::get('/carte-meteo/health',   [WeatherMapController::class, 'health'])->name('weather-map.health');
+Route::get('/carte-meteo/progress', [WeatherMapController::class, 'progress'])->name('weather-map.progress');
 
 // Tampon d'icônes SpotAir : Nginx sert les fichiers déjà présents
 // dans public/icons-cache/ via try_files. PHP n'est appelé qu'au
