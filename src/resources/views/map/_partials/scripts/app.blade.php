@@ -114,6 +114,31 @@ function mapApp(){return{
         L.control.zoom({position:'topright'}).addTo(this.map);
         const b=BASEMAP_LIST[0];
         this.tl=L.tileLayer(b.url,{attribution:b.attribution,maxZoom:b.maxZoom}).addTo(this.map);
+
+        // Le conteneur #map peut ne pas avoir sa taille finale au moment
+        // du L.map() : le volet gauche du shell (frère flex du <main>,
+        // ouvert d'emblée en desktop) n'a pas toujours pris sa largeur,
+        // surtout en refresh « soft » où le CSS Vite vient du cache et le
+        // JS s'exécute avant la stabilisation du layout. La carte mémorise
+        // alors une origine de projection erronée et n'est jamais recalée
+        // (onPanelChange ne se déclenche que sur un *changement* de volet).
+        // Conséquence : les marqueurs (balises surtout, jamais re-rendus
+        // après le boot) restent décalés et « décrochent » au zoom.
+        //
+        // Un ResizeObserver règle ça de façon déterministe : dès que #map
+        // atteint (ou change) sa taille, invalidateSize() recale l'origine
+        // et repositionne tous les marqueurs. Le zoom ne modifie pas la
+        // taille du conteneur → aucune interférence. rAF pour coalescer
+        // les rafales pendant les transitions de volet.
+        if (typeof ResizeObserver !== 'undefined') {
+            let raf = null;
+            this._mapResizeObserver = new ResizeObserver(() => {
+                if (raf) cancelAnimationFrame(raf);
+                raf = requestAnimationFrame(() => this.map?.invalidateSize({ animate: false }));
+            });
+            const el = document.getElementById('map');
+            if (el) this._mapResizeObserver.observe(el);
+        }
     },
 
     switchBasemap(key){
@@ -758,13 +783,7 @@ function mapApp(){return{
             seen.add(b.id);
             const netKey  = this._baliseNetworkKey(b);
             const layer   = this._ensureNetworkLayer(netKey);
-            // className `pg-balise-marker` : force une couche de
-            // compositing GPU (will-change:transform côté CSS) pour que
-            // l'animation de zoom Leaflet reste synchro avec le fond et
-            // les sites. Sans ça, l'<img> balise est repeinte sur le
-            // thread principal et décroche du zoom sur les frames chargées
-            // (les sites, eux, sont composités via leur filter drop-shadow).
-            const icon    = L.icon({iconUrl:baliseIconUrl(b.reading), iconSize:[40,40], iconAnchor:[20,20], className:'pg-balise-marker'});
+            const icon    = L.icon({iconUrl:baliseIconUrl(b.reading), iconSize:[40,40], iconAnchor:[20,20]});
             const tooltip = baliseTooltipHtml(b);
             const existing = this._balisesMarkers[b.id];
             if(existing){

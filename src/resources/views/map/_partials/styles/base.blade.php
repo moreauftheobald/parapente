@@ -38,16 +38,6 @@ body { font-family:'DM Sans',sans-serif; }
 .pg-site-marker { position:relative; width:38px; height:38px; border-radius:50%; display:grid; place-items:center; cursor:pointer; transition:transform .15s; }
 .pg-site-marker img { width:30px; height:30px; pointer-events:none; }
 
-/* Marqueurs balises (L.icon → <img>). On les promeut sur leur propre
-   couche de compositing GPU pour que l'animation de zoom Leaflet (une
-   transform CSS) soit gérée par le compositeur et reste synchro avec le
-   fond de carte + les sites. Sans ce hint, l'image est repeinte sur le
-   thread principal et "décroche" du zoom de façon intermittente sur les
-   frames chargées (les sites, eux, sont déjà composités via leur
-   filter:drop-shadow). Texture SVG simple → coût mémoire négligeable,
-   pas de recompute par frame (contrairement aux drop-shadows des sites). */
-.leaflet-marker-icon.pg-balise-marker { will-change:transform; }
-
 /* Badge user_scoring (coin bas-droite du marker). Échappe au filter glow
    du parent grâce à isolation:isolate côté wrapper — au pire le badge
    s'enflamme visuellement avec le halo, mais reste lisible grâce au
