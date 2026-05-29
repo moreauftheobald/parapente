@@ -46,6 +46,11 @@ class SiteController extends Controller
                 'altitude'     => $site->altitude_m,
                 'level'        => $site->level,
                 'region'       => $site->region,
+                // Enrichissement géocodage (nullable) — utilisé par les
+                // filtres de la page « Sites masqués » (pays / région / dépt).
+                'country'      => $site->country,
+                'admin_region' => $site->admin_region,
+                'department'   => $site->department,
                 // Plage favorable d'orientation du décollage (depuis site_conditions)
                 // utilisée par siteIconUrl() pour calculer le bitmask SpotAir.
                 'wind_dir_min' => $site->conditions?->wind_dir_min,

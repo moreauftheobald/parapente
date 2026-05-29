@@ -1,9 +1,9 @@
 <x-app-shell title="Sites masqués" page-title="Sites masqués"
-             detail-title="Filtres" :left-default="true">
+             detail-title="Aide" :left-default="false">
 
-    {{-- ─── Panneau gauche : recherche + filtre ───────────────── --}}
+    {{-- ─── Panneau gauche : aide ─────────────────────────────── --}}
     <x-slot:detail>
-        <div x-data class="flex flex-col gap-5">
+        <div class="flex flex-col gap-5">
             <div class="flex items-center gap-2 text-xs">
                 <a href="{{ route('user.profile') }}"
                    class="text-gray-400 hover:text-sky-300 transition flex items-center gap-1.5">
@@ -11,38 +11,14 @@
                 </a>
             </div>
 
-            <div>
-                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-2">Recherche</p>
-                <input type="search" placeholder="Nom de site…"
-                       x-model.debounce.200="$store.hiddenFilters.search"
-                       class="w-full px-3 py-1.5 bg-gray-950 border border-gray-700 rounded-md text-sm text-gray-100 focus:outline-none focus:border-sky-500">
-            </div>
-
-            <div>
-                <p class="text-[11px] uppercase tracking-wider text-gray-500 mb-2">Affichage</p>
-                <div class="flex flex-col gap-1">
-                    <label class="flex items-center gap-2 text-sm cursor-pointer">
-                        <input type="radio" name="hidden-filter" value="all"
-                               x-model="$store.hiddenFilters.scope" class="accent-sky-500">
-                        <span class="text-gray-300">Tous les sites</span>
-                    </label>
-                    <label class="flex items-center gap-2 text-sm cursor-pointer">
-                        <input type="radio" name="hidden-filter" value="hidden"
-                               x-model="$store.hiddenFilters.scope" class="accent-amber-500">
-                        <span class="text-gray-300">Masqués uniquement</span>
-                    </label>
-                    <label class="flex items-center gap-2 text-sm cursor-pointer">
-                        <input type="radio" name="hidden-filter" value="visible"
-                               x-model="$store.hiddenFilters.scope" class="accent-emerald-500">
-                        <span class="text-gray-300">Affichés uniquement</span>
-                    </label>
-                </div>
-            </div>
-
+            <p class="text-[12px] text-gray-400 leading-relaxed">
+                Par défaut, tous les sites sont affichés sur la carte de
+                volabilité. Masque ceux qui ne t'intéressent pas : ils
+                disparaîtront de la carte quand tu es connecté.
+            </p>
             <p class="text-[11px] text-gray-600 leading-relaxed">
-                Par défaut, tous les sites sont affichés sur la carte. Masque
-                ceux qui ne t'intéressent pas : ils disparaîtront de la carte
-                de volabilité quand tu es connecté.
+                Utilise la barre de filtres (nom, pays, région, département,
+                état) pour retrouver rapidement un site dans la liste.
             </p>
         </div>
     </x-slot:detail>
@@ -50,7 +26,7 @@
     <div x-data="hiddenSitesScreen()" x-init="boot()" class="px-4 sm:px-6 py-6 max-w-5xl mx-auto">
 
         {{-- ─── Toolbar haute ─────────────────────────────────── --}}
-        <header class="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <header class="flex flex-wrap items-center justify-between gap-4 mb-5">
             <div class="min-w-0">
                 <h1 class="text-2xl font-semibold text-white">Sites masqués</h1>
                 <p class="text-sm text-gray-500">
@@ -64,6 +40,64 @@
                 <span class="text-gray-500">site<span x-show="hiddenIds.length !== 1">s</span> masqué<span x-show="hiddenIds.length !== 1">s</span></span>
             </div>
         </header>
+
+        {{-- ─── Barre de filtrage ─────────────────────────────── --}}
+        @php
+            $fieldCls = 'px-3 py-1.5 bg-gray-950 border border-gray-700 rounded-md text-sm text-gray-100 focus:outline-none focus:border-sky-500';
+        @endphp
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-3 mb-4 flex flex-wrap items-end gap-3">
+            <div class="flex flex-col gap-1 flex-1 min-w-[180px]">
+                <label class="text-[10px] uppercase tracking-wider text-gray-500">Nom</label>
+                <input type="search" placeholder="Nom de site…"
+                       x-model.debounce.200="filters.name" class="{{ $fieldCls }} w-full">
+            </div>
+
+            <div class="flex flex-col gap-1 min-w-[140px]">
+                <label class="text-[10px] uppercase tracking-wider text-gray-500">Pays</label>
+                <select x-model="filters.country" @change="onCountryChange()" class="{{ $fieldCls }}">
+                    <option value="">Tous les pays</option>
+                    <template x-for="c in countryOptions" :key="c">
+                        <option :value="c" x-text="c"></option>
+                    </template>
+                </select>
+            </div>
+
+            <div class="flex flex-col gap-1 min-w-[150px]">
+                <label class="text-[10px] uppercase tracking-wider text-gray-500">Région</label>
+                <select x-model="filters.region" @change="onRegionChange()" class="{{ $fieldCls }}">
+                    <option value="">Toutes les régions</option>
+                    <template x-for="r in regionOptions" :key="r">
+                        <option :value="r" x-text="r"></option>
+                    </template>
+                </select>
+            </div>
+
+            <div class="flex flex-col gap-1 min-w-[150px]">
+                <label class="text-[10px] uppercase tracking-wider text-gray-500">Département</label>
+                <select x-model="filters.department" class="{{ $fieldCls }}">
+                    <option value="">Tous les départements</option>
+                    <template x-for="d in departmentOptions" :key="d">
+                        <option :value="d" x-text="d"></option>
+                    </template>
+                </select>
+            </div>
+
+            <div class="flex flex-col gap-1 min-w-[130px]">
+                <label class="text-[10px] uppercase tracking-wider text-gray-500">État</label>
+                <select x-model="filters.scope" class="{{ $fieldCls }}">
+                    <option value="all">Tous</option>
+                    <option value="hidden">Masqués</option>
+                    <option value="visible">Affichés</option>
+                </select>
+            </div>
+
+            <button type="button" @click="resetFilters()"
+                    x-show="hasActiveFilters"
+                    class="px-3 py-1.5 rounded-md text-xs text-gray-400 hover:text-white hover:bg-gray-800 border border-gray-700 transition"
+                    title="Réinitialiser les filtres">
+                <i class="fa-solid fa-xmark mr-1"></i> Réinitialiser
+            </button>
+        </div>
 
         {{-- Toast --}}
         <div x-show="message" x-cloak x-transition.opacity
@@ -88,6 +122,12 @@
             </div>
         </template>
 
+        {{-- ─── Compteur de résultats ─────────────────────────── --}}
+        <p x-show="!loading && filteredSites.length > 0" x-cloak class="text-[11px] text-gray-600 mb-2">
+            <span x-text="filteredSites.length"></span> site<span x-show="filteredSites.length !== 1">s</span>
+            <span x-show="hasActiveFilters"> · filtré<span x-show="filteredSites.length !== 1">s</span> sur <span x-text="sites.length"></span></span>
+        </p>
+
         {{-- ─── Liste des sites ───────────────────────────────── --}}
         <div x-show="!loading && filteredSites.length > 0" x-cloak
              class="bg-gray-900 border border-gray-800 rounded-2xl divide-y divide-gray-800 overflow-hidden">
@@ -104,7 +144,13 @@
                                   x-text="site.level"></span>
                         </div>
                         <p class="text-[11px] text-gray-500 truncate flex items-center gap-2 mt-0.5">
-                            <span x-show="site.region" x-text="site.region"></span>
+                            <span x-show="site.country" x-text="site.country"></span>
+                            <span x-show="site.admin_region" class="text-gray-600">·</span>
+                            <span x-show="site.admin_region" x-text="site.admin_region"></span>
+                            <span x-show="site.department" class="text-gray-600">·</span>
+                            <span x-show="site.department" x-text="site.department"></span>
+                            <span x-show="!site.country && site.region" x-text="site.region"></span>
+                            <span x-show="site.altitude" class="text-gray-600">·</span>
                             <span x-show="site.altitude" x-text="site.altitude + ' m'"></span>
                         </p>
                     </div>
@@ -140,13 +186,6 @@
 
     @push('scripts')
     <script>
-        document.addEventListener('alpine:init', () => {
-            Alpine.store('hiddenFilters', {
-                search: '',
-                scope:  'all',   // 'all' | 'hidden' | 'visible'
-            });
-        });
-
         function hiddenSitesScreen() {
             return {
                 loading: true,
@@ -155,6 +194,7 @@
                 busy: [],          // ids en cours de bascule (anti double-clic)
                 message: '',
                 messageType: 'info',
+                filters: { name: '', country: '', region: '', department: '', scope: 'all' },
 
                 async boot() {
                     await Promise.all([this.loadSites(), this.loadHidden()]);
@@ -184,15 +224,49 @@
 
                 isHidden(id) { return this.hiddenIds.includes(id); },
 
+                // ── Options de filtre (en cascade pays → région → dépt) ──
+                _sortedUnique(values) {
+                    return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+                },
+                get countryOptions() {
+                    return this._sortedUnique(this.sites.map(s => s.country));
+                },
+                get regionOptions() {
+                    const c = this.filters.country;
+                    return this._sortedUnique(
+                        this.sites.filter(s => !c || s.country === c).map(s => s.admin_region)
+                    );
+                },
+                get departmentOptions() {
+                    const c = this.filters.country, r = this.filters.region;
+                    return this._sortedUnique(
+                        this.sites
+                            .filter(s => (!c || s.country === c) && (!r || s.admin_region === r))
+                            .map(s => s.department)
+                    );
+                },
+                onCountryChange() { this.filters.region = ''; this.filters.department = ''; },
+                onRegionChange()  { this.filters.department = ''; },
+
+                get hasActiveFilters() {
+                    const f = this.filters;
+                    return !!(f.name.trim() || f.country || f.region || f.department || f.scope !== 'all');
+                },
+                resetFilters() {
+                    this.filters = { name: '', country: '', region: '', department: '', scope: 'all' };
+                },
+
                 get filteredSites() {
-                    const f = Alpine.store('hiddenFilters');
+                    const f = this.filters;
                     let list = this.sites.slice();
                     if (f.scope === 'hidden')  list = list.filter(s => this.isHidden(s.id));
                     if (f.scope === 'visible') list = list.filter(s => !this.isHidden(s.id));
-                    if (f.search.trim()) {
-                        const q = f.search.trim().toLowerCase();
-                        list = list.filter(s => (s.name || '').toLowerCase().includes(q)
-                            || (s.region || '').toLowerCase().includes(q));
+                    if (f.country)    list = list.filter(s => s.country === f.country);
+                    if (f.region)     list = list.filter(s => s.admin_region === f.region);
+                    if (f.department) list = list.filter(s => s.department === f.department);
+                    if (f.name.trim()) {
+                        const q = f.name.trim().toLowerCase();
+                        list = list.filter(s => (s.name || '').toLowerCase().includes(q));
                     }
                     list.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'fr'));
                     return list;
