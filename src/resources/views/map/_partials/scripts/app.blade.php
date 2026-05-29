@@ -758,7 +758,13 @@ function mapApp(){return{
             seen.add(b.id);
             const netKey  = this._baliseNetworkKey(b);
             const layer   = this._ensureNetworkLayer(netKey);
-            const icon    = L.icon({iconUrl:baliseIconUrl(b.reading), iconSize:[40,40], iconAnchor:[20,20]});
+            // className `pg-balise-marker` : force une couche de
+            // compositing GPU (will-change:transform côté CSS) pour que
+            // l'animation de zoom Leaflet reste synchro avec le fond et
+            // les sites. Sans ça, l'<img> balise est repeinte sur le
+            // thread principal et décroche du zoom sur les frames chargées
+            // (les sites, eux, sont composités via leur filter drop-shadow).
+            const icon    = L.icon({iconUrl:baliseIconUrl(b.reading), iconSize:[40,40], iconAnchor:[20,20], className:'pg-balise-marker'});
             const tooltip = baliseTooltipHtml(b);
             const existing = this._balisesMarkers[b.id];
             if(existing){
