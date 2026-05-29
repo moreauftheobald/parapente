@@ -11,6 +11,66 @@ Conventions :
 
 ---
 
+## 2026-05-29 — Sites masqués par utilisateur (carte de volabilité)
+
+Un utilisateur **connecté** peut masquer de sa carte de volabilité
+(`/carte`) les sites qui ne l'intéressent pas, depuis une page dédiée
+accessible via le menu utilisateur. Règle par défaut : **tout est
+affiché** ; seuls les sites explicitement marqués « ne pas afficher »
+disparaissent, pour cet utilisateur uniquement et seulement connecté.
+Modèle d'**exclusion pure** (une ligne = un site masqué). Cf.
+`FF_site_blacklist.md`.
+
+### Ajouté
+
+- **Page de gestion `/profil/sites-masques`** (`HiddenSitePageController`
+  → vue `user.hidden-sites`, `<x-app-shell>`) : liste des sites actifs
+  avec bascule **Masquer / Réafficher** (optimiste). **Barre de
+  filtrage** : recherche par nom, sélecteurs **en cascade** pays →
+  région → département, filtre d'état (tous / masqués / affichés),
+  bouton réinitialiser + compteur de résultats.
+- **Liens** dans le menu utilisateur (navbar) et dans la page `/profil`
+  (section « Sites masqués » + nav latérale).
+- **API CRUD** `auth:web` :
+  - `GET /api/users/me/hidden-sites` → `{ hidden_site_ids[], sites[] }`
+  - `PUT /api/users/me/hidden-sites/{site}` → masquer (idempotent)
+  - `DELETE /api/users/me/hidden-sites/{site}` → réafficher (idempotent)
+- **Overlay carte** `GET /api/me/hidden-sites` → ids à filtrer +
+  `days_summary` recalculé **sans** les sites masqués (le compteur
+  « h de vol possible » du sélecteur de jour reflète ce que
+  l'utilisateur voit). Recalcul en mémoire depuis le bundle en cache,
+  sans requête DB supplémentaire ; `null` si aucun site masqué.
+- **Filtrage carte** dans `mapApp()._siteVisible()` (connecté
+  uniquement, pas de toggle sur la carte — la page de gestion est le
+  panneau de contrôle).
+- **`/api/sites`** expose désormais `country`, `admin_region`,
+  `department` (colonnes de géocodage) pour alimenter les filtres.
+
+### Modifié
+
+- **`MapBundleBuilder`** : `buildDaysSummary` extrait en méthode
+  statique pure `summarizeDays($sitesPayload, $excludedSiteIds = [])`,
+  réutilisée par le build global et par l'overlay utilisateur. Le
+  bundle **caché** expose désormais `green_hours_set` par site (retiré
+  du payload client par `MapBundleController::show` → pas de bloat
+  côté front). **`CACHE_VERSION` 1 → 2** (penser à
+  `php artisan map:rebuild-bundle` au déploiement).
+
+### Base de données
+
+- Table **`user_hidden_sites`** (`user_id`, `site_id`, timestamps),
+  unique `(user_id, site_id)`, index `user_id`, cascade delete sur les
+  deux FK. Migration
+  `2026_05_29_120000_create_user_hidden_sites_table.php`.
+
+### Tests
+
+- `tests/Unit/Map/SummarizeDaysTest` (agrégat + exclusions, sans DB),
+  `tests/Feature/Api/UserHiddenSiteApiTest` (CRUD, auth, scoping,
+  idempotence, overlay), `tests/Feature/User/HiddenSitesPageTest`.
+
+---
+
 ## 2026-05-23 — Nouvelle « Carte météo » (overlays consensus-grid) + renommage de l'ancienne carte
 
 L'ancienne carte (`/carte`) est renommée **« Carte de volabilité »** et

@@ -82,7 +82,9 @@ src/                        ← Racine Laravel
 │   │   │   │   ├── BaliseController.php     ← API JSON balises + history
 │   │   │   │   ├── MapBundleController.php  ← Bundle pré-calculé pour boot carte
 │   │   │   │   ├── MeScoringController.php  ← Overrides scoring perso (auth)
-│   │   │   │   └── UserScoringController.php ← CRUD scorings perso utilisateur
+│   │   │   │   ├── UserScoringController.php ← CRUD scorings perso utilisateur
+│   │   │   │   ├── MeHiddenSitesController.php ← Overlay sites masqués + days_summary recalculé (auth)
+│   │   │   │   └── UserHiddenSiteController.php ← CRUD sites masqués utilisateur (FF_site_blacklist.md)
 │   │   │   ├── Admin/                   ← BackOffice (sites, balises, modèles, APIs,
 │   │   │   │                                users, sync, logs, articles, modules…)
 │   │   │   ├── HomeController.php        ← Page d'accueil (articles + épinglé « À la une »)
@@ -103,7 +105,9 @@ src/                        ← Racine Laravel
 │   │   ├── BaliseConsensusCompare.php    ← Historique triple-consensus (phase 2.5)
 │   │   ├── Module.php                    ← Modules du menu (table `modules`)
 │   │   ├── Article.php                   ← Articles / changelog accueil (+ flag `is_pinned`)
-│   │   └── WikiPage.php                  ← Pages du pseudo-wiki (arborescence parent_id)
+│   │   ├── WikiPage.php                  ← Pages du pseudo-wiki (arborescence parent_id)
+│   │   ├── UserSiteCondition.php         ← Scorings perso utilisateur (FF_personnal_scoring.md)
+│   │   └── UserHiddenSite.php            ← Sites masqués par utilisateur (FF_site_blacklist.md)
 │   ├── Support/
 │   │   └── Navigation.php                ← Liste des modules visibles (navbar)
 │   ├── Services/
@@ -202,6 +206,8 @@ src/                        ← Racine Laravel
 | `articles`        | Articles / changelog accueil (titre, body HTML, `author_id`, `is_published`, `is_pinned`, `published_at`) |
 | `wiki_pages`      | Pages du pseudo-wiki (`parent_id` auto-référent, `slug` unique, `title`, `excerpt`, body HTML, `sort_order`, `is_published`, `author_id`) |
 | `settings`        | Paramètres globaux (clé unique, valeur JSON, label, description) — seuils de scoring + paramètres `reliability.*` éditables via `/admin/settings` |
+| `user_site_conditions` | Scorings perso d'un utilisateur par site (miroir de `site_conditions` + `is_active`/`activated_at` pour la rotation LRU). Unique `(user_id, site_id)`. Cf. `FF_personnal_scoring.md`. |
+| `user_hidden_sites` | Sites masqués par un utilisateur sur la carte de volabilité (exclusion pure : 1 ligne = 1 site masqué pour ce user). `user_id`, `site_id`, unique `(user_id, site_id)`, cascade delete. Cf. `FF_site_blacklist.md`. |
 
 > **Colonnes de géocodage** (sur `sites` et `balises`) :
 > `country_code` (CHAR 2 ISO-2), `country` (libellé FR), `admin_region`
@@ -260,7 +266,18 @@ GET /api/me/scoring-overrides → (auth) Sur-couche utilisateur du bundle :
                               flag user_scoring + statuts journaliers
                               recalculés pour les sites avec scoring perso
                               actif. Fusionné côté client avec le bundle global.
-GET /api/sites              → Liste tous les sites actifs (métadonnées).
+GET /api/me/hidden-sites    → (auth) Sur-couche « sites masqués » : liste
+                              des site_id à filtrer + days_summary recalculé
+                              SANS les sites masqués (compteur « h de vol
+                              possible » cohérent). null si aucun site masqué.
+                              Recalcul en mémoire depuis le bundle (pas de DB).
+                              Cf. FF_site_blacklist.md.
+GET    /api/users/me/hidden-sites        → (auth) Liste des sites masqués (CRUD page gestion).
+PUT    /api/users/me/hidden-sites/{site} → (auth) Masquer un site (idempotent).
+DELETE /api/users/me/hidden-sites/{site} → (auth) Réafficher un site (idempotent).
+GET /api/sites              → Liste tous les sites actifs (métadonnées,
+                              + country/admin_region/department pour les
+                              filtres de la page « Sites masqués »).
                               Conservé pour rétrocompat — la carte utilise
                               désormais /api/map-bundle.
 GET /api/sites/{id}/scores  → Scores filtrés fenêtre solaire + sun_windows
@@ -498,16 +515,45 @@ sont préchargés au constructor une fois pour la durée du scoring,
 > Tous les paramètres (pic / σ / valeurs green/orange / run base/step /
 > seuils) sont éditables depuis `/admin/settings` (clés `viability.*`).
 
+### Sites masqués par utilisateur (« black-list » carte)
+
+Un utilisateur **connecté** peut masquer de sa carte les sites qui ne
+l'intéressent pas. Règle par défaut = **affiché** ; on ne stocke que
+les exclusions (table `user_hidden_sites`, modèle d'exclusion pure).
+Cf. `FF_site_blacklist.md`.
+
+- **Gestion** : page dédiée `/profil/sites-masques`
+  (`User\HiddenSitePageController` → vue `user.hidden-sites`), liée
+  depuis le menu utilisateur et la page `/profil`. Liste des sites
+  actifs avec bascule Masquer/Réafficher + **barre de filtrage**
+  (nom, sélecteurs en cascade pays → région → département, état).
+- **API** : `UserHiddenSiteController` (CRUD, `PUT`/`DELETE`
+  idempotents) + overlay carte `MeHiddenSitesController`
+  (`/api/me/hidden-sites`).
+- **Carte** : `mapApp().loadHiddenSites()` charge l'overlay au boot
+  (connecté uniquement) ; `_siteVisible()` masque les sites blacklistés
+  (pas de toggle sur la carte — la page de gestion est le panneau de
+  contrôle). Le compteur du sélecteur de jour (`days_summary`) est
+  remplacé par la version recalculée **sans** les sites masqués.
+
 ### Cache des données carte — `App\Services\Map\*`
 
 Tous les endpoints alimentant la vue carte sont **pré-calculés** en cache
 Redis pour soulager la DB et accélérer le boot mobile :
 
-- **`MapBundleBuilder`** (`map.bundle.v1`, TTL 90 min)
+- **`MapBundleBuilder`** (`map.bundle.v2`, TTL 90 min)
   - Construit le bundle global servi à `/api/map-bundle` : tous les sites
     actifs avec leurs statuts journaliers (issus de `site_scores`), les
     fenêtres solaires, et l'agrégat global par jour (best_status,
     green_slots cumulés).
+  - L'agrégat journalier est calculé par la méthode **statique pure
+    `summarizeDays($sitesPayload, $excludedSiteIds = [])`**, réutilisée
+    par l'overlay « sites masqués » (`MeHiddenSitesController`) pour
+    recalculer le compteur sans les sites masqués d'un utilisateur.
+  - Le bundle **caché** porte `green_hours_set` par site (heures green
+    par jour), nécessaire à ce recalcul ; **`MapBundleController::show`
+    le retire du payload client** (pas de bloat front). Toute modif de
+    cette structure ⇒ bump `CACHE_VERSION` (actuellement **2**).
   - Régénéré par `RebuildMapBundleJob`, dispatché à la fin du `Bus::batch`
     orchestré par `FetchForecastsJob` (toutes les chaînes de scoring ont
     fini) — et aussi à la fin de `FetchSiteForecastsJob` (manuel).
