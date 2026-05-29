@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Services\Weather;
 
 use App\Contracts\FlyingConditions;
+use App\Models\Forecast;
 use App\Models\Site;
 use App\Models\SiteScore;
 use App\Models\WeatherModel;
 use App\Services\Settings;
+use App\Services\Weather\Apis\ConsensusApi;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -20,6 +22,11 @@ class ScoringService
     private const WIND_SPEED_TOLERANCE_PCT = 25;    // ±25% pour la vitesse
     private const PRECIP_RAIN_THRESHOLD    = 0.1;   // mm/h — seuil "trace de pluie" (convergence)
     private const EPSILON                  = 0.001; // évite division par zéro
+
+    // Âge max d'une prévision `qui_vole_consensus` pour être considérée
+    // « fraîche ». Au-delà (sidecar tombé, run manqué), on retombe sur le
+    // calcul de consensus interne à partir des autres modèles.
+    private const CONSENSUS_MAX_AGE_MINUTES = 120;
 
     // Seuils globaux préchargés à la construction (au lieu d'appeler
     // Settings::get() N fois par scoring — typiquement 120 créneaux × 6 lookups).
@@ -97,8 +104,158 @@ class ScoringService
 
     /**
      * Calcule le score d'un site pour un créneau horaire donné.
+     *
+     * Priorité au consensus pré-calculé par le sidecar
+     * (`qui_vole_consensus`) : s'il existe une prévision consensus fraîche
+     * pour ce créneau, ses valeurs sont reprises telles quelles. Sinon, on
+     * retombe sur le calcul de consensus interne (voting logic) à partir des
+     * autres modèles — qui restent fetchés pour l'affichage.
      */
     private function computeScoreForSlot(
+        Site $site,
+        string $forecastAt,
+        Collection $modelForecasts
+    ): ?array {
+        $consensus = $this->freshConsensusForecast($modelForecasts);
+        if ($consensus !== null) {
+            return $this->buildScoreFromConsensus($site, $forecastAt, $consensus);
+        }
+
+        // Fallback : voting logic interne sur les autres modèles (le modèle
+        // consensus est exclu — il est absent/périmé dans cette branche).
+        $others = $modelForecasts->reject(
+            fn ($f) => $f->weatherModel?->code === ConsensusApi::MODEL_CODE
+        );
+        if ($others->isEmpty()) {
+            return null;
+        }
+
+        return $this->computeScoreByVoting($site, $forecastAt, $others);
+    }
+
+    /**
+     * Retourne la prévision `qui_vole_consensus` fraîche du créneau, ou null.
+     */
+    private function freshConsensusForecast(Collection $modelForecasts): ?Forecast
+    {
+        $cutoff = now()->subMinutes(self::CONSENSUS_MAX_AGE_MINUTES);
+
+        return $modelForecasts->first(function ($f) use ($cutoff) {
+            return $f->weatherModel?->code === ConsensusApi::MODEL_CODE
+                && $f->wind_direction !== null
+                && $f->wind_speed_avg !== null
+                && $f->fetched_at !== null
+                && $f->fetched_at->gte($cutoff);
+        });
+    }
+
+    /**
+     * Construit le score d'un créneau directement à partir du consensus
+     * fourni par l'API sidecar. Les valeurs de consensus sont reprises
+     * telles quelles ; seules les règles métier (éliminatoires, couleurs)
+     * sont appliquées côté Laravel. La confiance dérive des compteurs
+     * `models_count` / `models_converging` fournis par l'API.
+     */
+    private function buildScoreFromConsensus(
+        Site $site,
+        string $forecastAt,
+        Forecast $c
+    ): array {
+        $conditions = $site->conditions;
+
+        $windDirConsensus   = (float) $c->wind_direction;
+        $windSpeedConsensus = (float) $c->wind_speed_avg;
+        $windGustConsensus  = $c->wind_speed_max !== null ? (float) $c->wind_speed_max : $windSpeedConsensus;
+        $precipConsensus    = $c->precipitation !== null ? (float) $c->precipitation : 0.0;
+        $cloudBaseConsensus = $c->cloud_base_m !== null ? (float) $c->cloud_base_m : null;
+
+        $status = $this->applyEliminatoryRules(
+            $conditions,
+            $windDirConsensus,
+            $windSpeedConsensus,
+            $windGustConsensus,
+            $precipConsensus
+        );
+
+        $modelsCount      = (int) ($c->models_count ?? 0);
+        $modelsConverging = (int) ($c->models_converging ?? 0);
+        $convergence      = $modelsCount > 0 ? $modelsConverging / $modelsCount : 0.0;
+
+        $confidencePct = (int) round($convergence * 100);
+        if ($status === 'orange') {
+            $confidencePct = min($confidencePct, 60);
+        }
+
+        $colors = $this->computeParamColors(
+            $conditions,
+            $windDirConsensus,
+            $windSpeedConsensus,
+            $windGustConsensus,
+            $precipConsensus,
+            $cloudBaseConsensus
+        );
+
+        // L'API ne fournit pas la convergence par paramètre (un seul couple
+        // count/converging global). On reporte le ratio global sur chaque
+        // paramètre — `values` ne contient que la valeur consensus (les
+        // valeurs par modèle restent disponibles via /multimodel).
+        $detail = [
+            'wind_dir' => [
+                'consensus'   => $windDirConsensus,
+                'convergence' => round($convergence, 2),
+                'values'      => [$windDirConsensus],
+                'color'       => $colors['wind_dir'],
+                'source'      => 'consensus_api',
+            ],
+            'wind_speed' => [
+                'consensus'   => $windSpeedConsensus,
+                'convergence' => round($convergence, 2),
+                'values'      => [$windSpeedConsensus],
+                'color'       => $colors['wind_speed'],
+            ],
+            'wind_gust' => [
+                'consensus' => $windGustConsensus,
+                'values'    => [$windGustConsensus],
+                'color'     => $colors['wind_gust'],
+            ],
+            'precip' => [
+                'consensus'   => $precipConsensus,
+                'convergence' => round($convergence, 2),
+                'values'      => [$precipConsensus],
+                'color'       => $colors['precip'],
+            ],
+            'cloud_base' => [
+                'consensus' => $cloudBaseConsensus !== null ? (int) round($cloudBaseConsensus) : null,
+                'values'    => $cloudBaseConsensus !== null ? [(int) round($cloudBaseConsensus)] : [],
+                'color'     => $colors['cloud_base'],
+            ],
+        ];
+
+        return [
+            'site_id'              => $site->id,
+            'forecast_at'          => $forecastAt,
+            'computed_at'          => now()->toDateTimeString(),
+            'status'               => $status,
+            'confidence_pct'       => $confidencePct,
+            'wind_dir_consensus'   => (int) round($windDirConsensus),
+            'wind_speed_consensus' => round($windSpeedConsensus, 1),
+            'wind_gust_consensus'  => round($windGustConsensus, 1),
+            'precip_consensus'     => round($precipConsensus, 1),
+            'cloud_base_consensus' => $cloudBaseConsensus !== null ? (int) round($cloudBaseConsensus) : null,
+            'models_count'         => $modelsCount,
+            'models_converging'    => $modelsConverging,
+            'detail'               => json_encode($detail),
+            'created_at'           => now()->toDateTimeString(),
+            'updated_at'           => now()->toDateTimeString(),
+        ];
+    }
+
+    /**
+     * Calcule le score d'un créneau par voting logic interne (consensus
+     * multi-modèles calculé en PHP). Fallback quand le consensus pré-calculé
+     * du sidecar est indisponible.
+     */
+    private function computeScoreByVoting(
         Site $site,
         string $forecastAt,
         Collection $modelForecasts

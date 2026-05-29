@@ -102,6 +102,10 @@ class FetchSiteModelJob implements ShouldQueue
                 'cloud_base_m'     => $values['cloud_base_m'] ?? null,
                 'temperature'      => $values['temperature'] ?? null,
                 'humidity'         => $values['humidity'] ?? null,
+                // Métadonnées de consensus : alimentées uniquement par le
+                // modèle `qui_vole_consensus` (ConsensusApi), nulles sinon.
+                'models_count'      => $values['models_count'] ?? null,
+                'models_converging' => $values['models_converging'] ?? null,
                 'created_at'       => $fetchedAt,
                 'updated_at'       => $fetchedAt,
             ];
@@ -127,7 +131,7 @@ class FetchSiteModelJob implements ShouldQueue
                 'wind_speed_avg', 'wind_speed_min', 'wind_speed_max',
                 'precipitation', 'cloud_cover_low', 'cloud_cover_mid',
                 'cloud_cover_high', 'cloud_base_m', 'temperature',
-                'humidity', 'updated_at',
+                'humidity', 'models_count', 'models_converging', 'updated_at',
             ]
         );
     }

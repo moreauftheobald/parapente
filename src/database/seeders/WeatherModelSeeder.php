@@ -286,6 +286,30 @@ class WeatherModelSeeder extends Seeder
             );
         }
 
+        // Consensus Qui-Vole — modèle servi par le sidecar
+        // parapente-consensus-grid (API `consensus`), pas par l'instance
+        // Open-Meteo. Le ScoringService l'utilise en priorité comme valeur
+        // de consensus (cf. ConsensusApi / ScoringService).
+        $consensusApiId = DB::table('weather_apis')->where('code', 'consensus')->value('id');
+        if ($consensusApiId !== null) {
+            DB::table('weather_models')->updateOrInsert(
+                ['code' => 'qui_vole_consensus'],
+                [
+                    'name'                      => 'Consensus Qui-Vole',
+                    'provider'                  => 'Qui-Vole',
+                    'weather_api_id'            => $consensusApiId,
+                    'resolution_km'             => 2.5,
+                    'max_horizon_h'             => 120,
+                    'weight_short'              => 1.00,
+                    'weight_medium'             => 1.00,
+                    'refresh_frequency_minutes' => 60,
+                    'active'                    => true,
+                    'updated_at'                => now(),
+                    'created_at'                => now(),
+                ]
+            );
+        }
+
         // Désactive les anciens codes obsolètes encore en base.
         $obsoleteCodes = [
             'meteofrance_arome_france',

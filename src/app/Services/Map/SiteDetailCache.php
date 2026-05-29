@@ -30,7 +30,10 @@ use Illuminate\Contracts\Cache\Repository as CacheRepository;
  */
 final class SiteDetailCache
 {
-    public const CACHE_VERSION = 1;
+    // v2 : bascule du consensus vers le sidecar — la liste `models` du
+    // payload multimodel exclut `qui_vole_consensus`, et le `detail` des
+    // scores issus du consensus API porte un champ `source`.
+    public const CACHE_VERSION = 2;
 
     /**
      * TTL backup au cas où l'invalidation push (ScoreSiteJob) échoue

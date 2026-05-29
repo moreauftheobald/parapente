@@ -9,6 +9,7 @@ use App\Models\Site;
 use App\Models\SiteScore;
 use App\Models\WeatherModel;
 use App\Services\Map\SunWindowCalculator;
+use App\Services\Weather\Apis\ConsensusApi;
 
 /**
  * Construit le payload `/api/sites/{id}/multimodel?day=YYYY-MM-DD&period=…`
@@ -43,9 +44,13 @@ final class SiteMultimodelPayloadBuilder
 
         // Toujours un array natif (pas une Collection) : on cache le payload
         // et on évite de sérialiser des objets Eloquent (cf. point 11 CLAUDE.md).
+        // Le modèle `qui_vole_consensus` est exclu de la liste de comparaison :
+        // il EST le consensus (déjà servi dans le bloc `consensus`), pas un
+        // modèle NWP à comparer aux autres.
         $modelColors   = config('weather.model_colors', []);
         $fallbackColor = $modelColors['fallback'] ?? '#9ca3af';
         $models        = WeatherModel::where('active', true)
+            ->where('code', '!=', ConsensusApi::MODEL_CODE)
             ->orderBy('id')
             ->get()
             ->map(fn (WeatherModel $m) => [
@@ -58,6 +63,8 @@ final class SiteMultimodelPayloadBuilder
             ->values()
             ->all();
 
+        $allowedModelIds = array_column($models, 'id');
+
         $forecasts = Forecast::where('site_id', $id)
             ->whereBetween('forecast_at', [$dayStart, $dayEnd])
             ->get();
@@ -66,6 +73,10 @@ final class SiteMultimodelPayloadBuilder
         foreach ($forecasts as $f) {
             $h = (int) $f->forecast_at->format('G');
             if (!in_array($h, $hours, true)) {
+                continue;
+            }
+            // Ignore les lignes du modèle consensus (exclu de $models).
+            if (!in_array($f->weather_model_id, $allowedModelIds, true)) {
                 continue;
             }
             $data[$h][$f->weather_model_id] = [

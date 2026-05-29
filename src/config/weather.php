@@ -27,6 +27,7 @@ return [
         'icon_seamless'              => '#84cc16',
         'gem_seamless'               => '#10b981',
         'gfs_seamless'               => '#f97316',
+        'qui_vole_consensus'         => '#0f172a',
         'fallback'                   => '#9ca3af',
     ],
 

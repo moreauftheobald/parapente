@@ -24,12 +24,16 @@ class WeatherApiRegistry
      *                      les modèles que notre instance self-hosted ne
      *                      sert pas correctement — typiquement UKMO Global
      *                      qui n'expose pas le vent à 10 m).
+     * `consensus`        : sidecar `parapente-consensus-grid` — consensus
+     *                      multi-modèles pré-calculé, exposé en compatible
+     *                      Open-Meteo (sert le modèle `qui_vole_consensus`).
      *
      * @var array<string, class-string<WeatherApiInterface>>
      */
     private const REGISTRY = [
         'openmeteo'        => OpenMeteoApi::class,
         'openmeteo_public' => OpenMeteoApi::class,
+        'consensus'        => ConsensusApi::class,
     ];
 
     /**

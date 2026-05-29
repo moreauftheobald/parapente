@@ -54,10 +54,27 @@ class WeatherApiSeeder extends Seeder
             ]
         );
 
+        // API « Consensus » — sidecar parapente-consensus-grid (consensus
+        // multi-modèles pré-calculé, exposé en compatible Open-Meteo). Sert
+        // le modèle `qui_vole_consensus`. Endpoint/port éditables via
+        // /admin/apis (champ base_url).
+        DB::table('weather_apis')->updateOrInsert(
+            ['code' => 'consensus'],
+            [
+                'name'        => 'Consensus Qui-Vole (sidecar)',
+                'base_url'    => env('CONSENSUS_API_URL', 'http://parapente-consensus-grid:8082/v1'),
+                'auth_type'   => 'none',
+                'daily_quota' => null,
+                'active'      => true,
+                'created_at'  => now(),
+                'updated_at'  => now(),
+            ]
+        );
+
         // Désactive les éventuelles entrées d'anciennes APIs encore en
         // base (BD existante migrée). Idempotent.
         DB::table('weather_apis')
-            ->whereNotIn('code', ['openmeteo', 'openmeteo_public'])
+            ->whereNotIn('code', ['openmeteo', 'openmeteo_public', 'consensus'])
             ->update(['active' => false, 'updated_at' => now()]);
     }
 }

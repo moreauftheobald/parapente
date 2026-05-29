@@ -25,6 +25,8 @@ class Forecast extends Model
         'cloud_base_m',
         'temperature',
         'humidity',
+        'models_count',
+        'models_converging',
     ];
 
     protected $casts = [
@@ -41,6 +43,8 @@ class Forecast extends Model
         'cloud_base_m'    => 'integer',
         'temperature'     => 'decimal:1',
         'humidity'        => 'integer',
+        'models_count'      => 'integer',
+        'models_converging' => 'integer',
     ];
 
     // ── Relations ───────────────────────────────────────────────

@@ -29,8 +29,11 @@ class ModelGridController extends Controller
 
     public function index(): View
     {
+        // Le modèle consensus n'a pas de grille NWP propre ni de fiabilité
+        // par balise — on l'exclut du sélecteur de la carte des modèles.
         $models = WeatherModel::query()
             ->where('active', true)
+            ->where('code', '!=', \App\Services\Weather\Apis\ConsensusApi::MODEL_CODE)
             ->orderBy('name')
             ->get(['id', 'code', 'name', 'resolution_km']);
 
