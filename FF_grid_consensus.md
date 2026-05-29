@@ -1,11 +1,26 @@
 # FF — Consensus multi-modèles sur grille (overlay carte + moteur de scoring)
 
-> **Statut** : Cadrage. À développer après stabilisation des modules
-> en cours (fiabilité phase 2.5, scoring perso).
+> **Statut** : **Partiellement livré (V3, 2026-05-29)** — le sidecar
+> `parapente-consensus-grid` calcule le consensus et l'expose en API
+> compatible Open-Meteo ; côté Laravel, le consensus est **récupéré en
+> priorité** comme source de scoring via `ConsensusApi` /
+> `qui_vole_consensus`, avec **fallback** sur la voting logic interne.
+> L'overlay carte (tuiles raster, flèches, slider) est livré par ailleurs
+> dans le module « Carte météo » (`/carte-meteo`). Reste à cadrer/livrer :
+> shadow mode comparatif formel et bascule de l'extinction des 13 modèles
+> bruts (phases 3-4 ci-dessous). Cf. `CHANGELOG.md` 2026-05-29.
+>
+> **Note d'écart vs le plan initial** : l'intégration retenue diffère du
+> « zero refactor » décrit en § 3.4 (consensus = 14ᵉ modèle passé dans la
+> voting logic). Le `ScoringService` a été modifié pour **reprendre
+> directement** la valeur consensus du sidecar (confiance dérivée des
+> compteurs `qui_vole_models_count/converging`) et ne **retomber** sur la
+> voting logic interne qu'en l'absence de consensus frais. Les autres
+> modèles restent fetchés pour l'**affichage** uniquement.
 > **Priorité** : **Stratégique** — initialement cadré comme feature
 > visuelle, le sujet est en réalité **le levier de scaling du moteur
 > de scoring** vers 1 000 sites France et 10 000 sites Europe (cf. § 1.5).
-> **Date de rédaction** : 2026-05-19 (révisé 2026-05-20).
+> **Date de rédaction** : 2026-05-19 (révisé 2026-05-20, statut MàJ 2026-05-29).
 
 Ce document consigne la discussion de cadrage. Il sert de point de
 reprise quand on décidera d'implémenter le sujet.

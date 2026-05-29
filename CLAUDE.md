@@ -113,7 +113,8 @@ src/                        ← Racine Laravel
 │   ├── Services/
 │   │   ├── Weather/
 │   │   │   ├── Apis/OpenMeteoApi.php         (fetch sites + batch balises)
-│   │   │   ├── ScoringService.php            (voting logic — algo A legacy en prod)
+│   │   │   ├── Apis/ConsensusApi.php         (client sidecar consensus, modèle qui_vole_consensus — V3)
+│   │   │   ├── ScoringService.php            (consensus sidecar prioritaire + fallback voting interne — V3)
 │   │   │   ├── SiteScoresPayloadBuilder.php  (build `/api/sites/{id}/scores`)
 │   │   │   ├── SiteChartPayloadBuilder.php   (build `/api/sites/{id}/chart`)
 │   │   │   ├── SiteMultimodelPayloadBuilder.php (build `/api/sites/{id}/multimodel`)
@@ -192,9 +193,9 @@ src/                        ← Racine Laravel
 | `users`           | Utilisateurs + rôle admin/user                          |
 | `sites`           | Sites de vol (nom, coords, altitude, niveau, région)    |
 | `site_conditions` | Conditions idéales par site (vent dir/vitesse, nuages)  |
-| `weather_models`  | Catalogue des modèles NWP (~20 connus, palette dans `config/weather.php`) |
-| `weather_apis`    | Sources API météo (Open-Meteo…)                         |
-| `forecasts`       | Prévisions brutes Open-Meteo (nullable)                 |
+| `weather_models`  | Catalogue des modèles NWP (~20 connus + `qui_vole_consensus`, palette dans `config/weather.php`) |
+| `weather_apis`    | Sources API météo (Open-Meteo self-hosted/public, `consensus` = sidecar) |
+| `forecasts`       | Prévisions brutes par modèle (nullable). `models_count` / `models_converging` alimentés uniquement par `qui_vole_consensus` (consensus sidecar) |
 | `site_scores`     | Scores calculés par site/heure (green/orange/red)       |
 | `balises`         | Balises PiouPiou/FFVL/METAR/Windy (+ flag `in_consensus_compare_panel` pour la phase 2.5) |
 | `balise_readings` | Lectures temps réel balises                             |
@@ -428,6 +429,15 @@ Couleur = statut du jour sélectionné dans le toolbar.
 
 ### Services météo
 
+> **Consensus délégué au sidecar (V3, depuis 2026-05-29)** — le calcul du
+> consensus multi-modèles n'est plus fait par défaut dans l'app : il est
+> récupéré **en priorité** depuis le sidecar `parapente-consensus-grid`
+> (API compatible Open-Meteo `/v1/forecast`), via le modèle
+> `qui_vole_consensus` / l'API `consensus`. La voting logic PHP du
+> `ScoringService` ne sert plus que de **fallback** (consensus
+> indisponible/périmé). Cf. la sous-section *Consensus via le sidecar*
+> plus bas et `FF_grid_consensus.md`.
+
 **Architecture self-hosted (depuis PR5)** :
 Le projet utilise un **serveur Open-Meteo dédié** (image `open-meteo/open-meteo`)
 pour agréger 13 modèles publics. Plus de fetch direct sur les APIs externes
@@ -476,6 +486,17 @@ inactifs car peu pertinents pour des sites France/Bénélux.
 seuils — injection automatique par DI Laravel ; les 4 seuils globaux
 sont préchargés au constructor une fois pour la durée du scoring,
 évite ~6 lookups par créneau × 120 créneaux/site) :
+- **Source du consensus (V3)** — pour chaque créneau,
+  `computeScoreForSlot()` cherche d'abord une prévision
+  `qui_vole_consensus` **fraîche** (`fetched_at` < 120 min,
+  `CONSENSUS_MAX_AGE_MINUTES`). Si présente :
+  `buildScoreFromConsensus()` reprend ses valeurs **telles quelles**
+  comme consensus et dérive `confidence_pct` de
+  `models_converging / models_count` (compteurs fournis par l'API).
+  Sinon, **fallback** : `computeScoreByVoting()` rejoue la voting logic
+  interne **en excluant** le modèle consensus (cf. `ConsensusApi::MODEL_CODE`).
+  Les règles métier ci-dessous (éliminatoires + couleurs) s'appliquent
+  identiquement dans les deux branches.
 - Voting logic complète
 - Moyenne circulaire pour direction vent (évite le problème 359°/1°)
 - Moyenne inverse carré pour isoler les outliers
@@ -502,6 +523,42 @@ sont préchargés au constructor une fois pour la durée du scoring,
   refetch météo. Idempotent. Lance-la après un déploiement qui change la
   logique de couleurs (sinon les couleurs s'actualiseront au prochain fetch
   horaire).
+
+#### Consensus via le sidecar — `ConsensusApi` (V3)
+
+Le consensus multi-modèles est calculé par le sidecar
+`parapente-consensus-grid` sur toute la France et exposé via une API
+**compatible Open-Meteo** (`GET /v1/forecast?latitude=&longitude=
+&hourly=…&models=qui_vole_consensus`). Côté Laravel, ce consensus est
+traité comme **un modèle météo ordinaire** :
+
+- **`App\Services\Weather\Apis\ConsensusApi`** (code `consensus`,
+  enregistré dans `WeatherApiRegistry`) — sert l'unique modèle
+  `qui_vole_consensus`. Fetché par `ForecastFetcher` / `FetchSiteModelJob`
+  comme n'importe quel modèle, stocké dans `forecasts`.
+  - ⚠️ Le sidecar renvoie le vent en **m/s** (pas de `wind_speed_unit`) →
+    `ConsensusApi` convertit en **km/h** (×3,6), unité de toute l'app.
+  - `qui_vole_cloud_base` (m AMSL, Espy côté sidecar) → `cloud_base_m`
+    directement (pas de recalcul).
+  - `qui_vole_models_count` / `qui_vole_models_converging` (horaires) →
+    stockés dans `forecasts.models_count` / `models_converging` (colonnes
+    nullables, alimentées **uniquement** par le modèle consensus).
+  - Toutes les constantes sensibles (code modèle, variables `qui_vole_*`)
+    sont en tête de `ConsensusApi` — à ajuster si le sidecar évolue.
+- **Endpoint/port éditables** depuis `/admin/apis` (champ `base_url` de la
+  ligne `weather_apis` `consensus`), comme l'Open-Meteo interne. Variable
+  d'env `CONSENSUS_API_URL` (défaut
+  `http://parapente-consensus-grid:8082/v1`), distincte de
+  `CONSENSUS_GRID_BASE_URL` (overlays raster de la carte météo).
+- **Modèle `qui_vole_consensus`** : visible dans `/admin/models`, mais
+  **exclu** de la liste des modèles comparés du panel multimodèles
+  (`SiteMultimodelPayloadBuilder`) et du sélecteur `/carte-modeles`
+  (`ModelGridController`) — il EST le consensus, déjà servi à part.
+- **Réversibilité** (pas de flag dédié) : désactiver `qui_vole_consensus`
+  dans `/admin/models` ⇒ plus de fetch consensus ⇒ le `ScoringService`
+  retombe sur la voting logic interne pour tous les créneaux.
+- Toute modif des payloads concernés ⇒ bump `SiteDetailCache::CACHE_VERSION`
+  (actuellement **v2**) — cf. point 14.
 
 > **Qualité d'une journée** — calculée à la lecture par
 > `App\Services\Map\DayQualityCalculator::compute()` (pas en base) :

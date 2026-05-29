@@ -11,6 +11,67 @@ Conventions :
 
 ---
 
+## 2026-05-29 — Consensus délégué au sidecar météo (V3)
+
+Le **calcul du consensus multi-modèles** est désormais récupéré **en
+priorité depuis le sidecar `parapente-consensus-grid`** (qui calcule le
+consensus sur toute la France et l'expose via une API compatible
+Open-Meteo `GET /v1/forecast`), avec **fallback automatique** sur la
+voting logic interne PHP lorsque le consensus est indisponible ou périmé.
+Les ~20 modèles NWP continuent d'être récupérés mais ne servent plus
+qu'à l'**affichage** (panel multimodèles) — ils ne pilotent le scoring
+que dans le mode dégradé. Branche `V3`.
+
+### Ajouté
+
+- **Fournisseur API « Consensus »** : nouvelle classe dédiée
+  `App\Services\Weather\Apis\ConsensusApi` (code `consensus`), client du
+  point-forecast `/v1/forecast` du sidecar. Enregistrée dans
+  `WeatherApiRegistry`. Sert l'unique modèle `qui_vole_consensus`.
+  - Conversion **m/s → km/h** (×3,6) du vent (l'endpoint ne renvoie pas
+    de `wind_speed_unit`, tout le reste de l'app est en km/h).
+  - Mapping `qui_vole_cloud_base` (m AMSL, Espy calculé par le sidecar)
+    → `cloud_base_m` sans recalcul.
+  - Lecture des compteurs propriétaires `qui_vole_models_count` /
+    `qui_vole_models_converging` (horaires).
+- **Endpoint/port éditables** depuis `/admin/apis` (champ `base_url` de
+  la ligne `weather_apis` `consensus`), comme l'API Open-Meteo interne.
+
+### Modifié
+
+- **`ScoringService`** : pour chaque créneau, si une prévision
+  `qui_vole_consensus` **fraîche** (< 120 min) existe, ses valeurs sont
+  reprises **telles quelles** comme consensus et la confiance est dérivée
+  de `models_converging / models_count`. Sinon, **fallback** sur la
+  voting logic interne calculée sur les autres modèles (le modèle
+  consensus étant exclu du vote). Les règles métier (éliminatoires,
+  couleurs par paramètre) restent appliquées côté Laravel dans les deux
+  cas. `rescore()` (scoring perso) inchangé.
+- **`SiteMultimodelPayloadBuilder`** et **`ModelGridController`** :
+  `qui_vole_consensus` exclu de la liste des modèles comparés (il EST le
+  consensus, déjà servi dans le bloc dédié).
+- **`SiteDetailCache`** : `CACHE_VERSION` → **v2** (la structure du
+  payload multimodel et du `detail` des scores a changé).
+
+### Base de données
+
+- `forecasts` : ajout de `models_count` et `models_converging`
+  (nullable, alimentées uniquement par le modèle consensus).
+- Insertion idempotente (migration) de l'API `consensus` et du modèle
+  `qui_vole_consensus`. Seeders `WeatherApiSeeder` / `WeatherModelSeeder`
+  mis à jour pour les installs neuves.
+
+### Déploiement
+
+- `php artisan migrate --force` (colonnes + enregistrement API/modèle).
+- Variable d'env **`CONSENSUS_API_URL`** (défaut
+  `http://parapente-consensus-grid:8082/v1`).
+- **Réversibilité** sans flag : désactiver le modèle `qui_vole_consensus`
+  dans `/admin/models` → plus de fetch consensus → fallback voting
+  interne partout.
+
+---
+
 ## 2026-05-29 — Sites masqués par utilisateur (carte de volabilité)
 
 Un utilisateur **connecté** peut masquer de sa carte de volabilité
