@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\User\AccountDeleteRequest;
 use App\Http\Requests\User\PasswordUpdateRequest;
 use App\Http\Requests\User\ProfileUpdateRequest;
+use App\Models\UserHiddenSite;
 use App\Models\UserSiteCondition;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -32,6 +33,7 @@ class ProfileController extends Controller
             'scoringStoredCount'    => UserSiteCondition::forUser($userId)->count(),
             'scoringMaxActive'      => UserSiteCondition::MAX_ACTIVE,
             'scoringMaxStored'      => UserSiteCondition::MAX_STORED,
+            'hiddenSiteCount'       => UserHiddenSite::forUser($userId)->count(),
         ]);
     }
 

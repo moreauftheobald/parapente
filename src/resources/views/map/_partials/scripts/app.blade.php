@@ -28,6 +28,10 @@ function mapApp(){return{
     // Disponible uniquement quand l'utilisateur est connecté.
     onlyMyScorings:false,
     authUser: AUTH_USER,
+    // Sites masqués par l'utilisateur connecté (cf. /profil/sites-masques).
+    // Toujours filtrés de la carte (pas de toggle ici — la page de gestion
+    // est le panneau de contrôle). Vide pour les invités. FF_site_blacklist.md.
+    hiddenSiteIds:[],
 
     // ── Volet droit (site) : onglets + données ──
     rpTab:'synthese',                              // synthese | voting | models | models5
@@ -197,8 +201,39 @@ function mapApp(){return{
 
         // Phase 4 : sur-couche perso (badge + overrides scoring actif)
         if (this.authUser) await this.loadScoringOverrides();
+        // Sites masqués : filtre les marqueurs + recalcule l'agrégat du jour
+        if (this.authUser) await this.loadHiddenSites();
 
         this.renderMarkers();
+    },
+
+    /**
+     * Récupère les sites masqués par l'utilisateur connecté + l'agrégat
+     * journalier recalculé sans eux. Fusionne en mémoire :
+     *  - hiddenSiteIds → filtre des marqueurs (_siteVisible)
+     *  - days_summary  → remplace bestStatus / greenSlots du sélecteur de
+     *    jour pour qu'il reflète uniquement les sites visibles.
+     * Cf. FF_site_blacklist.md.
+     */
+    async loadHiddenSites(){
+        try {
+            const r = await fetch('/api/me/hidden-sites', {credentials:'same-origin'});
+            if (!r.ok) return;
+            const data = await r.json();
+            this.hiddenSiteIds = data.hidden_site_ids || [];
+            // Agrégat recalculé (null si aucun site masqué → on garde le global).
+            if (Array.isArray(data.days_summary)) {
+                const byRaw = {};
+                data.days_summary.forEach(d => { byRaw[d.raw] = d; });
+                this.days = this.days.map(day => {
+                    const o = byRaw[day.raw];
+                    return o ? { ...day, bestStatus: o.best_status, greenSlots: o.green_slots } : day;
+                });
+            }
+        } catch (e) {
+            // silencieux : sans l'overlay, l'utilisateur voit la carte globale
+            console.warn('loadHiddenSites:', e);
+        }
     },
 
     /**
@@ -303,6 +338,8 @@ function mapApp(){return{
         return true; // statut inconnu : toujours affiché
     },
     _siteVisible(site, status){
+        // Sites masqués par l'utilisateur : jamais affichés (connecté only).
+        if(this.authUser && this.hiddenSiteIds.includes(site.id)) return false;
         if(! this._statusVisible(status)) return false;
         // Filtre « Mes sites » : ne garde que ceux avec un scoring perso
         // (actif ou inactif). Désactivé si l'user n'est pas connecté.

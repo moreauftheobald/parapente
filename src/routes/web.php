@@ -28,6 +28,7 @@ use App\Http\Controllers\IconCacheController;
 use App\Http\Controllers\MapController;
 use App\Http\Controllers\WeatherMapController;
 use App\Http\Controllers\WikiController;
+use App\Http\Controllers\User\HiddenSitePageController;
 use App\Http\Controllers\User\ProfileController;
 use App\Http\Controllers\User\ScoringPageController;
 use Illuminate\Support\Facades\Route;
@@ -92,6 +93,9 @@ Route::middleware('auth')->group(function () {
 
     // Page d'écran complet : gestion des scorings perso
     Route::get('/profil/scorings',        [ScoringPageController::class, 'index'])->name('user.scorings');
+
+    // Page d'écran complet : gestion des sites masqués sur la carte
+    Route::get('/profil/sites-masques',   [HiddenSitePageController::class, 'index'])->name('user.hidden-sites');
 });
 
 // ───────────────────────────────────────────────────────────────

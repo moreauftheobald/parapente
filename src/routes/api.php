@@ -2,8 +2,10 @@
 
 use App\Http\Controllers\Api\BaliseController;
 use App\Http\Controllers\Api\MapBundleController;
+use App\Http\Controllers\Api\MeHiddenSitesController;
 use App\Http\Controllers\Api\MeScoringController;
 use App\Http\Controllers\Api\SiteController;
+use App\Http\Controllers\Api\UserHiddenSiteController;
 use App\Http\Controllers\Api\UserScoringController;
 use Illuminate\Support\Facades\Route;
 
@@ -34,6 +36,10 @@ Route::middleware('auth:web')->group(function () {
     // global, fusionnée côté client. Léger (1-3 sites max en pratique).
     Route::get('me/scoring-overrides', [MeScoringController::class, 'overrides']);
 
+    // Sites masqués pour la carte : ids à filtrer + agrégat journalier
+    // recalculé sans eux (cf. FF_site_blacklist.md).
+    Route::get('me/hidden-sites', [MeHiddenSitesController::class, 'overrides']);
+
     Route::prefix('users/me/scorings')->group(function () {
         Route::get('/',                       [UserScoringController::class, 'index']);
         Route::post('/',                      [UserScoringController::class, 'store']);
@@ -41,5 +47,13 @@ Route::middleware('auth:web')->group(function () {
         Route::delete('/{scoring}',           [UserScoringController::class, 'destroy']);
         Route::post('/{scoring}/activate',    [UserScoringController::class, 'activate']);
         Route::post('/{scoring}/deactivate',  [UserScoringController::class, 'deactivate']);
+    });
+
+    // CRUD des sites masqués (page /profil/sites-masques). Binding sur
+    // le Site : masquer = PUT, réafficher = DELETE (tous deux idempotents).
+    Route::prefix('users/me/hidden-sites')->group(function () {
+        Route::get('/',           [UserHiddenSiteController::class, 'index']);
+        Route::put('/{site}',     [UserHiddenSiteController::class, 'hide']);
+        Route::delete('/{site}',  [UserHiddenSiteController::class, 'unhide']);
     });
 });

@@ -11,6 +11,12 @@
                 <span><i class="fa-solid fa-sliders w-5 text-center opacity-70"></i> Gérer mes scorings</span>
                 <i class="fa-solid fa-arrow-right text-[10px] opacity-60"></i>
             </a>
+            <a href="#hidden-sites" class="px-3 py-2 rounded-md text-gray-300 hover:bg-gray-800 hover:text-white transition"><i class="fa-solid fa-eye-slash w-5 text-center opacity-70"></i> Sites masqués</a>
+            <a href="{{ route('user.hidden-sites') }}"
+               class="px-3 py-2 rounded-md text-sky-300 hover:bg-sky-500/10 transition flex items-center justify-between">
+                <span><i class="fa-solid fa-eye-slash w-5 text-center opacity-70"></i> Gérer mes sites masqués</span>
+                <i class="fa-solid fa-arrow-right text-[10px] opacity-60"></i>
+            </a>
             @if (! $user->isAdmin())
                 <a href="#danger"  class="px-3 py-2 rounded-md text-red-300/80 hover:bg-red-500/10 hover:text-red-300 transition mt-4"><i class="fa-solid fa-triangle-exclamation w-5 text-center opacity-70"></i> Supprimer mon compte</a>
             @endif
@@ -158,6 +164,33 @@
             @if ($scoringStoredCount === 0)
                 <p class="mt-4 text-xs text-gray-500">
                     Aucun scoring perso pour l'instant. <a href="{{ route('user.scorings') }}" class="text-sky-400 hover:text-sky-300 transition">Crée ton premier scoring →</a>
+                </p>
+            @endif
+        </section>
+
+        {{-- ─── Sites masqués (résumé + lien vers la page dédiée) ─── --}}
+        <section id="hidden-sites" class="{{ $cardCls }}">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <h2 class="text-lg font-semibold text-white">Sites masqués</h2>
+                    <p class="text-sm text-gray-500">Masque de ta carte de volabilité les sites qui ne t'intéressent pas.</p>
+                </div>
+                <a href="{{ route('user.hidden-sites') }}"
+                   class="px-4 py-2 rounded-md bg-sky-500 hover:bg-sky-400 text-white text-sm font-medium transition flex items-center gap-2">
+                    <i class="fa-solid fa-eye-slash text-xs"></i> Gérer mes sites masqués
+                </a>
+            </div>
+
+            <div class="mt-5 bg-gray-950/50 border border-gray-800 rounded-lg px-4 py-3 inline-block">
+                <p class="text-[11px] uppercase tracking-wider text-gray-500">Sites masqués</p>
+                <p class="mt-1 font-mono text-2xl">
+                    <span class="{{ $hiddenSiteCount > 0 ? 'text-amber-300' : 'text-gray-300' }}">{{ $hiddenSiteCount }}</span>
+                </p>
+            </div>
+
+            @if ($hiddenSiteCount === 0)
+                <p class="mt-4 text-xs text-gray-500">
+                    Aucun site masqué : tous les sites s'affichent sur ta carte. <a href="{{ route('user.hidden-sites') }}" class="text-sky-400 hover:text-sky-300 transition">Gérer les sites masqués →</a>
                 </p>
             @endif
         </section>

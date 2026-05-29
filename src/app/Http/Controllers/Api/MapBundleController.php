@@ -30,6 +30,17 @@ class MapBundleController extends Controller
     {
         $bundle = $this->builder->getOrBuild();
 
+        // `green_hours_set` n'est utile qu'au recalcul serveur de
+        // l'agrégat journalier par utilisateur (MeHiddenSitesController) ;
+        // on le retire du payload client pour ne pas l'alourdir. On copie
+        // les sites pour ne pas muter l'entrée de cache partagée.
+        if (isset($bundle['sites']) && is_array($bundle['sites'])) {
+            $bundle['sites'] = array_map(static function (array $site): array {
+                unset($site['green_hours_set']);
+                return $site;
+            }, $bundle['sites']);
+        }
+
         // Cache-Control public : le bundle est identique pour tout le
         // monde, les intermédiaires (CDN, proxies) peuvent le cacher.
         // max-age court (60s) car on veut que la régénération horaire

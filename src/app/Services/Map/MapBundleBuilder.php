@@ -33,8 +33,15 @@ final class MapBundleBuilder
      * Bump à chaque changement de structure du bundle. Les anciennes
      * entrées Redis deviennent orphelines (clé différente) plutôt que
      * de risquer un crash de désérialisation.
+     *
+     * v2 : ajout de `green_hours_set` par site (day => [heures green])
+     *      dans le bundle caché — sert au recalcul de l'agrégat
+     *      journalier excluant les sites masqués par un utilisateur
+     *      (MeHiddenSitesController). Cette clé est retirée du payload
+     *      envoyé au client par MapBundleController::show (pas de bloat
+     *      côté front). Cf. FF_site_blacklist.md.
      */
-    public const CACHE_VERSION = 1;
+    public const CACHE_VERSION = 2;
 
     /**
      * TTL backup au cas où l'invalidation push (FetchForecastsJob)
@@ -118,7 +125,7 @@ final class MapBundleBuilder
 
         // 2e passe : agrégat global jour-par-jour (alimente le sélecteur
         // de jour côté client). Le client doit éviter de recalculer.
-        $daysSummary = $this->buildDaysSummary($sitesPayload);
+        $daysSummary = self::summarizeDays($sitesPayload);
 
         $generatedAt = CarbonImmutable::now();
         $payload = [
@@ -141,9 +148,12 @@ final class MapBundleBuilder
      * - `days` : dict day => {status, viability, green_hours}
      *           ⇒ remplace directement `dayQuality[id]` côté client.
      * - `sun_windows` : dict day => fenêtre solaire pour ce site
-     * - `green_hours_set` (interne) : ensemble des heures green pour ce
-     *           site/jour, utilisé par buildDaysSummary pour l'agrégat
-     *           « X h de vol possible quelque part ». Pas exposé au client.
+     * - `green_hours_set` : ensemble des heures green pour ce site/jour,
+     *           utilisé par summarizeDays pour l'agrégat « X h de vol
+     *           possible quelque part » et son recalcul par utilisateur
+     *           (exclusion des sites masqués). Présent dans le bundle
+     *           caché mais retiré du payload envoyé au client par
+     *           MapBundleController::show.
      *
      * @return array<string,mixed>
      */
@@ -197,40 +207,45 @@ final class MapBundleBuilder
             'wind_dir_max'     => $site->conditions?->wind_dir_max,
             'days'             => $days,
             'sun_windows'      => $sunWindows,
-            '_green_hours_set' => $greenHoursPerDay, // privé, retiré avant cache
+            'green_hours_set'  => $greenHoursPerDay, // retiré du payload client (cf. MapBundleController)
         ];
     }
 
     /**
      * Construit l'agrégat global par jour (5 premiers jours rencontrés) :
-     *  - `best_status` : meilleur statut observé parmi tous les sites
+     *  - `best_status` : meilleur statut observé parmi les sites retenus
      *    pour ce jour (green > orange > red > unknown)
-     *  - `green_slots` : nombre d'heures où AU MOINS UN site est green
-     *    sur ce jour (set des heures green agrégées)
+     *  - `green_slots` : nombre d'heures où AU MOINS UN site retenu est
+     *    green sur ce jour (union des heures green dédupliquée)
      *
-     * Reproduit la logique de `mapApp().buildDays()` côté serveur pour
-     * que le client n'ait plus à le faire en boot.
+     * Méthode statique pure (pas d'état, pas de DB) : sert au build du
+     * bundle (tous les sites) ET au recalcul par utilisateur excluant
+     * ses sites masqués (cf. MeHiddenSitesController). Lit les clés
+     * `days` et `green_hours_set` de chaque payload site.
      *
-     * Effet de bord : retire la clé interne `_green_hours_set` des
-     * payloads sites une fois consommée (pas exposée au client).
-     *
-     * @param  array<int,array<string,mixed>> $sitesPayload (modifié par ref)
+     * @param  array<int,array<string,mixed>> $sitesPayload
+     * @param  array<int,int>                 $excludedSiteIds  id de sites à ignorer
      * @return array<int,array{raw:string,best_status:string,green_slots:int}>
      */
-    private function buildDaysSummary(array &$sitesPayload): array
+    public static function summarizeDays(array $sitesPayload, array $excludedSiteIds = []): array
     {
         $statusRank = ['green' => 3, 'orange' => 2, 'red' => 1, 'unknown' => 0];
+        $excluded   = array_flip($excludedSiteIds);
 
         // Collecte des jours connus + agrégat green/best.
         $allDays = [];
         foreach ($sitesPayload as $site) {
-            foreach ($site['days'] as $day => $info) {
+            if (isset($excluded[$site['id'] ?? null])) {
+                continue;
+            }
+            foreach ($site['days'] ?? [] as $day => $info) {
                 $allDays[$day] ??= ['best' => 'unknown', 'green_hours' => []];
                 if (($statusRank[$info['status']] ?? 0) > ($statusRank[$allDays[$day]['best']] ?? 0)) {
                     $allDays[$day]['best'] = $info['status'];
                 }
             }
-            foreach ($site['_green_hours_set'] ?? [] as $day => $hours) {
+            foreach ($site['green_hours_set'] ?? [] as $day => $hours) {
+                $allDays[$day] ??= ['best' => 'unknown', 'green_hours' => []];
                 $allDays[$day]['green_hours'] = array_unique(array_merge($allDays[$day]['green_hours'] ?? [], $hours));
             }
         }
@@ -259,12 +274,6 @@ final class MapBundleBuilder
             ];
             if (count($out) >= 5) break; // horizon 5 jours
         }
-
-        // Nettoyage : retirer la clé interne avant cache.
-        foreach ($sitesPayload as &$site) {
-            unset($site['_green_hours_set']);
-        }
-        unset($site);
 
         return $out;
     }
