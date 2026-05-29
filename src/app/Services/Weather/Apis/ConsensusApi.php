@@ -42,7 +42,14 @@ class ConsensusApi implements WeatherApiInterface
     private const DAYS         = 5;
     private const TIMEZONE     = 'Europe/Paris';
     private const MS_TO_KMH    = 3.6;
-    private const HTTP_TIMEOUT = 15;
+    private const HTTP_TIMEOUT = 10;
+
+    // Mode batch multi-coordonnées (le sidecar accepte des listes CSV de
+    // latitudes/longitudes et renvoie un tableau racine, ordre préservé).
+    // 40 points/appel = ~75 appels pour 3000 sites (au lieu de 3000 appels
+    // mono qui saturaient le sidecar — cf. incident 2026-05-29).
+    private const BATCH_CHUNK     = 40;
+    private const BATCH_TIMEOUT_S = 20;
 
     /**
      * Variables horaires demandées au sidecar. Noms Open-Meteo natifs +
@@ -115,6 +122,95 @@ class ConsensusApi implements WeatherApiInterface
                 'site'    => $site->slug,
                 'model'   => $model->code,
                 'message' => $e->getMessage(),
+            ]);
+            $this->config?->recordError($e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Fetch batch multi-coordonnées (toutes les coordonnées d'un coup).
+     *
+     * Le sidecar accepte `latitude`/`longitude` en CSV et renvoie un
+     * **tableau racine** d'objets stations dans le **même ordre** que les
+     * coordonnées en entrée (un objet seul si un seul point). On remappe
+     * par position sur les ids fournis.
+     *
+     * @param  array<int, array{id:int|string, lat:float, lng:float}>  $points
+     * @return array<int|string, array<string, array<string, mixed>>>  id => (forecast_at => values)
+     */
+    public function fetchBatchForSites(array $points): array
+    {
+        if (empty($points)) {
+            return [];
+        }
+
+        $result = [];
+        foreach (array_chunk(array_values($points), self::BATCH_CHUNK) as $chunk) {
+            foreach ($this->fetchBatchChunk($chunk) as $id => $parsed) {
+                $result[$id] = $parsed;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param  array<int, array{id:int|string, lat:float, lng:float}>  $points
+     * @return array<int|string, array<string, array<string, mixed>>>
+     */
+    private function fetchBatchChunk(array $points): array
+    {
+        $lats = array_map(fn ($p) => (string) $p['lat'], $points);
+        $lngs = array_map(fn ($p) => (string) $p['lng'], $points);
+        $ids  = array_map(fn ($p) => $p['id'], $points);
+
+        try {
+            $response = Http::timeout(self::BATCH_TIMEOUT_S)
+                ->get($this->baseUrl . '/forecast', [
+                    'latitude'   => implode(',', $lats),
+                    'longitude'  => implode(',', $lngs),
+                    'hourly'     => implode(',', self::HOURLY_VARS),
+                    'models'     => self::MODEL_CODE,
+                    'start_date' => now(self::TIMEZONE)->startOfDay()->toDateString(),
+                    'end_date'   => now(self::TIMEZONE)->addDays(self::DAYS - 1)->toDateString(),
+                    'timezone'   => self::TIMEZONE,
+                ]);
+
+            $this->config?->incrementRequestsToday();
+
+            if (! $response->successful()) {
+                $msg = "Consensus batch HTTP {$response->status()} (" . count($points) . ' points)';
+                Log::warning($msg);
+                $this->config?->recordError($msg);
+                return [];
+            }
+
+            $this->config?->recordSuccess();
+
+            $payload = $response->json();
+            if (! is_array($payload)) {
+                return [];
+            }
+            // Tableau racine pour le multi-points ; objet seul pour 1 point.
+            $stations = isset($payload[0]) ? $payload : [$payload];
+
+            $result = [];
+            foreach ($stations as $idx => $stationData) {
+                $id = $ids[$idx] ?? null;
+                if ($id === null || ! is_array($stationData)) {
+                    continue;
+                }
+                $parsed = $this->parseResponse($stationData);
+                if (! empty($parsed)) {
+                    $result[$id] = $parsed;
+                }
+            }
+            return $result;
+        } catch (\Exception $e) {
+            Log::error('ConsensusApi batch failed', [
+                'message'     => $e->getMessage(),
+                'point_count' => count($points),
             ]);
             $this->config?->recordError($e->getMessage());
             return [];

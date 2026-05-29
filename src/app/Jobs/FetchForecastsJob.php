@@ -6,6 +6,7 @@ namespace App\Jobs;
 
 use App\Models\Site;
 use App\Models\WeatherModel;
+use App\Services\Weather\Apis\ConsensusApi;
 use Illuminate\Bus\Batch;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -52,9 +53,19 @@ class FetchForecastsJob implements ShouldQueue
             return;
         }
 
-        $dueModels = WeatherModel::with('api')
-            ->where('active', true)
-            ->get()
+        $activeModels = WeatherModel::with('api')->where('active', true)->get();
+
+        // Le consensus est fetché à part, en BATCH multi-coordonnées
+        // (1 appel/40 sites) — sorti de la chaîne par site pour ne pas
+        // refaire 1 appel HTTP par site (cf. FetchConsensusBatchJob).
+        $consensus        = $activeModels->firstWhere('code', ConsensusApi::MODEL_CODE);
+        $dispatchConsensus = $consensus
+            && $consensus->isDueForRefresh()
+            && $consensus->api
+            && $consensus->api->active;
+
+        $dueModels = $activeModels
+            ->reject(fn (WeatherModel $m) => $m->code === ConsensusApi::MODEL_CODE)
             ->filter(fn (WeatherModel $m) => $m->isDueForRefresh())
             ->filter(function (WeatherModel $m) {
                 if (! $m->api || ! $m->api->active) {
@@ -65,9 +76,24 @@ class FetchForecastsJob implements ShouldQueue
             })
             ->values();
 
-        if ($dueModels->isEmpty()) {
+        // Rien à faire que si aucun modèle NWP n'est dû ET que le consensus
+        // n'est pas dû non plus. Si SEUL le consensus est dû, on lance quand
+        // même une passe de scoring (chaînes = [ScoreSiteJob]) pour répercuter
+        // le consensus horaire frais sur les scores.
+        if ($dueModels->isEmpty() && ! $dispatchConsensus) {
             Log::info('FetchForecastsJob: aucun modèle dû pour refresh.');
             return;
+        }
+
+        // Consensus en batch, dispatché en premier sur la file `meteo` :
+        // il alimente `forecasts` avant les ScoreSiteJob (le scoring tolère
+        // de toute façon un consensus du cycle précédent grâce à la fenêtre
+        // de fraîcheur de 120 min — cf. ScoringService).
+        if ($dispatchConsensus) {
+            FetchConsensusBatchJob::dispatch()->onQueue('meteo');
+            $consensus->last_fetch_at = now();
+            $consensus->save();
+            Log::info('FetchForecastsJob: FetchConsensusBatchJob dispatché (batch consensus).');
         }
 
         // Une chaîne par site : modèles à fetcher puis ScoreSiteJob en fin.

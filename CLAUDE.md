@@ -534,8 +534,16 @@ traité comme **un modèle météo ordinaire** :
 
 - **`App\Services\Weather\Apis\ConsensusApi`** (code `consensus`,
   enregistré dans `WeatherApiRegistry`) — sert l'unique modèle
-  `qui_vole_consensus`. Fetché par `ForecastFetcher` / `FetchSiteModelJob`
-  comme n'importe quel modèle, stocké dans `forecasts`.
+  `qui_vole_consensus`, stocké dans `forecasts`.
+  - **Fetch en BATCH multi-coordonnées** (le sidecar accepte des listes
+    CSV `latitude`/`longitude` et renvoie un tableau racine, ordre
+    préservé) : `fetchBatchForSites()` envoie **40 sites par appel** →
+    `FetchConsensusBatchJob` couvre ~3000 sites en ~75 appels/heure.
+    ⚠️ **Ne jamais revenir à un fetch mono par site dans le cron** : à
+    3000 sites ça saturait le sidecar (incident 2026-05-29 — timeouts en
+    cascade, run consensus étouffé, carte météo HS). Le fetch mono
+    (`fetchForSiteAndModel`) reste utilisé uniquement pour le single-site
+    (`FetchSiteForecastsJob`, activation d'un site).
   - ⚠️ Le sidecar renvoie le vent en **m/s** (pas de `wind_speed_unit`) →
     `ConsensusApi` convertit en **km/h** (×3,6), unité de toute l'app.
   - `qui_vole_cloud_base` (m AMSL, Espy côté sidecar) → `cloud_base_m`
@@ -554,9 +562,17 @@ traité comme **un modèle météo ordinaire** :
   **exclu** de la liste des modèles comparés du panel multimodèles
   (`SiteMultimodelPayloadBuilder`) et du sélecteur `/carte-modeles`
   (`ModelGridController`) — il EST le consensus, déjà servi à part.
+- **Orchestration horaire** : `FetchForecastsJob` **sort
+  `qui_vole_consensus` de la chaîne par site** et dispatch à la place
+  `FetchConsensusBatchJob` (batch). Si SEUL le consensus est dû (cas
+  horaire courant), une passe de scoring (`ScoreSiteJob` par site) tourne
+  quand même pour répercuter le consensus frais. `FetchConsensusBatchJob`
+  a un **circuit breaker** (N échecs de chunk consécutifs → arrêt du
+  cycle) pour ne pas matraquer un sidecar à terre.
 - **Réversibilité** (pas de flag dédié) : désactiver `qui_vole_consensus`
   dans `/admin/models` ⇒ plus de fetch consensus ⇒ le `ScoringService`
-  retombe sur la voting logic interne pour tous les créneaux.
+  retombe sur la voting logic interne pour tous les créneaux. **C'est le
+  geste d'urgence** si le sidecar décroche.
 - Toute modif des payloads concernés ⇒ bump `SiteDetailCache::CACHE_VERSION`
   (actuellement **v2**) — cf. point 14.
 

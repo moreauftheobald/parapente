@@ -39,6 +39,14 @@ que dans le mode dégradé. Branche `V3`.
 
 ### Modifié
 
+- **Fetch consensus en BATCH multi-coordonnées** (suite à l'incident de
+  charge du 2026-05-29) : `ConsensusApi::fetchBatchForSites()` envoie 40
+  sites par appel au sidecar (tableau racine, ordre préservé), et
+  `FetchConsensusBatchJob` couvre tous les sites actifs en ~75 appels/h
+  au lieu d'un appel mono par site (~3000) qui saturait le sidecar.
+  `FetchForecastsJob` sort `qui_vole_consensus` de la chaîne par site et
+  dispatch le job batch ; circuit breaker en cas de sidecar injoignable.
+  Le fetch mono reste utilisé pour le single-site (activation).
 - **`ScoringService`** : pour chaque créneau, si une prévision
   `qui_vole_consensus` **fraîche** (< 120 min) existe, ses valeurs sont
   reprises **telles quelles** comme consensus et la confiance est dérivée

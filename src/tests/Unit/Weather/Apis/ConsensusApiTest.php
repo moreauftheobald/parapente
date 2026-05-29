@@ -101,4 +101,49 @@ class ConsensusApiTest extends TestCase
 
         $this->assertSame([], $api->fetchForSiteAndModel($site, $model));
     }
+
+    public function test_batch_parses_root_array_keyed_by_site_id_in_order(): void
+    {
+        $hour = now('Europe/Paris')->addHours(2)->format('Y-m-d\TH:00');
+
+        $station = function (int $dir, float $speedMs) use ($hour): array {
+            return [
+                'hourly' => [
+                    'time'                       => [$hour],
+                    'wind_speed_10m'             => [$speedMs],
+                    'wind_direction_10m'         => [$dir],
+                    'qui_vole_models_count'      => [9],
+                    'qui_vole_models_converging' => [6],
+                ],
+            ];
+        };
+
+        // Tableau racine, ordre = ordre des coordonnées en entrée.
+        Http::fake([
+            '*forecast*' => Http::response([$station(100, 5.0), $station(200, 10.0)], 200),
+        ]);
+
+        $api = new ConsensusApi();
+        $result = $api->fetchBatchForSites([
+            ['id' => 11, 'lat' => 49.0, 'lng' => 6.0],
+            ['id' => 22, 'lat' => 48.0, 'lng' => 5.0],
+        ]);
+
+        $this->assertSame([11, 22], array_keys($result));
+        $this->assertSame(100, array_values($result[11])[0]['wind_direction']);
+        $this->assertSame(18.0, array_values($result[11])[0]['wind_speed_avg']); // 5.0 × 3.6
+        $this->assertSame(200, array_values($result[22])[0]['wind_direction']);
+        $this->assertSame(36.0, array_values($result[22])[0]['wind_speed_avg']); // 10.0 × 3.6
+        $this->assertSame(6, array_values($result[22])[0]['models_converging']);
+    }
+
+    public function test_batch_empty_on_http_error(): void
+    {
+        Http::fake(['*forecast*' => Http::response('boom', 500)]);
+
+        $api = new ConsensusApi();
+        $this->assertSame([], $api->fetchBatchForSites([
+            ['id' => 1, 'lat' => 49.0, 'lng' => 6.0],
+        ]));
+    }
 }
