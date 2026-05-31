@@ -1,20 +1,24 @@
+# /srv/application/docker-compose.yml  — développement local
+#
+# Données persistées dans ./data/ (bind mounts locaux) :
+#   ./data/mysql/    ← MariaDB
+#   ./data/redis/    ← Redis
+#
+# Usage :
+#   docker compose up -d --build
+#   docker compose logs -f
+#   docker compose down
+
 networks:
-    parapente-internal-pod:
+    parapente-internal:
         internal: true
-    parapente-external-pod:
+    parapente-external:
         internal: false
 
-volumes:
-    mariadb-parapente:
-        external: false
-    redis-parapente:
-        external: false
-
 services:
-
-    # ──────────────────────────────────────────
+    # ────────────────────────────────────────────
     # MariaDB 10.11
-    # ──────────────────────────────────────────
+    # ────────────────────────────────────────────
     parapente-mariadb:
         image: mariadb:10.11
         command:
@@ -28,12 +32,12 @@ services:
             MYSQL_USER: ${DB_USERNAME}
             MYSQL_PASSWORD: ${DB_PASSWORD}
         ports:
-            - "3307:3306"          # 3307 pour éviter le conflit avec Dolibarr (3306)
+            - "3307:3306"
         networks:
-            - parapente-internal-pod
-            - parapente-external-pod
+            - parapente-internal
+            - parapente-external
         volumes:
-            - mariadb-parapente:/var/lib/mysql
+            - ./data/mysql:/var/lib/mysql
             - /etc/timezone:/etc/timezone:ro
             - /etc/localtime:/etc/localtime:ro
         healthcheck:
@@ -42,9 +46,9 @@ services:
             timeout: 5s
             retries: 5
 
-    # ──────────────────────────────────────────
-    # phpMyAdmin
-    # ──────────────────────────────────────────
+    # ────────────────────────────────────────────
+    # phpMyAdmin (dev uniquement)
+    # ────────────────────────────────────────────
     parapente-phpmyadmin:
         image: phpmyadmin/phpmyadmin
         container_name: parapente_phpmyadmin
@@ -55,14 +59,14 @@ services:
             parapente-mariadb:
                 condition: service_healthy
         ports:
-            - "8081:80"            # 8081 pour éviter le conflit avec Dolibarr (8080)
+            - "8081:80"
         networks:
-            - parapente-internal-pod
-            - parapente-external-pod
+            - parapente-internal
+            - parapente-external
 
-    # ──────────────────────────────────────────
+    # ────────────────────────────────────────────
     # Nginx
-    # ──────────────────────────────────────────
+    # ────────────────────────────────────────────
     parapente-nginx:
         image: nginx:1.26-alpine
         container_name: parapente_nginx
@@ -73,17 +77,17 @@ services:
             - /etc/timezone:/etc/timezone:ro
             - /etc/localtime:/etc/localtime:ro
         ports:
-            - "8001:80"            # 8001 pour éviter le conflit avec Dolibarr (80)
-            - "8443:443"           # 8443 pour éviter le conflit avec Dolibarr (443)
+            - "8001:80"
+            - "8443:443"
         networks:
-            - parapente-internal-pod
-            - parapente-external-pod
+            - parapente-internal
+            - parapente-external
         depends_on:
             - parapente-php
 
-    # ──────────────────────────────────────────
-    # PHP 8.4 FPM (app principale)
-    # ──────────────────────────────────────────
+    # ────────────────────────────────────────────
+    # PHP 8.4 FPM
+    # ────────────────────────────────────────────
     parapente-php:
         build:
             context: .
@@ -98,10 +102,10 @@ services:
             - /etc/timezone:/etc/timezone:ro
             - /etc/localtime:/etc/localtime:ro
         ports:
-            - "6001:9003"          # Xdebug (6001 pour éviter le conflit avec Dolibarr 6000)
+            - "6001:9003"    # Xdebug
         networks:
-            - parapente-internal-pod
-            - parapente-external-pod
+            - parapente-internal
+            - parapente-external
         depends_on:
             parapente-mariadb:
                 condition: service_healthy
@@ -111,9 +115,9 @@ services:
             - APP_ENV=${APP_ENV:-local}
             - XDEBUG_MODE=${XDEBUG_MODE:-develop,debug}
 
-    # ──────────────────────────────────────────
-    # Laravel Queue Worker (jobs météo)
-    # ──────────────────────────────────────────
+    # ────────────────────────────────────────────
+    # Laravel Queue Worker
+    # ────────────────────────────────────────────
     parapente-worker:
         build:
             context: .
@@ -125,8 +129,8 @@ services:
             - /etc/timezone:/etc/timezone:ro
             - /etc/localtime:/etc/localtime:ro
         networks:
-            - parapente-internal-pod
-            - parapente-external-pod
+            - parapente-internal
+            - parapente-external
         depends_on:
             parapente-mariadb:
                 condition: service_healthy
@@ -134,15 +138,9 @@ services:
                 condition: service_healthy
         restart: unless-stopped
 
-    # ──────────────────────────────────────────
-    # Laravel Scheduler (équivalent du cron)
-    # ──────────────────────────────────────────
-    # Boucle infinie qui appelle schedule:run toutes les minutes
-    # → déclenche les jobs définis dans routes/console.php :
-    #   - FetchForecastsJob          (horaire)
-    #   - FetchPiouPiouReadingsJob   (toutes les 10 min)
-    #   - FetchBaliseForecastsJob    (horaire)
-    #   - PurgeOldForecastsJob       (quotidien à 03h00)
+    # ────────────────────────────────────────────
+    # Laravel Scheduler
+    # ────────────────────────────────────────────
     parapente-scheduler:
         build:
             context: .
@@ -154,8 +152,8 @@ services:
             - /etc/timezone:/etc/timezone:ro
             - /etc/localtime:/etc/localtime:ro
         networks:
-            - parapente-internal-pod
-            - parapente-external-pod
+            - parapente-internal
+            - parapente-external
         depends_on:
             parapente-mariadb:
                 condition: service_healthy
@@ -163,33 +161,33 @@ services:
                 condition: service_healthy
         restart: unless-stopped
 
-    # ──────────────────────────────────────────
-    # Redis (cache + queues)
-    # ──────────────────────────────────────────
+    # ────────────────────────────────────────────
+    # Redis
+    # ────────────────────────────────────────────
     parapente-redis:
         image: redis:7-alpine
         container_name: parapente_redis
         volumes:
-            - redis-parapente:/data
+            - ./data/redis:/data
             - /etc/timezone:/etc/timezone:ro
             - /etc/localtime:/etc/localtime:ro
         networks:
-            - parapente-internal-pod
+            - parapente-internal
         healthcheck:
             test: ["CMD", "redis-cli", "ping"]
             interval: 10s
             timeout: 5s
             retries: 5
 
-    # ──────────────────────────────────────────
-    # MailDev (emails de dev)
-    # ──────────────────────────────────────────
+    # ────────────────────────────────────────────
+    # MailDev (dev uniquement)
+    # ────────────────────────────────────────────
     parapente-mail:
         image: maildev/maildev
         container_name: parapente_maildev
         ports:
-            - "6082:1080"          # Interface web (6082 pour éviter le conflit avec Dolibarr 6081)
-            - "1026:1025"          # SMTP (1026 pour éviter le conflit avec Dolibarr 25)
+            - "6082:1080"
+            - "1026:1025"
         networks:
-            - parapente-internal-pod
-            - parapente-external-pod
+            - parapente-internal
+            - parapente-external
