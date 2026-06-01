@@ -96,9 +96,6 @@
                 <a href="{{ route('admin.modules.index') }}" class="{{ $adminLink($adminSegment === 'modules') }}">
                     <i class="fa-solid fa-puzzle-piece w-4 text-center"></i> Modules
                 </a>
-                <a href="{{ route('admin.data-coverage.index') }}" class="{{ $adminLink($adminSegment === 'data-coverage') }}">
-                    <i class="fa-solid fa-chart-area w-4 text-center"></i> Couverture des données
-                </a>
             </nav>
         @endauth
     </x-slot:detail>

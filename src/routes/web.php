@@ -4,7 +4,6 @@ use App\Http\Controllers\Admin\ArticleController as AdminArticleController;
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\BaliseController as AdminBaliseController;
 use App\Http\Controllers\Admin\DashboardController;
-use App\Http\Controllers\Admin\DataCoverageController as AdminDataCoverageController;
 use App\Http\Controllers\Admin\DataQualityController as AdminDataQualityController;
 use App\Http\Controllers\Admin\DataSyncController as AdminSyncController;
 use App\Http\Controllers\Admin\LogController as AdminLogController;
@@ -192,10 +191,6 @@ Route::prefix('admin')->name('admin.')->group(function () {
         // ── Modules du menu principal ────────────────────────────
         Route::get('/modules',           [AdminModuleController::class, 'index'])->name('modules.index');
         Route::patch('/modules/{module}', [AdminModuleController::class, 'update'])->name('modules.update');
-
-        // ── Couverture des données météo ──────────────────────────
-        Route::get('/data-coverage', [AdminDataCoverageController::class, 'index'])
-            ->name('data-coverage.index');
 
         // ── Logs / monitoring ─────────────────────────────────────
         Route::get('/logs', [AdminLogController::class, 'index'])->name('logs.index');
