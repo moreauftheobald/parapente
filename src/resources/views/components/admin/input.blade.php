@@ -37,14 +37,14 @@
             </label>
         @endif
         @if ($suffix)
-            <div class="flex flex-1 min-w-0">
+            <div class="flex flex-1 min-w-20">
                 <input id="{{ $id }}" name="{{ $name }}" type="{{ $type }}" value="{{ $val }}"
                        {{ $attributes->except(['id'])->merge(['class' => $inputCls]) }}>
                 <span class="shrink-0 px-2 py-1.5 bg-gray-800 border border-l-0 border-gray-700 rounded-r-md text-xs text-gray-500">{{ $suffix }}</span>
             </div>
         @else
             <input id="{{ $id }}" name="{{ $name }}" type="{{ $type }}" value="{{ $val }}"
-                   {{ $attributes->except(['id'])->merge(['class' => $inputCls]) }}>
+                   {{ $attributes->except(['id'])->merge(['class' => $inputCls . ' min-w-20']) }}>
         @endif
     </div>
 
