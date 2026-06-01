@@ -91,21 +91,24 @@ function mapApp(){return{
                 root.style.transform = '';
                 window.dispatchEvent(new Event('resize'));
             });
-            [50, 250, 450, 700].forEach(ms => setTimeout(() => this.map?.invalidateSize(), ms));
         };
         this.$watch('leftOpen',  onPanelChange);
         this.$watch('rightOpen', onPanelChange);
 
-        // Re-rendu des graphes du volet droit sur redimensionnement
+        // Re-rendu des graphes du volet droit sur redimensionnement (debounce 250ms)
+        let _resizeTimer = null;
         window.addEventListener('resize', () => {
-            if (!this.rightOpen) return;
-            if (this.selectedFeature?.type === 'site') {
-                if (this.rpTab === 'synthese' && this.chartData)       this.renderSynthese();
-                if (this.rpTab === 'models'   && this.multimodelData)  this.renderCharts();
-                if (this.rpTab === 'models5'  && this.multimodel5Data) this.renderCharts5();
-            } else if (this.selectedFeature?.type === 'balise' && this.baliseData) {
-                this.renderBaliseCharts();
-            }
+            clearTimeout(_resizeTimer);
+            _resizeTimer = setTimeout(() => {
+                if (!this.rightOpen) return;
+                if (this.selectedFeature?.type === 'site') {
+                    if (this.rpTab === 'synthese' && this.chartData)       this.renderSynthese();
+                    if (this.rpTab === 'models'   && this.multimodelData)  this.renderCharts();
+                    if (this.rpTab === 'models5'  && this.multimodel5Data) this.renderCharts5();
+                } else if (this.selectedFeature?.type === 'balise' && this.baliseData) {
+                    this.renderBaliseCharts();
+                }
+            }, 250);
         });
     },
 
@@ -342,9 +345,6 @@ function mapApp(){return{
     },
     hideVotingTip(){ this.votingTip.visible = false; },
 
-    // (buildDays supprimé — agrégat global maintenant pré-calculé côté
-    // serveur dans le map bundle, sous la clé `days_summary`. Cf.
-    // loadSites() pour le mapping vers this.days[]. FF_map_bundle_cache.md)
     selectDay(idx){
         this.selectedDayIdx=idx;
         this.renderMarkers();
