@@ -246,6 +246,30 @@
             </div>
         </x-admin.section>
 
+        {{-- Fiabilité (sidecar consensus) ────────────────────────── --}}
+        <x-admin.section title="Fiabilité — pondération sidecar" icon="fa-solid fa-flask-vial" color="amber" class="mb-5">
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-8 gap-y-3">
+                <x-admin.input name="weight_factor" label="Weight factor global" type="number"
+                               step="0.01" min="0" max="5" required class="font-mono"
+                               :value="old('weight_factor', $model->weight_factor)"
+                               hint="Facteur de fiabilité global lu par le sidecar (0 = ignoré dans le consensus, 1.0 = neutre, > 1.0 = boosté). La table model_reliability fournit des poids fins par (variable, horizon, balise)." />
+            </div>
+            @if (old('weight_factor', $model->weight_factor) < 0.1 && old('weight_factor', $model->weight_factor) != 0)
+                <x-admin.alert type="warning" class="mt-3">Valeur très basse — le modèle aura un poids quasi-nul dans le consensus.</x-admin.alert>
+            @endif
+            @if (old('weight_factor', $model->weight_factor) > 2.0)
+                <x-admin.alert type="warning" class="mt-3">Valeur élevée — ce modèle dominera le consensus. Vérifiez que c'est intentionnel.</x-admin.alert>
+            @endif
+
+            <div class="mt-3">
+                <x-admin.field name="notes_admin" label="Notes admin" :inline="false"
+                               hint="Champ libre : raison d'un poids modifié, observations, remarques opérationnelles.">
+                    <textarea name="notes_admin" id="notes_admin" rows="2"
+                              class="{{ $inputCls }}">{{ old('notes_admin', $model->notes_admin) }}</textarea>
+                </x-admin.field>
+            </div>
+        </x-admin.section>
+
         <div class="flex items-center justify-between">
             <x-admin.button type="submit" icon="fa-solid fa-floppy-disk">Enregistrer</x-admin.button>
             <a href="{{ route('admin.models.index') }}" class="text-sm text-gray-400 hover:text-white transition">Annuler</a>

@@ -87,8 +87,11 @@
                 <a href="{{ route('admin.logs.index') }}" class="{{ $adminLink($adminSegment === 'logs') }}">
                     <i class="fa-solid fa-scroll w-4 text-center"></i> Logs / monitoring
                 </a>
-                <a href="{{ route('admin.settings.index') }}" class="{{ $adminSubLink($adminSegment === 'settings') }}">
+                <a href="{{ route('admin.settings.index') }}" class="{{ $adminSubLink($adminSegment === 'settings' && request()->segment(3) !== 'audit') }}">
                     <i class="fa-solid fa-gear w-4 text-center"></i> Paramètres
+                </a>
+                <a href="{{ route('admin.settings.audit') }}" class="{{ $adminSubLink($adminSegment === 'settings' && request()->segment(3) === 'audit') }}">
+                    <i class="fa-solid fa-clock-rotate-left w-4 text-center"></i> Historique
                 </a>
 
                 {{-- ── Divers ───────────────────────────────────── --}}

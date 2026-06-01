@@ -35,7 +35,7 @@ class WeatherModelController extends Controller
 
     private const SORTABLE = [
         'name', 'code', 'provider', 'resolution_km', 'max_horizon_h',
-        'weight_short', 'weight_medium', 'refresh_frequency_minutes', 'active',
+        'weight_short', 'weight_medium', 'weight_factor', 'refresh_frequency_minutes', 'active',
     ];
 
     public function index(Request $request): View
@@ -91,6 +91,8 @@ class WeatherModelController extends Controller
             'endpoint_url'              => ['nullable', 'url', 'max:500'],
             'weight_short'              => ['required', 'numeric', 'min:0', 'max:5'],
             'weight_medium'             => ['required', 'numeric', 'min:0', 'max:5'],
+            'weight_factor'             => ['required', 'numeric', 'min:0', 'max:5'],
+            'notes_admin'               => ['nullable', 'string', 'max:2000'],
             'refresh_frequency_minutes' => ['required', 'integer', 'min:5', 'max:1440'],
             'active'                    => ['nullable', 'boolean'],
         ]);
@@ -112,6 +114,8 @@ class WeatherModelController extends Controller
             'endpoint_url'              => $data['endpoint_url'] ?: null,
             'weight_short'              => $data['weight_short'],
             'weight_medium'             => $data['weight_medium'],
+            'weight_factor'             => $data['weight_factor'],
+            'notes_admin'               => $data['notes_admin'],
             'refresh_frequency_minutes' => $data['refresh_frequency_minutes'],
             'active'                    => (bool) ($data['active'] ?? false),
         ]);

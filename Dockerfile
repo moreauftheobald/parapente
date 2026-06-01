@@ -115,3 +115,12 @@ RUN groupmod -g ${HOST_GID} www-data \
 WORKDIR /var/www/html
 
 RUN chown -R www-data:www-data /var/www
+
+# ──────────────────────────────────────────
+# Entrypoint — crée les répertoires writables
+# et fixe les permissions à chaque démarrage
+# ──────────────────────────────────────────
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["php-fpm"]

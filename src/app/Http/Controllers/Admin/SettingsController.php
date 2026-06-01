@@ -35,15 +35,22 @@ class SettingsController extends Controller
 
         // Regroupement par section (cf. catalogue Settings::DEFAULTS) :
         $groups = [
-            'precip'      => ['title' => 'Précipitations',           'icon' => 'fa-cloud-rain',     'keys' => []],
-            'gust'        => ['title' => 'Rafales',                  'icon' => 'fa-tornado',        'keys' => []],
-            'viability'   => ['title' => "Viabilité d'une journée",  'icon' => 'fa-chart-line',     'keys' => []],
-            'quality'     => ['title' => 'Qualité des données',      'icon' => 'fa-clipboard-check','keys' => []],
-            'balises'     => ['title' => 'Sources balises',          'icon' => 'fa-tower-broadcast','keys' => []],
-            'analytics'   => ['title' => 'Trafic / analytics',       'icon' => 'fa-chart-line',     'keys' => []],
-            'reliability' => ['title' => 'Fiabilité des modèles',    'icon' => 'fa-flask-vial',     'keys' => []],
+            'precip'               => ['title' => 'Précipitations',                'icon' => 'fa-cloud-rain',      'keys' => []],
+            'gust'                 => ['title' => 'Rafales',                       'icon' => 'fa-tornado',         'keys' => []],
+            'viability'            => ['title' => "Viabilité d'une journée",       'icon' => 'fa-chart-line',      'keys' => []],
+            'quality'              => ['title' => 'Qualité des données',           'icon' => 'fa-clipboard-check', 'keys' => []],
+            'balises'              => ['title' => 'Sources balises',               'icon' => 'fa-tower-broadcast', 'keys' => []],
+            'analytics'            => ['title' => 'Trafic / analytics',            'icon' => 'fa-chart-line',      'keys' => []],
+            'reliability'          => ['title' => 'Fiabilité des modèles',         'icon' => 'fa-flask-vial',      'keys' => []],
+            'consensus_global'     => ['title' => 'Consensus sidecar — globaux',   'icon' => 'fa-sliders',         'keys' => []],
+            'consensus_scheduler'  => ['title' => 'Orchestration sidecar',         'icon' => 'fa-clock',           'keys' => []],
         ];
+        // JSON-typed settings (consensus per-variable config) are managed
+        // on their own dedicated page — exclude them from the generic form.
         foreach (Settings::DEFAULTS as $key => $meta) {
+            if (($meta['type'] ?? 'float') === 'json') {
+                continue;
+            }
             $g = $meta['group'] ?? 'misc';
             if (! isset($groups[$g])) {
                 $groups[$g] = ['title' => ucfirst($g), 'icon' => 'fa-gear', 'keys' => []];
@@ -61,8 +68,12 @@ class SettingsController extends Controller
     {
         // Construction dynamique des règles de validation à partir du
         // catalogue (int / float / bool / secret-string).
+        // JSON-typed settings are excluded (managed on their own page).
         $rules = [];
         foreach (Settings::DEFAULTS as $key => $meta) {
+            if (($meta['type'] ?? 'float') === 'json') {
+                continue;
+            }
             $name = $this->keyToField($key);
             $rules[$name] = match ($meta['type'] ?? 'float') {
                 'int'              => ['required', 'integer', 'min:0'],
@@ -75,6 +86,9 @@ class SettingsController extends Controller
 
         $values = [];
         foreach (Settings::DEFAULTS as $key => $meta) {
+            if (($meta['type'] ?? 'float') === 'json') {
+                continue;
+            }
             $name = $this->keyToField($key);
             $raw  = $data[$name] ?? null;
             $type = $meta['type'] ?? 'float';

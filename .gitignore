@@ -24,8 +24,9 @@ src/public/storage
 src/public/build/
 
 # ──────────────────────────────────────────
-# Docker
+# Docker — données persistantes
 # ──────────────────────────────────────────
+data/
 nginx/log/*.log
 nginx/log/*.gz
 

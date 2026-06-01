@@ -73,6 +73,9 @@
                         {!! $sortLink('weight_short', 'Poids') !!}
                         <div class="text-[10px] text-gray-500 normal-case mt-0.5">court / moyen</div>
                     </th>
+                    <th class="px-4 py-3 text-right align-top w-20 text-gray-300">
+                        {!! $sortLink('weight_factor', 'Fiabilité') !!}
+                    </th>
                     <th class="px-4 py-3 text-right align-top w-24 text-gray-300">
                         {!! $sortLink('refresh_frequency_minutes', 'Refresh') !!}
                     </th>
@@ -105,6 +108,15 @@
                             <span class="text-emerald-300">{{ number_format((float) $m->weight_short, 2) }}</span>
                             <span class="text-gray-600 mx-0.5">/</span>
                             <span class="text-violet-300">{{ number_format((float) $m->weight_medium, 2) }}</span>
+                        </td>
+                        <td class="px-4 py-3 text-right font-mono text-xs">
+                            @php $wf = (float) $m->weight_factor; @endphp
+                            <span @class([
+                                'text-gray-500' => $wf === 1.0,
+                                'text-amber-300' => $wf < 1.0 && $wf > 0,
+                                'text-red-300' => $wf === 0.0,
+                                'text-emerald-300' => $wf > 1.0,
+                            ])>{{ number_format($wf, 2) }}</span>
                         </td>
                         <td class="px-4 py-3 text-right font-mono text-gray-400 text-xs">
                             {{ $fmtFreq($m->refresh_frequency_minutes) }}
@@ -140,7 +152,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="8" class="px-0 py-0">
+                        <td colspan="9" class="px-0 py-0">
                             <x-admin.empty-state icon="fa-solid fa-cloud" message="Aucun modèle." class="border-0 rounded-none" />
                         </td>
                     </tr>

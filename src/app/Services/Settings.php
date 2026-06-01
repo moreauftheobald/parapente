@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Setting;
+use App\Models\SettingsAudit;
 use App\Services\Weather\UserScoringService;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -251,6 +253,220 @@ class Settings
             'group'       => 'reliability',
             'type'        => 'int',
         ],
+
+        // ── Consensus sidecar — defaults globaux ─────────────────
+        'consensus.global.default_method' => [
+            'default'     => 'B',
+            'label'       => 'Méthode de consensus par défaut',
+            'description' => "Méthode appliquée aux variables qui n'ont pas de config explicite (A = legacy inverse-carré, B = amélioré MAD/médiane). Le sidecar lit cette valeur à chaque run.",
+            'group'       => 'consensus_global',
+            'type'        => 'string',
+        ],
+        'consensus.global.preview_enabled' => [
+            'default'     => false,
+            'label'       => 'Endpoint preview actif',
+            'description' => "Active l'endpoint /v1/consensus/preview côté sidecar (debug uniquement).",
+            'group'       => 'consensus_global',
+            'type'        => 'bool',
+        ],
+
+        // ── Consensus sidecar — config par variable ──────────────
+        // Chaque clé `consensus.config.<variable>` est un objet JSON
+        // avec la méthode de consensus et ses options.
+        // Base sol (8 + precipitation)
+        'consensus.config.wind_speed_10m' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001],
+            'label'       => 'Vent moyen 10 m',
+            'description' => "Config consensus pour wind_speed_10m.",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.wind_gusts_10m' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001],
+            'label'       => 'Rafales 10 m',
+            'description' => "Config consensus pour wind_gusts_10m.",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.wind_direction_10m' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 5.0, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001],
+            'label'       => 'Direction vent 10 m',
+            'description' => "Config consensus pour wind_direction_10m (circulaire, mad_floor en degrés).",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.temperature_2m' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 2.5, 'mad_floor' => 0.5, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001],
+            'label'       => 'Température 2 m',
+            'description' => "Config consensus pour temperature_2m.",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.relative_humidity_2m' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 2.5, 'mad_floor' => 0.5, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001],
+            'label'       => 'Humidité relative 2 m',
+            'description' => "Config consensus pour relative_humidity_2m.",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.precipitation' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => false, 'use_weighted_median' => true, 'epsilon' => 0.001],
+            'label'       => 'Précipitations',
+            'description' => "Config consensus pour precipitation. MAD désactivé par défaut (divergence légitime entre modèles sur la pluie).",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.cloud_cover_low' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001],
+            'label'       => 'Couverture nuageuse basse',
+            'description' => "Config consensus pour cloud_cover_low.",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.cloud_cover_mid' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001],
+            'label'       => 'Couverture nuageuse moyenne',
+            'description' => "Config consensus pour cloud_cover_mid.",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.cloud_cover_high' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001],
+            'label'       => 'Couverture nuageuse haute',
+            'description' => "Config consensus pour cloud_cover_high.",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        // Pression 850 hPa (3)
+        'consensus.config.temperature_850hPa' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 2.5, 'mad_floor' => 0.5, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001],
+            'label'       => 'Température 850 hPa',
+            'description' => "Config consensus pour temperature_850hPa.",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.wind_speed_850hPa' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001],
+            'label'       => 'Vent 850 hPa',
+            'description' => "Config consensus pour wind_speed_850hPa.",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.wind_direction_850hPa' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 5.0, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001],
+            'label'       => 'Direction vent 850 hPa',
+            'description' => "Config consensus pour wind_direction_850hPa (circulaire).",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        // Instabilité convective (5)
+        'consensus.config.cape' => [
+            'default'     => ['method' => 'A', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => false, 'use_weighted_median' => false, 'epsilon' => 1.0],
+            'label'       => 'CAPE',
+            'description' => "Config consensus pour cape. Méthode A par défaut (forte dispersion légitime).",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.convective_inhibition' => [
+            'default'     => ['method' => 'A', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => false, 'use_weighted_median' => false, 'epsilon' => 1.0],
+            'label'       => 'CIN (inhibition convective)',
+            'description' => "Config consensus pour convective_inhibition. Méthode A par défaut.",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.lifted_index' => [
+            'default'     => ['method' => 'A', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => false, 'use_weighted_median' => false, 'epsilon' => 1.0],
+            'label'       => 'Lifted Index',
+            'description' => "Config consensus pour lifted_index. Méthode A par défaut.",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.convective_precipitation' => [
+            'default'     => ['method' => 'A', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => false, 'use_weighted_median' => false, 'epsilon' => 1.0],
+            'label'       => 'Précipitations convectives',
+            'description' => "Config consensus pour convective_precipitation. Méthode A par défaut.",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.boundary_layer_height' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001],
+            'label'       => 'Hauteur couche limite',
+            'description' => "Config consensus pour boundary_layer_height.",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+
+        // ── Orchestration du sidecar ────────────────────────────
+        'consensus.scheduler.mode' => [
+            'default'     => 'cron',
+            'label'       => 'Mode de scheduling',
+            'description' => "Mode d'orchestration du sidecar : « cron » (horaire classique) ou « event_driven » (déclenché par les mises à jour Open-Meteo). Le mode event-driven sera activable quand la phase 3 sera livrée.",
+            'group'       => 'consensus_scheduler',
+            'type'        => 'string',
+        ],
+        'consensus.scheduler.cron_minute' => [
+            'default'     => 25,
+            'label'       => 'Minute du cron horaire',
+            'description' => "Minute à laquelle le run consensus se déclenche en mode cron (0-59).",
+            'group'       => 'consensus_scheduler',
+            'type'        => 'int',
+        ],
+        'consensus.scheduler.event_debounce_seconds' => [
+            'default'     => 30,
+            'label'       => 'Debounce event-driven (s)',
+            'description' => "Délai d'attente après détection d'un event Open-Meteo avant de lancer le run (coalescing, évite les runs en rafale).",
+            'group'       => 'consensus_scheduler',
+            'type'        => 'int',
+        ],
+        'consensus.scheduler.safety_net_hours' => [
+            'default'     => 6,
+            'label'       => 'Filet de sécurité (h)',
+            'description' => "En mode event-driven, force un run global si rien n'a tourné depuis X heures.",
+            'group'       => 'consensus_scheduler',
+            'type'        => 'int',
+        ],
+        'consensus.scheduler.priority_horizon_J' => [
+            'default'     => 100,
+            'label'       => 'Priorité J (aujourd\'hui)',
+            'description' => "Priorité du run pour l'horizon J (plus haut = plus prioritaire, échelle 0-100).",
+            'group'       => 'consensus_scheduler',
+            'type'        => 'int',
+        ],
+        'consensus.scheduler.priority_horizon_J1' => [
+            'default'     => 80,
+            'label'       => 'Priorité J+1',
+            'description' => "Priorité du run pour l'horizon J+1.",
+            'group'       => 'consensus_scheduler',
+            'type'        => 'int',
+        ],
+        'consensus.scheduler.priority_horizon_J2' => [
+            'default'     => 60,
+            'label'       => 'Priorité J+2',
+            'description' => "Priorité du run pour l'horizon J+2.",
+            'group'       => 'consensus_scheduler',
+            'type'        => 'int',
+        ],
+        'consensus.scheduler.priority_horizon_J3' => [
+            'default'     => 40,
+            'label'       => 'Priorité J+3',
+            'description' => "Priorité du run pour l'horizon J+3.",
+            'group'       => 'consensus_scheduler',
+            'type'        => 'int',
+        ],
+        'consensus.scheduler.priority_horizon_J4' => [
+            'default'     => 20,
+            'label'       => 'Priorité J+4',
+            'description' => "Priorité du run pour l'horizon J+4.",
+            'group'       => 'consensus_scheduler',
+            'type'        => 'int',
+        ],
+        'consensus.scheduler.priority_derived' => [
+            'default'     => 10,
+            'label'       => 'Priorité variables dérivées',
+            'description' => "Poids appliqué aux jobs de variables dérivées (cloud_base, dew_point…) relatif à leur source.",
+            'group'       => 'consensus_scheduler',
+            'type'        => 'int',
+        ],
     ];
 
     /**
@@ -296,6 +512,7 @@ class Settings
      */
     public function set(string $key, mixed $value): void
     {
+        $oldValue = $this->get($key);
         $meta = self::DEFAULTS[$key] ?? null;
         Setting::updateOrCreate(
             ['key' => $key],
@@ -305,6 +522,7 @@ class Settings
                 'description' => $meta['description'] ?? null,
             ]
         );
+        $this->audit($key, $oldValue, $value);
         $this->flush();
     }
 
@@ -316,7 +534,8 @@ class Settings
      */
     public function setMany(array $values): void
     {
-        DB::transaction(function () use ($values) {
+        $oldValues = $this->all();
+        DB::transaction(function () use ($values, $oldValues) {
             foreach ($values as $key => $value) {
                 $meta = self::DEFAULTS[$key] ?? null;
                 Setting::updateOrCreate(
@@ -327,9 +546,31 @@ class Settings
                         'description' => $meta['description'] ?? null,
                     ]
                 );
+                $old = $oldValues[$key] ?? (self::DEFAULTS[$key]['default'] ?? null);
+                $this->audit($key, $old, $value);
             }
         });
         $this->flush();
+    }
+
+    private function audit(string $key, mixed $oldValue, mixed $newValue): void
+    {
+        $encode = fn (mixed $v): ?string => $v === null ? null : (is_scalar($v) ? (string) $v : json_encode($v, JSON_UNESCAPED_UNICODE));
+        $oldStr = $encode($oldValue);
+        $newStr = $encode($newValue);
+        if ($oldStr === $newStr) {
+            return;
+        }
+        try {
+            SettingsAudit::create([
+                'setting_key'        => $key,
+                'old_value'          => $oldStr,
+                'new_value'          => $newStr,
+                'changed_by_user_id' => Auth::id(),
+            ]);
+        } catch (\Throwable) {
+            // Table might not exist yet during migration
+        }
     }
 
     public function flush(): void

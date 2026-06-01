@@ -14,6 +14,7 @@ use App\Http\Controllers\Admin\ReliabilityExportController as AdminReliabilityEx
 use App\Http\Controllers\Admin\ReliabilityHorizonController as AdminReliabilityHorizonController;
 use App\Http\Controllers\Admin\ReliabilityModelsController as AdminReliabilityModelsController;
 use App\Http\Controllers\Admin\SectionSettingsController as AdminSectionSettingsController;
+use App\Http\Controllers\Admin\SettingsAuditController as AdminSettingsAuditController;
 use App\Http\Controllers\Admin\SettingsController as AdminSettingsController;
 use App\Http\Controllers\Admin\SiteController as AdminSiteController;
 use App\Http\Controllers\Admin\TrafficController as AdminTrafficController;
@@ -114,7 +115,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
         // ── Paramètres par section ───────────────────────────────
         Route::get('/contenu/settings', [AdminSectionSettingsController::class, 'contenu'])->name('contenu.settings');
-        Route::get('/meteo/settings',   [AdminSectionSettingsController::class, 'meteo'])->name('meteo.settings');
+        Route::get('/meteo/settings',              [AdminSectionSettingsController::class, 'meteo'])->name('meteo.settings');
+        Route::post('/meteo/settings/consensus',     [AdminSectionSettingsController::class, 'updateConsensus'])->name('meteo.settings.consensus');
+        Route::post('/meteo/settings/orchestration', [AdminSectionSettingsController::class, 'updateOrchestration'])->name('meteo.settings.orchestration');
+        Route::post('/meteo/settings/variable-override', [AdminSectionSettingsController::class, 'updateVariableOverride'])->name('meteo.settings.variable-override');
         Route::get('/sites/settings',   [AdminSectionSettingsController::class, 'sites'])->name('sites.settings');
         Route::get('/balises/settings', [AdminSectionSettingsController::class, 'balises'])->name('balises.settings');
 
@@ -196,8 +200,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/logs', [AdminLogController::class, 'index'])->name('logs.index');
 
         // ── Paramètres généraux (seuils de scoring) ───────────────
-        Route::get('/settings',   [AdminSettingsController::class, 'index'])->name('settings.index');
-        Route::patch('/settings', [AdminSettingsController::class, 'update'])->name('settings.update');
+        Route::get('/settings',       [AdminSettingsController::class, 'index'])->name('settings.index');
+        Route::patch('/settings',     [AdminSettingsController::class, 'update'])->name('settings.update');
+        Route::get('/settings/audit', [AdminSettingsAuditController::class, 'index'])->name('settings.audit');
 
         // ── Fiabilité des modèles (phase 2.5 — shadow comparatif) ─
         Route::get('/reliability/compare',          [AdminReliabilityCompareController::class, 'index'])->name('reliability.compare');
