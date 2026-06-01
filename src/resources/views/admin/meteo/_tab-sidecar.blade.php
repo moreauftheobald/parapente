@@ -159,11 +159,13 @@ function sidecarPanel() {
             this.error = null;
             try {
                 const r = await fetch(@js($sidecarConfigEndpoint), {
-                    headers: { 'Accept': 'application/json' },
-                    signal: AbortSignal.timeout(8000),
+                    headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    signal: AbortSignal.timeout(10000),
                 });
                 if (!r.ok) throw new Error(`HTTP ${r.status}`);
-                this.config = await r.json();
+                const data = await r.json();
+                if (data.error) throw new Error(data.message || 'Erreur sidecar');
+                this.config = data;
             } catch (e) {
                 this.error = 'Sidecar injoignable : ' + e.message;
             } finally {

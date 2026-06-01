@@ -121,11 +121,12 @@ function variablesPanel() {
         async loadData() {
             try {
                 const r = await fetch(@js($sidecarVariablesEndpoint), {
-                    headers: { 'Accept': 'application/json' },
-                    signal: AbortSignal.timeout(8000),
+                    headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    signal: AbortSignal.timeout(10000),
                 });
                 if (!r.ok) throw new Error(`HTTP ${r.status}`);
                 const data = await r.json();
+                if (data.error) throw new Error(data.message || 'Erreur sidecar');
                 const raw = data.models || data;
                 for (const [code, model] of Object.entries(raw)) {
                     model._open = false;

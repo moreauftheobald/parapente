@@ -100,11 +100,15 @@ class SectionSettingsController extends Controller
             $overrides = ModelVariableOverride::all()
                 ->keyBy(fn ($o) => "{$o->model_code}:{$o->variable}");
             $data['overrides'] = $overrides;
-            $data['sidecarVariablesEndpoint'] = $this->sidecarBaseUrl() . '/models/variables';
+            $data['sidecarVariablesEndpoint'] = route('admin.meteo.sidecar.models-variables');
+        }
+
+        if ($tab === 'dependencies') {
+            $data['sidecarDependencyEndpoint'] = route('admin.meteo.sidecar.dependency-graph');
         }
 
         if ($tab === 'sidecar') {
-            $data['sidecarConfigEndpoint'] = $this->sidecarBaseUrl() . '/consensus/active_config';
+            $data['sidecarConfigEndpoint'] = route('admin.meteo.sidecar.active-config');
         }
 
         return view('admin.meteo.settings', $data);
@@ -301,5 +305,46 @@ class SectionSettingsController extends Controller
     private function sidecarBaseUrl(): string
     {
         return rtrim(config('services.consensus_grid.base_url', 'http://consensus-grid:8082'), '/') . '/v1';
+    }
+
+    /**
+     * Proxy GET — /v1/consensus/active_config (sidecar interne, injoignable depuis le navigateur).
+     */
+    public function sidecarActiveConfig(): \Illuminate\Http\JsonResponse
+    {
+        return $this->proxySidecar('/consensus/active_config');
+    }
+
+    /**
+     * Proxy GET — /v1/consensus/dependency_graph.
+     */
+    public function sidecarDependencyGraph(): \Illuminate\Http\JsonResponse
+    {
+        return $this->proxySidecar('/consensus/dependency_graph');
+    }
+
+    /**
+     * Proxy GET — /v1/models/variables.
+     */
+    public function sidecarModelsVariables(): \Illuminate\Http\JsonResponse
+    {
+        return $this->proxySidecar('/models/variables');
+    }
+
+    private function proxySidecar(string $path): \Illuminate\Http\JsonResponse
+    {
+        $timeout = (int) config('services.consensus_grid.timeout', 10);
+        try {
+            $response = Http::timeout($timeout)
+                ->acceptJson()
+                ->get($this->sidecarBaseUrl() . $path);
+
+            return response()->json($response->json(), $response->status());
+        } catch (\Throwable $e) {
+            return response()->json([
+                'error'   => true,
+                'message' => 'Sidecar injoignable : ' . $e->getMessage(),
+            ], 502);
+        }
     }
 }

@@ -1,6 +1,6 @@
 {{-- Onglet Dépendances — graphe read-only depuis le sidecar /v1/consensus/dependency_graph --}}
 
-<div x-data="dependenciesPanel()" x-init="loadGraph()">
+<div x-data="dependenciesPanel()" x-init="loadGraph()" data-proxy-url="{{ route('admin.meteo.sidecar.dependency-graph') }}">
     <div x-show="loading" class="text-center py-12 text-gray-500">
         <i class="fa-solid fa-spinner fa-spin text-2xl"></i>
         <p class="mt-2 text-sm">Chargement du graphe de dépendances…</p>
@@ -15,14 +15,14 @@
 
     <div x-show="!loading && !error" x-cloak>
 
-        {{-- Mini DAG Mermaid ──────────────────────────────────────── --}}
+        {{-- Mini DAG Mermaid --}}
         <x-admin.section title="Graphe de dépendances" icon="fa-solid fa-share-nodes" color="violet" class="mb-6">
             <div id="mermaid-dag" class="overflow-x-auto bg-gray-950 rounded-lg p-4 border border-gray-800 min-h-[120px]">
                 <p class="text-xs text-gray-600 animate-pulse">Rendu du graphe…</p>
             </div>
         </x-admin.section>
 
-        {{-- Tableau des dépendances ────────────────────────────────── --}}
+        {{-- Tableau des dépendances --}}
         <x-admin.section title="Détail par variable" icon="fa-solid fa-table-cells" color="gray" class="mb-6">
             <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-x-auto">
                 <table class="w-full text-sm">
@@ -92,6 +92,7 @@
 
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+@verbatim
 <script>
 mermaid.initialize({
     startOnLoad: false,
@@ -110,7 +111,7 @@ mermaid.initialize({
 });
 
 function dependenciesPanel() {
-    const baseUrl = @js(rtrim(config('services.consensus_grid.base_url', 'http://consensus-grid:8082'), '/') . '/v1');
+    const proxyUrl = document.querySelector('[data-proxy-url]')?.dataset.proxyUrl;
     return {
         loading: true,
         error: null,
@@ -118,12 +119,13 @@ function dependenciesPanel() {
 
         async loadGraph() {
             try {
-                const r = await fetch(baseUrl + '/consensus/dependency_graph', {
-                    headers: { 'Accept': 'application/json' },
-                    signal: AbortSignal.timeout(8000),
+                const r = await fetch(proxyUrl, {
+                    headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    signal: AbortSignal.timeout(10000),
                 });
                 if (!r.ok) throw new Error(`HTTP ${r.status}`);
                 const data = await r.json();
+                if (data.error) throw new Error(data.message || 'Erreur sidecar');
                 this.variables = data.variables || data;
                 this.$nextTick(() => this.renderDag());
             } catch (e) {
@@ -144,12 +146,13 @@ function dependenciesPanel() {
             for (const name of names) {
                 const v = vars[name];
                 const id = sanitize(name);
+                // Mermaid rhombus shape for external deps, rounded for derived, square for consensus
                 const shape = v.type === 'derived' ? `${id}([${name}])` : `${id}[${name}]`;
                 const style = v.type === 'derived'
                     ? `style ${id} fill:#7c3aed22,stroke:#7c3aed,color:#c4b5fd`
                     : `style ${id} fill:#0ea5e922,stroke:#0ea5e9,color:#7dd3fc`;
-                lines.push(`    ${shape}`);
-                lines.push(`    ${style}`);
+                lines.push('    ' + shape);
+                lines.push('    ' + style);
             }
 
             for (const name of names) {
@@ -157,14 +160,15 @@ function dependenciesPanel() {
                 const id = sanitize(name);
                 for (const dep of (v.derived_from || [])) {
                     if (names.includes(dep)) {
-                        lines.push(`    ${sanitize(dep)} --> ${id}`);
+                        lines.push('    ' + sanitize(dep) + ' --> ' + id);
                     }
                 }
                 for (const ext of (v.depends_on_external || [])) {
                     const extId = sanitize('ext_' + ext);
-                    lines.push(`    ${extId}{{${ext}}}`);
-                    lines.push(`    style ${extId} fill:#f59e0b22,stroke:#f59e0b,color:#fcd34d`);
-                    lines.push(`    ${extId} -.-> ${id}`);
+                    // Mermaid hexagon shape for external dependencies
+                    lines.push('    ' + extId + '{' + '{' + ext + '}' + '}');
+                    lines.push('    style ' + extId + ' fill:#f59e0b22,stroke:#f59e0b,color:#fcd34d');
+                    lines.push('    ' + extId + ' -.-> ' + id);
                 }
             }
 
@@ -173,13 +177,15 @@ function dependenciesPanel() {
             if (!el) return;
 
             el.innerHTML = '';
-            mermaid.render('mermaid-dag-svg', definition).then(({ svg }) => {
-                el.innerHTML = svg;
-            }).catch(() => {
+            mermaid.render('mermaid-dag-svg', definition).then(function(result) {
+                el.innerHTML = result.svg;
+            }).catch(function() {
                 el.innerHTML = '<p class="text-xs text-gray-500">Impossible de rendre le graphe Mermaid.</p>';
             });
         },
     };
 }
 </script>
+@endverbatim
 @endpush
+
