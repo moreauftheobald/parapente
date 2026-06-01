@@ -307,12 +307,17 @@ class SectionSettingsController extends Controller
         return rtrim(config('services.consensus_grid.base_url', 'http://consensus-grid:8082'), '/') . '/v1';
     }
 
+    private function sidecarV2BaseUrl(): string
+    {
+        return rtrim(config('services.consensus_grid_v2.base_url', 'http://consensus-grid-v2:8083'), '/') . '/v1';
+    }
+
     /**
      * Proxy GET — /v1/consensus/active_config (sidecar interne, injoignable depuis le navigateur).
      */
     public function sidecarActiveConfig(): \Illuminate\Http\JsonResponse
     {
-        return $this->proxySidecar('/consensus/active_config');
+        return $this->proxySidecarV2('/consensus/active_config');
     }
 
     /**
@@ -320,7 +325,7 @@ class SectionSettingsController extends Controller
      */
     public function sidecarDependencyGraph(): \Illuminate\Http\JsonResponse
     {
-        return $this->proxySidecar('/consensus/dependency_graph');
+        return $this->proxySidecarV2('/consensus/dependency_graph');
     }
 
     /**
@@ -328,22 +333,29 @@ class SectionSettingsController extends Controller
      */
     public function sidecarModelsVariables(): \Illuminate\Http\JsonResponse
     {
-        return $this->proxySidecar('/models/variables');
+        return $this->proxySidecarV2('/models/variables');
     }
 
-    private function proxySidecar(string $path): \Illuminate\Http\JsonResponse
+    private function proxySidecarV2(string $path): \Illuminate\Http\JsonResponse
     {
-        $timeout = (int) config('services.consensus_grid.timeout', 10);
+        $timeout = (int) config('services.consensus_grid_v2.timeout', 10);
         try {
             $response = Http::timeout($timeout)
                 ->acceptJson()
-                ->get($this->sidecarBaseUrl() . $path);
+                ->get($this->sidecarV2BaseUrl() . $path);
+
+            if ($response->status() === 404) {
+                return response()->json([
+                    'error'   => true,
+                    'message' => "Endpoint {$path} non disponible sur cette version du sidecar V2.",
+                ], 200);
+            }
 
             return response()->json($response->json(), $response->status());
         } catch (\Throwable $e) {
             return response()->json([
                 'error'   => true,
-                'message' => 'Sidecar injoignable : ' . $e->getMessage(),
+                'message' => 'Sidecar V2 injoignable : ' . $e->getMessage(),
             ], 502);
         }
     }
