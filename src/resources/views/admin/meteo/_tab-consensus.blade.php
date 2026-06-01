@@ -166,6 +166,17 @@
     </div>
 </form>
 
+{{-- Restauration des valeurs par défaut (formulaire séparé, confirmation JS) --}}
+<div class="mt-4 pt-4 border-t border-gray-800">
+    <form method="POST" action="{{ route('admin.meteo.settings.consensus.restore') }}"
+          onsubmit="return confirm('Restaurer toutes les variables consensus aux valeurs par défaut ?\n\nCette action est irréversible (mais tracée dans l\'historique).')">
+        @csrf
+        <x-admin.button type="submit" variant="ghost" size="sm" icon="fa-solid fa-rotate-left">
+            Restaurer les defaults métier
+        </x-admin.button>
+    </form>
+</div>
+
 @push('styles')
     <style>[x-cloak] { display: none !important; }</style>
 @endpush

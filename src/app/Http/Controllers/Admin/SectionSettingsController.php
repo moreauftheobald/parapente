@@ -158,6 +158,28 @@ class SectionSettingsController extends Controller
     }
 
     /**
+     * POST — restore all consensus settings to their factory defaults.
+     */
+    public function restoreConsensusDefaults(Settings $settings): RedirectResponse
+    {
+        $values = [
+            'consensus.global.default_method'  => Settings::DEFAULTS['consensus.global.default_method']['default'],
+            'consensus.global.preview_enabled' => Settings::DEFAULTS['consensus.global.preview_enabled']['default'],
+        ];
+
+        foreach (self::CONSENSUS_VARIABLES as $var) {
+            $key = "consensus.config.{$var}";
+            $values[$key] = Settings::DEFAULTS[$key]['default'];
+        }
+
+        $settings->setMany($values);
+
+        return redirect()
+            ->route('admin.meteo.settings', ['tab' => 'consensus'])
+            ->with('status', 'Configuration consensus restaurée aux valeurs par défaut.');
+    }
+
+    /**
      * POST — save orchestration/scheduler settings.
      */
     public function updateOrchestration(Request $request, Settings $settings): RedirectResponse

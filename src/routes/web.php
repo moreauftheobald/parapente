@@ -116,8 +116,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
         // ── Paramètres par section ───────────────────────────────
         Route::get('/contenu/settings', [AdminSectionSettingsController::class, 'contenu'])->name('contenu.settings');
         Route::get('/meteo/settings',              [AdminSectionSettingsController::class, 'meteo'])->name('meteo.settings');
-        Route::post('/meteo/settings/consensus',     [AdminSectionSettingsController::class, 'updateConsensus'])->name('meteo.settings.consensus');
-        Route::post('/meteo/settings/orchestration', [AdminSectionSettingsController::class, 'updateOrchestration'])->name('meteo.settings.orchestration');
+        Route::post('/meteo/settings/consensus',          [AdminSectionSettingsController::class, 'updateConsensus'])->name('meteo.settings.consensus');
+        Route::post('/meteo/settings/consensus/restore', [AdminSectionSettingsController::class, 'restoreConsensusDefaults'])->name('meteo.settings.consensus.restore');
+        Route::post('/meteo/settings/orchestration',     [AdminSectionSettingsController::class, 'updateOrchestration'])->name('meteo.settings.orchestration');
         Route::post('/meteo/settings/variable-override', [AdminSectionSettingsController::class, 'updateVariableOverride'])->name('meteo.settings.variable-override');
         Route::get('/sites/settings',   [AdminSectionSettingsController::class, 'sites'])->name('sites.settings');
         Route::get('/balises/settings', [AdminSectionSettingsController::class, 'balises'])->name('balises.settings');
