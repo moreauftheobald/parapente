@@ -13,7 +13,7 @@
 @endphp
 
 @section('content')
-<div class="max-w-7xl">
+<div>
     <x-admin.page-title title="APIs météo"
         subtitle="Sources de données pour le fetch des modèles. Chaque modèle pointe vers UNE API (politique single-shot)." />
 

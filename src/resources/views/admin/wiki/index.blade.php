@@ -2,7 +2,7 @@
 @section('title', 'Aide / Wiki')
 
 @section('content')
-<div class="max-w-5xl">
+<div>
     <x-admin.page-title title="Aide / Wiki">
         <x-slot:subtitle>
             Pages publiées sur <code class="text-gray-400">/aide</code> ({{ $pages->total() }} au total).

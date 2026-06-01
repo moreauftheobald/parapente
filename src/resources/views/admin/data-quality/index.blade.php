@@ -1,5 +1,5 @@
 @extends('layouts.admin')
-@section('title', 'Qualité des données')
+@section('title', 'Fusion / dédoublonnage')
 
 @section('help')
     <div class="text-sm text-gray-400 leading-relaxed space-y-3">
@@ -50,8 +50,8 @@
     };
 @endphp
 
-<div class="max-w-5xl">
-    <x-admin.page-title title="Qualité des données"
+<div>
+    <x-admin.page-title title="Fusion / dédoublonnage"
         subtitle="Doublons potentiels détectés sur la base des coordonnées géographiques.">
         <x-slot:actions>
             <form method="GET" action="{{ route('admin.data-quality.index') }}" class="flex items-center gap-2">

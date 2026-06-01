@@ -8,7 +8,7 @@
 @endphp
 
 @section('content')
-<div class="max-w-4xl">
+<div>
     <x-admin.page-title title="Synchronisation des données">
         <x-slot:subtitle>
             Déclenche manuellement l'import des sites de vol (ParaglidingEarth) et la découverte

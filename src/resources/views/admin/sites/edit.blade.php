@@ -3,13 +3,11 @@
 
 @php
     $cond = $site->conditions;
-    $inputCls = 'w-full px-3 py-2 bg-gray-950 border border-gray-700 rounded-md text-sm text-gray-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/40';
-    $labelCls = 'block text-xs font-medium text-gray-400 mb-1';
-    $errorCls = 'text-red-400 text-xs mt-1';
+    $inputCls = 'w-full px-2.5 py-1.5 bg-gray-950 border border-gray-700 rounded-md text-sm text-gray-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/40';
 @endphp
 
 @section('content')
-<div class="max-w-5xl">
+<div>
     {{-- Bandeau titre ────────────────────────────────────────────── --}}
     <div class="bg-gradient-to-r from-sky-500/10 via-gray-900 to-gray-900 border border-sky-500/20 rounded-xl p-5 mb-6 flex items-baseline justify-between">
         <div>
@@ -49,33 +47,26 @@
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
             {{-- Section Site ──────────────────────────────────────── --}}
             <x-admin.section title="Identité" icon="fa-solid fa-mountain-sun" color="sky">
-
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div class="sm:col-span-2">
-                        <label class="{{ $labelCls }}">Nom <span class="text-red-400">*</span></label>
-                        <input name="name" type="text" required class="{{ $inputCls }}" value="{{ old('name', $site->name) }}">
-                        @error('name')<p class="{{ $errorCls }}">{{ $message }}</p>@enderror
-                    </div>
-
-                    <div>
-                        <label class="{{ $labelCls }}">Région</label>
-                        <input name="region" type="text" class="{{ $inputCls }}" value="{{ old('region', $site->region) }}" placeholder="ex: grand-est">
-                    </div>
-                    <div>
-                        <label class="{{ $labelCls }}">Niveau requis <span class="text-red-400">*</span></label>
-                        <select name="level" required class="{{ $inputCls }}">
+                <div class="space-y-3">
+                    <x-admin.input name="name" label="Nom" required
+                                   :value="old('name', $site->name)" hint="Nom du site de vol." />
+                    <x-admin.input name="region" label="Région"
+                                   :value="old('region', $site->region)" placeholder="ex: grand-est"
+                                   hint="Région technique (slug). Distinction avec admin_region (géocodage)." />
+                    <x-admin.field name="level" label="Niveau requis"
+                                   hint="Niveau pilote minimum recommandé pour ce site.">
+                        <select name="level" required class="{{ $inputCls }} flex-1">
                             @foreach (['debutant'=>'Débutant','intermediaire'=>'Intermédiaire','confirme'=>'Confirmé'] as $val => $lbl)
                                 <option value="{{ $val }}" @selected(old('level', $site->level) === $val)>{{ $lbl }}</option>
                             @endforeach
                         </select>
-                    </div>
-
-                    <div class="sm:col-span-2">
-                        <label class="{{ $labelCls }}">Description</label>
+                    </x-admin.field>
+                    <x-admin.field name="description" label="Description" :inline="false"
+                                   hint="Description libre du site (conditions habituelles, accès, etc.).">
                         <textarea name="description" rows="3" class="{{ $inputCls }}">{{ old('description', $site->description) }}</textarea>
-                    </div>
+                    </x-admin.field>
 
-                    <div class="sm:col-span-2 mt-1 p-3 rounded-lg
+                    <div class="p-3 rounded-lg
                         @class([
                             'bg-emerald-500/10 border border-emerald-500/30' => old('active', $site->active),
                             'bg-gray-950 border border-gray-700' => ! old('active', $site->active),
@@ -100,36 +91,30 @@
 
             {{-- Section Coordonnées ───────────────────────────────── --}}
             <x-admin.section title="Coordonnées" icon="fa-solid fa-location-dot" color="violet">
-
-                <div class="grid grid-cols-2 gap-3 mb-3">
-                    <div>
-                        <label class="{{ $labelCls }}"><i class="fa-solid fa-circle text-emerald-400 mr-1 text-[8px]"></i> Lat. décollage <span class="text-red-400">*</span></label>
-                        <input id="input-lat" name="latitude" type="number" step="0.000001" required class="{{ $inputCls }} font-mono"
-                               value="{{ old('latitude', $site->latitude) }}">
-                        @error('latitude')<p class="{{ $errorCls }}">{{ $message }}</p>@enderror
+                <div class="space-y-3 mb-3">
+                    <div class="grid grid-cols-2 gap-3">
+                        <x-admin.input id="input-lat" name="latitude" label="Lat. déco" type="number"
+                                       step="0.000001" required class="font-mono"
+                                       :value="old('latitude', $site->latitude)"
+                                       hint="Latitude du décollage (WGS84)." />
+                        <x-admin.input id="input-lng" name="longitude" label="Lng. déco" type="number"
+                                       step="0.000001" required class="font-mono"
+                                       :value="old('longitude', $site->longitude)"
+                                       hint="Longitude du décollage (WGS84)." />
                     </div>
-                    <div>
-                        <label class="{{ $labelCls }}"><i class="fa-solid fa-circle text-emerald-400 mr-1 text-[8px]"></i> Lng. décollage <span class="text-red-400">*</span></label>
-                        <input id="input-lng" name="longitude" type="number" step="0.000001" required class="{{ $inputCls }} font-mono"
-                               value="{{ old('longitude', $site->longitude) }}">
-                        @error('longitude')<p class="{{ $errorCls }}">{{ $message }}</p>@enderror
-                    </div>
-
-                    <div class="col-span-2">
-                        <label class="{{ $labelCls }}">Altitude (m)</label>
-                        <input name="altitude_m" type="number" step="1" min="0" max="9000" class="{{ $inputCls }} font-mono"
-                               value="{{ old('altitude_m', $site->altitude_m) }}">
-                    </div>
-
-                    <div>
-                        <label class="{{ $labelCls }}"><i class="fa-solid fa-circle text-amber-400 mr-1 text-[8px]"></i> Lat. atterrissage</label>
-                        <input id="input-landing-lat" name="landing_lat" type="number" step="0.000001" class="{{ $inputCls }} font-mono"
-                               value="{{ old('landing_lat', $site->landing_lat) }}">
-                    </div>
-                    <div>
-                        <label class="{{ $labelCls }}"><i class="fa-solid fa-circle text-amber-400 mr-1 text-[8px]"></i> Lng. atterrissage</label>
-                        <input id="input-landing-lng" name="landing_lng" type="number" step="0.000001" class="{{ $inputCls }} font-mono"
-                               value="{{ old('landing_lng', $site->landing_lng) }}">
+                    <x-admin.input name="altitude_m" label="Altitude" type="number" step="1" min="0" max="9000"
+                                   suffix="m" class="font-mono"
+                                   :value="old('altitude_m', $site->altitude_m)"
+                                   hint="Altitude du décollage (mètres ASL)." />
+                    <div class="grid grid-cols-2 gap-3">
+                        <x-admin.input id="input-landing-lat" name="landing_lat" label="Lat. atterro" type="number"
+                                       step="0.000001" class="font-mono"
+                                       :value="old('landing_lat', $site->landing_lat)"
+                                       hint="Latitude de l'atterrissage (optionnel)." />
+                        <x-admin.input id="input-landing-lng" name="landing_lng" label="Lng. atterro" type="number"
+                                       step="0.000001" class="font-mono"
+                                       :value="old('landing_lng', $site->landing_lng)"
+                                       hint="Longitude de l'atterrissage (optionnel)." />
                     </div>
                 </div>
 
@@ -166,97 +151,60 @@
 
         {{-- Section Conditions de vol ───────────────────────────── --}}
         <x-admin.section title="Conditions de vol favorables" icon="fa-solid fa-wind" color="emerald" class="mb-5">
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-8 gap-y-3">
+                <x-admin.input name="wind_dir_min" label="Direction min" type="number" min="0" max="360"
+                               required suffix="°" class="font-mono"
+                               :value="old('wind_dir_min', $cond?->wind_dir_min ?? 0)"
+                               hint="Direction FROM minimale (convention météo). Si min > max, la plage chevauche le Nord." />
+                <x-admin.input name="wind_dir_max" label="Direction max" type="number" min="0" max="360"
+                               required suffix="°" class="font-mono"
+                               :value="old('wind_dir_max', $cond?->wind_dir_max ?? 360)"
+                               hint="Direction FROM maximale (convention météo)." />
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {{-- Ligne 1 : direction min, max, hint --}}
-                <div>
-                    <label class="{{ $labelCls }}"><i class="fa-solid fa-compass text-emerald-400 mr-1"></i> Direction min (°) <span class="text-red-400">*</span></label>
-                    <input name="wind_dir_min" type="number" min="0" max="360" required class="{{ $inputCls }} font-mono"
-                           value="{{ old('wind_dir_min', $cond?->wind_dir_min ?? 0) }}">
-                </div>
-                <div>
-                    <label class="{{ $labelCls }}"><i class="fa-solid fa-compass text-emerald-400 mr-1"></i> Direction max (°) <span class="text-red-400">*</span></label>
-                    <input name="wind_dir_max" type="number" min="0" max="360" required class="{{ $inputCls }} font-mono"
-                           value="{{ old('wind_dir_max', $cond?->wind_dir_max ?? 360) }}">
-                </div>
-                <div class="text-xs text-gray-500 self-end pb-2">
-                    <i class="fa-solid fa-circle-info"></i> Convention météo (FROM). Si min &gt; max, la plage chevauche le Nord.
-                </div>
+                <x-admin.input name="wind_speed_min" label="Vitesse min" type="number" step="0.1" min="0" max="100"
+                               required suffix="km/h" class="font-mono"
+                               :value="old('wind_speed_min', $cond?->wind_speed_min ?? 0)"
+                               hint="Vitesse de vent moyen minimale acceptable." />
+                <x-admin.input name="wind_speed_max" label="Vitesse max" type="number" step="0.1" min="0" max="100"
+                               required suffix="km/h" class="font-mono"
+                               :value="old('wind_speed_max', $cond?->wind_speed_max ?? 25)"
+                               hint="Vitesse de vent moyen maximale acceptable." />
+                <x-admin.input name="wind_speed_ideal" label="Vitesse idéale" type="number" step="0.1" min="0" max="100"
+                               required suffix="km/h" class="font-mono"
+                               :value="old('wind_speed_ideal', $cond?->wind_speed_ideal ?? 12)"
+                               hint="Vitesse optimale pour le site." />
 
-                {{-- Ligne 2 : vitesses --}}
-                <div>
-                    <label class="{{ $labelCls }}"><i class="fa-solid fa-wind text-emerald-400 mr-1"></i> Vitesse min</label>
-                    <div class="flex">
-                        <input name="wind_speed_min" type="number" step="0.1" min="0" max="100" required class="{{ $inputCls }} font-mono rounded-r-none"
-                               value="{{ old('wind_speed_min', $cond?->wind_speed_min ?? 0) }}">
-                        <span class="px-2 py-2 bg-gray-800 border border-l-0 border-gray-700 rounded-r-md text-xs text-gray-500">km/h</span>
-                    </div>
-                </div>
-                <div>
-                    <label class="{{ $labelCls }}"><i class="fa-solid fa-wind text-emerald-400 mr-1"></i> Vitesse max</label>
-                    <div class="flex">
-                        <input name="wind_speed_max" type="number" step="0.1" min="0" max="100" required class="{{ $inputCls }} font-mono rounded-r-none"
-                               value="{{ old('wind_speed_max', $cond?->wind_speed_max ?? 25) }}">
-                        <span class="px-2 py-2 bg-gray-800 border border-l-0 border-gray-700 rounded-r-md text-xs text-gray-500">km/h</span>
-                    </div>
-                </div>
-                <div>
-                    <label class="{{ $labelCls }}"><i class="fa-solid fa-bullseye text-emerald-400 mr-1"></i> Vitesse idéale</label>
-                    <div class="flex">
-                        <input name="wind_speed_ideal" type="number" step="0.1" min="0" max="100" required class="{{ $inputCls }} font-mono rounded-r-none"
-                               value="{{ old('wind_speed_ideal', $cond?->wind_speed_ideal ?? 12) }}">
-                        <span class="px-2 py-2 bg-gray-800 border border-l-0 border-gray-700 rounded-r-md text-xs text-gray-500">km/h</span>
-                    </div>
-                </div>
+                <x-admin.input name="cloud_base_min_m" label="Plafond min" type="number" min="0" max="5000"
+                               required suffix="m" class="font-mono"
+                               :value="old('cloud_base_min_m', $cond?->cloud_base_min_m ?? 800)"
+                               hint="Base des nuages minimum (m ASL, règle d'Espy). Orange dans une marge de 100 m, rouge en dessous." />
+                <x-admin.input name="cloud_cover_low_max" label="Couv. nuages basse max" type="number" min="0" max="100"
+                               required suffix="%" class="font-mono"
+                               :value="old('cloud_cover_low_max', $cond?->cloud_cover_low_max ?? 50)"
+                               hint="Couverture nuageuse basse maximale tolérée." />
 
-                {{-- Ligne 3 : rafales (surcharges optionnelles par site) + plafond + couverture --}}
-                {{-- Précipitations : seuils globaux (cf. /admin/settings), plus de précip_max par site --}}
-                <div>
-                    <label class="{{ $labelCls }}"><i class="fa-solid fa-cloud text-gray-400 mr-1"></i> Plafond min</label>
-                    <div class="flex">
-                        <input name="cloud_base_min_m" type="number" min="0" max="5000" required class="{{ $inputCls }} font-mono rounded-r-none"
-                               value="{{ old('cloud_base_min_m', $cond?->cloud_base_min_m ?? 800) }}">
-                        <span class="px-2 py-2 bg-gray-800 border border-l-0 border-gray-700 rounded-r-md text-xs text-gray-500">m</span>
-                    </div>
-                </div>
-                <div>
-                    <label class="{{ $labelCls }}"><i class="fa-solid fa-cloud-sun text-amber-300 mr-1"></i> Couv. nuages basse max</label>
-                    <div class="flex">
-                        <input name="cloud_cover_low_max" type="number" min="0" max="100" required class="{{ $inputCls }} font-mono rounded-r-none"
-                               value="{{ old('cloud_cover_low_max', $cond?->cloud_cover_low_max ?? 50) }}">
-                        <span class="px-2 py-2 bg-gray-800 border border-l-0 border-gray-700 rounded-r-md text-xs text-gray-500">%</span>
-                    </div>
-                </div>
-
-                {{-- Surcharge rafales (laisser vide pour utiliser les seuils globaux) --}}
-                <div>
-                    <label class="{{ $labelCls }}"><i class="fa-solid fa-tornado text-amber-400 mr-1"></i> Rafale orange <span class="text-gray-600">(override)</span></label>
-                    <div class="flex">
-                        <input name="wind_gust_orange_kmh" type="number" step="0.1" min="0" max="200" class="{{ $inputCls }} font-mono rounded-r-none"
+                <x-admin.input name="wind_gust_orange_kmh" label="Rafale orange (override)" type="number"
+                               step="0.1" min="0" max="200" suffix="km/h" class="font-mono"
                                placeholder="globale"
-                               value="{{ old('wind_gust_orange_kmh', $cond?->wind_gust_orange_kmh) }}">
-                        <span class="px-2 py-2 bg-gray-800 border border-l-0 border-gray-700 rounded-r-md text-xs text-gray-500">km/h</span>
-                    </div>
-                </div>
-                <div>
-                    <label class="{{ $labelCls }}"><i class="fa-solid fa-tornado text-red-400 mr-1"></i> Rafale rouge <span class="text-gray-600">(override)</span></label>
-                    <div class="flex">
-                        <input name="wind_gust_red_kmh" type="number" step="0.1" min="0" max="200" class="{{ $inputCls }} font-mono rounded-r-none"
+                               :value="old('wind_gust_orange_kmh', $cond?->wind_gust_orange_kmh)"
+                               hint="Surcharge du seuil orange de rafales pour ce site. Vide = valeur globale." />
+                <x-admin.input name="wind_gust_red_kmh" label="Rafale rouge (override)" type="number"
+                               step="0.1" min="0" max="200" suffix="km/h" class="font-mono"
                                placeholder="globale"
-                               value="{{ old('wind_gust_red_kmh', $cond?->wind_gust_red_kmh) }}">
-                        <span class="px-2 py-2 bg-gray-800 border border-l-0 border-gray-700 rounded-r-md text-xs text-gray-500">km/h</span>
-                    </div>
-                </div>
-                <div class="text-xs text-gray-500 self-end pb-2 md:col-span-3">
-                    <i class="fa-solid fa-circle-info"></i> Les seuils de pluie sont globaux ; les seuils de rafales aussi
-                    sauf surcharge ci-dessus (laisser vide pour utiliser la valeur globale).
-                    <a href="{{ route('admin.settings.index') }}" class="text-sky-400 hover:text-sky-300">Paramètres généraux</a>
-                </div>
+                               :value="old('wind_gust_red_kmh', $cond?->wind_gust_red_kmh)"
+                               hint="Surcharge du seuil rouge de rafales pour ce site. Vide = valeur globale." />
             </div>
+            <p class="text-xs text-gray-500 mt-3">
+                <i class="fa-solid fa-circle-info"></i> Les seuils de pluie sont globaux ; les seuils de rafales aussi
+                sauf surcharge ci-dessus (laisser vide pour utiliser la valeur globale).
+                <a href="{{ route('admin.settings.index') }}" class="text-sky-400 hover:text-sky-300">Paramètres généraux</a>
+            </p>
 
             <div class="mt-3">
-                <label class="{{ $labelCls }}"><i class="fa-solid fa-pen-to-square text-gray-400 mr-1"></i> Notes</label>
-                <textarea name="notes" rows="2" class="{{ $inputCls }}">{{ old('notes', $cond?->notes) }}</textarea>
+                <x-admin.field name="notes" label="Notes" :inline="false"
+                               hint="Notes libres sur les conditions de vol du site.">
+                    <textarea name="notes" rows="2" class="{{ $inputCls }}">{{ old('notes', $cond?->notes) }}</textarea>
+                </x-admin.field>
             </div>
         </x-admin.section>
 

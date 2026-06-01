@@ -2,7 +2,7 @@
 @section('title', 'Nouvel article')
 
 @section('content')
-<div class="max-w-4xl">
+<div>
     <div class="mb-5">
         <a href="{{ route('admin.articles.index') }}" class="text-xs text-gray-500 hover:text-gray-300 transition">
             <i class="fa-solid fa-arrow-left"></i> Articles

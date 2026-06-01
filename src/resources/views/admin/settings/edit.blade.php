@@ -1,52 +1,13 @@
 @extends('layouts.admin')
 @section('title', 'Paramètres généraux')
 
-@section('help')
-    <div class="text-sm text-gray-400 leading-relaxed space-y-3">
-        <p>
-            Cette page regroupe les <strong>seuils globaux de scoring</strong> appliqués à
-            tous les sites.
-        </p>
-        <div>
-            <div class="font-semibold text-gray-200 mb-1">Précipitations</div>
-            Seuil orange et seuil rouge sur le <em>consensus</em> multi-modèles
-            de précipitations (mm/h). Une heure dont le consensus dépasse le seuil
-            orange passe en orange ; au-delà du seuil rouge, elle est éliminée.
-        </div>
-        <div>
-            <div class="font-semibold text-gray-200 mb-1">Rafales</div>
-            Seuils globaux par défaut. Chaque site peut surcharger ces valeurs
-            depuis la fiche site (champs « Rafale orange / rouge »).
-        </div>
-        <div>
-            <div class="font-semibold text-gray-200 mb-1">Viabilité d'une journée</div>
-            Réglages de la cloche horaire (créneaux du milieu de journée &gt; tôt
-            le matin / fin de journée), de la continuité (un créneau isolé pèse
-            moins), et des seuils de qualification d'une journée (vert / orange / rouge).
-        </div>
-        <div>
-            <div class="font-semibold text-gray-200 mb-1">Sources balises</div>
-            Clés API des fournisseurs externes (Windy…). Stockées chiffrées dans
-            la table <code>settings</code>. Effacer le champ supprime la clé.
-        </div>
-        <p class="text-xs text-gray-500 mt-3 pt-3 border-t border-gray-800">
-            Les valeurs prennent effet <strong>immédiatement</strong> pour les nouveaux
-            scores. Pour appliquer les nouvelles couleurs aux scores déjà en base
-            sans attendre le prochain fetch horaire :
-            <code class="text-sky-400">php artisan scores:recompute-detail-colors</code>.
-        </p>
-    </div>
-@endsection
-
 @section('content')
 @php
-    $inputCls = 'w-full px-3 py-2 bg-gray-950 border border-gray-700 rounded-md text-sm text-gray-100 font-mono focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/40';
-    $labelCls = 'block text-xs font-medium text-gray-300 mb-1';
-    $errorCls = 'text-red-400 text-xs mt-1';
+    $inputCls = 'w-full px-2.5 py-1.5 bg-gray-950 border border-gray-700 rounded-md text-sm text-gray-100 font-mono focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/40';
     $field = fn (string $key) => str_replace('.', '__', $key);
 @endphp
 
-<div class="max-w-4xl">
+<div>
     <x-admin.page-title
         title="Paramètres généraux"
         subtitle="Seuils globaux du scoring : précipitations, rafales, viabilité du jour." />
@@ -71,7 +32,7 @@
                         <i class="fa-solid {{ $group['icon'] ?? 'fa-gear' }}"></i> {{ $group['title'] }}
                     </h2>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-8 gap-y-3">
                         @foreach ($group['keys'] as $key => $meta)
                             @php
                                 $name = $field($key);
@@ -79,77 +40,72 @@
                                 $isSecret = $type === 'secret';
                                 $isString = $type === 'string';
                                 $isBool   = $type === 'bool';
-                                $colSpan = ($isSecret || $isString) ? 'md:col-span-2' : '';
+                                $colSpan = ($isSecret || $isString) ? 'md:col-span-2 xl:col-span-3' : '';
+                                $tooltip = trim(($meta['description'] ?? '') . "\n\nclé : {$key}" . (! $isSecret && isset($meta['default']) ? " · défaut : {$meta['default']}" : ''));
                             @endphp
                             <div class="{{ $colSpan }}">
-                                <label class="{{ $labelCls }}" for="{{ $name }}">
-                                    {{ $meta['label'] ?? $key }}
-                                </label>
-                                @if ($isBool)
-                                    @php $checked = (bool) old($name, $meta['value']); @endphp
-                                    <input type="hidden" name="{{ $name }}" value="0">
-                                    <label class="inline-flex items-center gap-2 cursor-pointer select-none">
-                                        <input type="checkbox"
-                                               id="{{ $name }}"
-                                               name="{{ $name }}"
-                                               value="1"
-                                               @checked($checked)
-                                               class="h-4 w-4 rounded border-gray-700 bg-gray-800 text-sky-500 focus:ring-sky-500/30">
-                                        <span class="text-xs text-gray-300">{{ $checked ? 'Activé' : 'Désactivé' }}</span>
+                                <div class="flex items-center gap-2">
+                                    <label class="shrink-0 text-sm text-gray-400 flex items-center gap-1" for="{{ $name }}">
+                                        {{ $meta['label'] ?? $key }}
+                                        <x-admin.tooltip :text="$tooltip" />
                                     </label>
-                                @elseif ($isSecret)
-                                    @php
-                                        $current = (string) ($meta['value'] ?? '');
-                                        $hasValue = $current !== '';
-                                        $tail = $hasValue ? substr($current, -4) : '';
-                                    @endphp
-                                    <div x-data="{ shown: false }" class="relative">
-                                        <input :type="shown ? 'text' : 'password'"
+                                    @if ($isBool)
+                                        @php $checked = (bool) old($name, $meta['value']); @endphp
+                                        <input type="hidden" name="{{ $name }}" value="0">
+                                        <label class="inline-flex items-center gap-2 cursor-pointer select-none">
+                                            <input type="checkbox"
+                                                   id="{{ $name }}"
+                                                   name="{{ $name }}"
+                                                   value="1"
+                                                   @checked($checked)
+                                                   class="h-4 w-4 rounded border-gray-700 bg-gray-800 text-sky-500 focus:ring-sky-500/30">
+                                            <span class="text-xs text-gray-500">{{ $checked ? 'Oui' : 'Non' }}</span>
+                                        </label>
+                                    @elseif ($isSecret)
+                                        @php
+                                            $current = (string) ($meta['value'] ?? '');
+                                            $hasValue = $current !== '';
+                                            $tail = $hasValue ? substr($current, -4) : '';
+                                        @endphp
+                                        <div x-data="{ shown: false }" class="relative flex-1">
+                                            <input :type="shown ? 'text' : 'password'"
+                                                   id="{{ $name }}"
+                                                   name="{{ $name }}"
+                                                   autocomplete="new-password"
+                                                   value="{{ old($name, $current) }}"
+                                                   placeholder="{{ $hasValue ? '••••••••••••' . $tail : 'Coller la clé ici…' }}"
+                                                   class="{{ $inputCls }} pr-10">
+                                            <button type="button"
+                                                    @click="shown = ! shown"
+                                                    tabindex="-1"
+                                                    class="absolute inset-y-0 right-2 flex items-center px-2 text-gray-500 hover:text-gray-200 transition"
+                                                    :title="shown ? 'Masquer' : 'Afficher'">
+                                                <i :class="shown ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'" class="text-xs"></i>
+                                            </button>
+                                        </div>
+                                    @elseif ($isString)
+                                        <input type="text"
                                                id="{{ $name }}"
                                                name="{{ $name }}"
-                                               autocomplete="new-password"
-                                               value="{{ old($name, $current) }}"
-                                               placeholder="{{ $hasValue ? '••••••••••••' . $tail : 'Coller la clé ici…' }}"
-                                               class="{{ $inputCls }} pr-10">
-                                        <button type="button"
-                                                @click="shown = ! shown"
-                                                tabindex="-1"
-                                                class="absolute inset-y-0 right-2 flex items-center px-2 text-gray-500 hover:text-gray-200 transition"
-                                                :title="shown ? 'Masquer' : 'Afficher'">
-                                            <i :class="shown ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'" class="text-xs"></i>
-                                        </button>
-                                    </div>
-                                    @if ($hasValue)
-                                        <p class="text-[11px] text-emerald-400 mt-1">
-                                            <i class="fa-solid fa-circle-check"></i> Clé enregistrée (se termine par <code>{{ $tail }}</code>). Laisser vide pour la supprimer.
-                                        </p>
+                                               value="{{ old($name, $meta['value']) }}"
+                                               class="{{ $inputCls }} flex-1">
+                                    @else
+                                        <input type="number"
+                                               id="{{ $name }}"
+                                               name="{{ $name }}"
+                                               step="{{ $type === 'int' ? '1' : 'any' }}"
+                                               min="0"
+                                               required
+                                               value="{{ old($name, $meta['value']) }}"
+                                               class="{{ $inputCls }} flex-1">
                                     @endif
-                                @elseif ($isString)
-                                    <input type="text"
-                                           id="{{ $name }}"
-                                           name="{{ $name }}"
-                                           value="{{ old($name, $meta['value']) }}"
-                                           class="{{ $inputCls }}">
-                                @else
-                                    <input type="number"
-                                           id="{{ $name }}"
-                                           name="{{ $name }}"
-                                           step="{{ $type === 'int' ? '1' : 'any' }}"
-                                           min="0"
-                                           required
-                                           value="{{ old($name, $meta['value']) }}"
-                                           class="{{ $inputCls }}">
+                                </div>
+                                @if ($isSecret && $hasValue)
+                                    <p class="text-[11px] text-emerald-400 mt-0.5">
+                                        <i class="fa-solid fa-circle-check"></i> Clé enregistrée (…{{ $tail }}). Vider pour supprimer.
+                                    </p>
                                 @endif
-                                @if (! empty($meta['description']))
-                                    <p class="text-xs text-gray-500 mt-1 leading-relaxed">{{ $meta['description'] }}</p>
-                                @endif
-                                <p class="text-[11px] text-gray-600 mt-1">
-                                    <span class="text-gray-700">clé :</span> <code>{{ $key }}</code>
-                                    @if (! $isSecret)
-                                        <span class="text-gray-700">· défaut :</span> <code>{{ $meta['default'] }}</code>
-                                    @endif
-                                </p>
-                                @error($name) <p class="{{ $errorCls }}">{{ $message }}</p> @enderror
+                                @error($name) <p class="text-red-400 text-xs mt-0.5">{{ $message }}</p> @enderror
                             </div>
                         @endforeach
                     </div>

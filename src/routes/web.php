@@ -14,6 +14,7 @@ use App\Http\Controllers\ModelGridController;
 use App\Http\Controllers\Admin\ReliabilityExportController as AdminReliabilityExportController;
 use App\Http\Controllers\Admin\ReliabilityHorizonController as AdminReliabilityHorizonController;
 use App\Http\Controllers\Admin\ReliabilityModelsController as AdminReliabilityModelsController;
+use App\Http\Controllers\Admin\SectionSettingsController as AdminSectionSettingsController;
 use App\Http\Controllers\Admin\SettingsController as AdminSettingsController;
 use App\Http\Controllers\Admin\SiteController as AdminSiteController;
 use App\Http\Controllers\Admin\TrafficController as AdminTrafficController;
@@ -112,6 +113,12 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
         Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
+        // ── Paramètres par section ───────────────────────────────
+        Route::get('/contenu/settings', [AdminSectionSettingsController::class, 'contenu'])->name('contenu.settings');
+        Route::get('/meteo/settings',   [AdminSectionSettingsController::class, 'meteo'])->name('meteo.settings');
+        Route::get('/sites/settings',   [AdminSectionSettingsController::class, 'sites'])->name('sites.settings');
+        Route::get('/balises/settings', [AdminSectionSettingsController::class, 'balises'])->name('balises.settings');
+
         // ── Sites ────────────────────────────────────────────────
         Route::get('/sites',                   [AdminSiteController::class, 'index'])->name('sites.index');
         Route::get('/sites/map',               [AdminSiteController::class, 'map'])->name('sites.map');
@@ -149,8 +156,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::patch('/apis/{api}',        [AdminApiController::class, 'update'])->name('apis.update');
         Route::post('/apis/{api}/toggle',  [AdminApiController::class, 'toggleActive'])->name('apis.toggle');
 
-        // ── Synchronisation des données (sites / balises) ─────────
-        Route::get('/sync',          [AdminSyncController::class, 'index'])->name('sync.index');
+        // ── Synchronisation des données (actions POST, vues intégrées aux pages Paramètres) ──
         Route::post('/sync/sites',   [AdminSyncController::class, 'importSites'])->name('sync.sites');
         Route::post('/sync/balises', [AdminSyncController::class, 'discoverBalises'])->name('sync.balises');
         Route::post('/sync/deploy',  [AdminSyncController::class, 'deploy'])->name('sync.deploy');

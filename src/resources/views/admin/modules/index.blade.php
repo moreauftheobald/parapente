@@ -2,7 +2,7 @@
 @section('title', 'Modules')
 
 @section('content')
-<div class="max-w-4xl">
+<div>
     <x-admin.page-title title="Modules du menu"
         subtitle="L'affichage de chaque module dans la barre de menu supérieure dépend de ces réglages : module actif, niveau de droit requis, et compte utilisateur obligatoire ou non." />
 

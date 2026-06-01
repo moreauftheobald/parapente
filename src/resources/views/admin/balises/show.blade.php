@@ -2,7 +2,7 @@
 @section('title', 'Balise · ' . $balise->name)
 
 @section('content')
-<div class="max-w-5xl">
+<div>
     <div class="bg-gradient-to-r from-sky-500/10 via-gray-900 to-gray-900 border border-sky-500/20 rounded-xl p-5 mb-6 flex items-baseline justify-between">
         <div>
             <h1 class="text-2xl font-semibold text-white flex items-center gap-2">

@@ -2,7 +2,7 @@
 @section('title', 'Éditer — ' . $page->title)
 
 @section('content')
-<div class="max-w-5xl">
+<div>
     <div class="mb-6 flex items-start justify-between gap-4">
         <div>
             <a href="{{ route('admin.wiki.index') }}" class="text-sm text-gray-400 hover:text-white">

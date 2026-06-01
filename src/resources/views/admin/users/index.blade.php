@@ -17,7 +17,7 @@
 @endphp
 
 @section('content')
-<div class="max-w-5xl">
+<div>
     <x-admin.page-title
         title="Utilisateurs"
         :subtitle="number_format($users->total(), 0, ',', ' ') . ' utilisateur' . ($users->total() > 1 ? 's' : '')">

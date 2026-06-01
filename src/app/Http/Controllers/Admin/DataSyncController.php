@@ -11,7 +11,6 @@ use App\Services\GeoDeploymentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\View\View;
 
 /**
  * BackOffice — synchronisation des données de référence.
@@ -29,7 +28,7 @@ use Illuminate\View\View;
 class DataSyncController extends Controller
 {
     /** Codes ISO pays proposés pour l'import de sites */
-    private const ISO_COUNTRIES = [
+    public const ISO_COUNTRIES = [
         'fr' => 'France',
         'ch' => 'Suisse',
         'be' => 'Belgique',
@@ -40,26 +39,12 @@ class DataSyncController extends Controller
     ];
 
     /** Bounding box par défaut : large couverture (France + zones frontalières) */
-    private const DEFAULT_BBOX = [
+    public const DEFAULT_BBOX = [
         'lat_min' => 47.0,
         'lat_max' => 50.5,
         'lng_min' => 3.5,
         'lng_max' => 8.5,
     ];
-
-    public function index(): View
-    {
-        return view('admin.sync.index', [
-            'countries'       => self::ISO_COUNTRIES,
-            'bbox'            => self::DEFAULT_BBOX,
-            'sitesTotal'      => Site::count(),
-            'sitesPge'        => Site::where('source', 'paraglidingearth')->count(),
-            'balisesPiou'     => Balise::where('source', 'pioupiou')->count(),
-            'balisesMetar'    => Balise::where('source', 'metar')->count(),
-            'balisesWindy'    => Balise::where('source', 'windy')->count(),
-            'windyKeyConfigured' => trim((string) app(\App\Services\Settings::class)->get('windy.api_key', '')) !== '',
-        ]);
-    }
 
     /**
      * Importe les sites de vol d'un pays depuis ParaglidingEarth.
@@ -81,7 +66,7 @@ class DataSyncController extends Controller
         Artisan::call('sites:import', $params);
 
         return redirect()
-            ->route('admin.sync.index')
+            ->route('admin.sites.settings', ['tab' => 'data'])
             ->with('status', 'Import des sites (' . self::ISO_COUNTRIES[$data['iso']] . ') terminé.')
             ->with('sync_output', trim(Artisan::output()));
     }
@@ -117,7 +102,7 @@ class DataSyncController extends Controller
         };
 
         return redirect()
-            ->route('admin.sync.index')
+            ->route('admin.balises.settings', ['tab' => 'data'])
             ->with('status', 'Découverte des balises ' . $label . ' terminée.')
             ->with('sync_output', trim(Artisan::output()));
     }
@@ -144,7 +129,7 @@ class DataSyncController extends Controller
         }
 
         return redirect()
-            ->route('admin.sync.index')
+            ->route('admin.dashboard')
             ->with('status', 'Déploiement géographique terminé.')
             ->with('deploy_report', $report);
     }

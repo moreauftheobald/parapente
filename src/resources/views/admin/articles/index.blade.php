@@ -2,7 +2,7 @@
 @section('title', 'Articles / Changelog')
 
 @section('content')
-<div class="max-w-4xl">
+<div>
     <x-admin.page-title title="Articles / Changelog">
         <x-slot:subtitle>
             Affichés sur la page d'accueil, du plus récent au plus ancien ({{ $articles->total() }} au total).

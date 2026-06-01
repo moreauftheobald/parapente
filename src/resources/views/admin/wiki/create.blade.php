@@ -2,7 +2,7 @@
 @section('title', 'Nouvelle page d\'aide')
 
 @section('content')
-<div class="max-w-5xl">
+<div>
     <div class="mb-6">
         <a href="{{ route('admin.wiki.index') }}" class="text-sm text-gray-400 hover:text-white">
             <i class="fa-solid fa-arrow-left mr-1"></i> Retour aux pages
