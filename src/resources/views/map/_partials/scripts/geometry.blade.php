@@ -2,7 +2,7 @@
 // COMPASS_TICKS est défini dans config.blade.php (déjà chargé).
 
 function svgMk(svg, tag, attrs, parent) {
-    const e = document.createElementNS(NS, tag);
+    const e = document.createElementNS(SVG_NS, tag);
     for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
     (parent || svg).appendChild(e);
     return e;
@@ -21,7 +21,7 @@ function svgMk(svg, tag, attrs, parent) {
  */
 function svgHelpers(svg) {
     const mk = (tag, attrs, parent) => {
-        const e = document.createElementNS(NS, tag);
+        const e = document.createElementNS(SVG_NS, tag);
         for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
         (parent || svg).appendChild(e);
         return e;

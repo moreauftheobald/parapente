@@ -57,8 +57,7 @@ function baliseTooltipHtml(b) {
     const min = r.wind_speed_min !== null ? Math.round(r.wind_speed_min) : '—';
     const max = r.wind_speed_max !== null ? Math.round(r.wind_speed_max) : '—';
     const dir = r.wind_direction !== null ? r.wind_direction + '°' : '—';
-    const ageMin = Math.round((Date.now() - new Date(r.read_at).getTime()) / 60000);
-    const ageStr = ageMin < 1 ? "à l'instant" : (ageMin < 60 ? `il y a ${ageMin} min` : `il y a ${Math.round(ageMin/60)} h`);
+    const ageStr = formatAge(r.read_at);
 
     return `<strong>${b.name}</strong><br>` +
         `<span style="font-family:'DM Mono',monospace;">` +

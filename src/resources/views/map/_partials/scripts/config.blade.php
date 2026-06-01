@@ -10,12 +10,26 @@ const BASEMAP_LIST=[
     {key:'light',label:'Clair',icon:'☀',desc:'CartoDB Voyager',url:'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',attribution:'© OpenStreetMap © CARTO',maxZoom:19},
 ];
 
-// Couleurs de statut
-const SC = {green:'#16a34a', orange:'#d97706', red:'#dc2626', unknown:'#4b5563'};
 // Jours de la semaine abrégés (index = jour ISO ; ex: dt.getDay() retourne 0..6)
-const DF = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+const DAY_NAMES_SHORT = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
 // Namespace SVG (pour createElementNS)
-const NS = 'http://www.w3.org/2000/svg';
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+// ── Helpers partagés ────────────────────────────────────────
+function formatAge(isoTimestamp) {
+    if (!isoTimestamp) return 'aucune lecture';
+    const ageMin = Math.round((Date.now() - new Date(isoTimestamp).getTime()) / 60000);
+    if (ageMin < 1)  return "à l'instant";
+    if (ageMin < 60) return `il y a ${ageMin} min`;
+    return `il y a ${Math.round(ageMin / 60)} h`;
+}
+
+function positionTooltip(clientX, clientY, tooltipW, tooltipH) {
+    let tx = clientX + 14, ty = clientY + 14;
+    if (tx + tooltipW > window.innerWidth)  tx = clientX - tooltipW - 14;
+    if (ty + tooltipH > window.innerHeight) ty = clientY - tooltipH - 14;
+    return { x: Math.max(8, tx), y: Math.max(8, ty) };
+}
 
 // ── Configuration des 6 graphes du panel multi-modèles ──────
 const CHART_CONFIGS = [

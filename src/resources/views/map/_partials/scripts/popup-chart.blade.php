@@ -52,12 +52,9 @@ function attachSynthTooltip(svgEl, dayData, opts) {
 
         // Position au curseur, évite les bords
         const tw = 240, th = Math.min(220, (content.rows.length + (content.consensus ? 1 : 0)) * 20 + 60);
-        let tx = e.clientX + 14;
-        let ty = e.clientY + 14;
-        if (tx + tw > window.innerWidth)  tx = e.clientX - tw - 14;
-        if (ty + th > window.innerHeight) ty = e.clientY - th - 14;
-        app.tooltip.x = Math.max(8, tx);
-        app.tooltip.y = Math.max(8, ty);
+        const pos = positionTooltip(e.clientX, e.clientY, tw, th);
+        app.tooltip.x = pos.x;
+        app.tooltip.y = pos.y;
     });
 
     overlay.addEventListener('mouseleave', () => {

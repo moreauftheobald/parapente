@@ -166,6 +166,10 @@ function mapApp(){return{
             setTimeout(()=>this.map?.panTo([this.selectedFeature.lat,this.selectedFeature.lng]), 280);
         }
     },
+    _markerEl(m){ return m.getElement()?.querySelector('.pg-site-marker'); },
+    _clearAllMarkerSelection(){
+        Object.values(this.markers).forEach(m => this._markerEl(m)?.classList.remove('selected'));
+    },
     closeRightPanel(){
         this.rightOpen=false;
         this.selectedFeature=null;
@@ -173,7 +177,7 @@ function mapApp(){return{
         this.multimodelData=null; this.multimodel5Data=null;
         this._multimodelByDay={};
         this.baliseData=null; this._baliseObj=null;
-        Object.values(this.markers).forEach(m=>m.getElement()?.querySelector('.pg-site-marker')?.classList.remove('selected'));
+        this._clearAllMarkerSelection();
     },
 
     /**
@@ -302,7 +306,7 @@ function mapApp(){return{
         const now = new Date(), tom = new Date(now); tom.setDate(now.getDate() + 1);
         if (dt.toDateString() === now.toDateString()) return 'Aujourd\'hui';
         if (dt.toDateString() === tom.toDateString()) return 'Demain';
-        return DF[dt.getDay()] + ' ' + d + '/' + mo;
+        return DAY_NAMES_SHORT[dt.getDay()] + ' ' + d + '/' + mo;
     },
 
     /**
@@ -391,22 +395,22 @@ function mapApp(){return{
 
             const icon=L.divIcon({className:'',html:siteIconHtml(site,st),iconSize:[40,40],iconAnchor:[20,20]});
             if(this.markers[site.id]){
-                const was=this.markers[site.id].getElement()?.querySelector('.pg-site-marker')?.classList.contains('selected');
+                const was=this._markerEl(this.markers[site.id])?.classList.contains('selected');
                 this.markers[site.id].setIcon(icon);
-                if(was)setTimeout(()=>this.markers[site.id]?.getElement()?.querySelector('.pg-site-marker')?.classList.add('selected'),10);
+                if(was)setTimeout(()=>this._markerEl(this.markers[site.id])?.classList.add('selected'),10);
             }else{
                 const mk=L.marker([site.lat,site.lng],{icon}).addTo(this.map).bindTooltip(site.name,{permanent:false,direction:'top',offset:[0,-22]});
                 mk.on('click',(e)=>{L.DomEvent.stopPropagation(e);this.clickSite(site,mk.getElement());});
                 this.markers[site.id]=mk;
                 if(this.selectedFeature?.type==='site'&&this.selectedFeature.id===site.id)
-                    setTimeout(()=>mk.getElement()?.querySelector('.pg-site-marker')?.classList.add('selected'),10);
+                    setTimeout(()=>this._markerEl(mk)?.classList.add('selected'),10);
             }
         });
     },
 
     // ── Clic sur un site → volet droit (onglet Synthèse par défaut) ──
     clickSite(site, markerEl){
-        Object.values(this.markers).forEach(m=>m.getElement()?.querySelector('.pg-site-marker')?.classList.remove('selected'));
+        this._clearAllMarkerSelection();
         markerEl?.querySelector('.pg-site-marker')?.classList.add('selected');
         this.site=site;
         this.selectedFeature={type:'site',...site};
@@ -832,7 +836,7 @@ function mapApp(){return{
     clickBalise(id, markerEl){
         const b=this.balises.find(x=>x.id===id);
         if(!b) return;
-        Object.values(this.markers).forEach(m=>m.getElement()?.querySelector('.pg-site-marker')?.classList.remove('selected'));
+        this._clearAllMarkerSelection();
         this.site={};
         this._baliseObj=b;
         this.selectedFeature={type:'balise', ...b};
@@ -855,19 +859,14 @@ function mapApp(){return{
         buildBaliseRoseSVG(this.baliseData);
         buildBaliseChartSVG(this.baliseData);
     },
-    baliseFreshness(){
-        const iso=this.baliseData?.latest?.read_at ?? this._baliseObj?.reading?.read_at;
-        if(!iso) return 'aucune lecture';
-        const ageMin=Math.round((Date.now()-new Date(iso).getTime())/60000);
-        if(ageMin<1)  return "à l'instant";
-        if(ageMin<60) return `il y a ${ageMin} min`;
-        return `il y a ${Math.round(ageMin/60)} h`;
+    get baliseFreshness(){
+        return formatAge(this.baliseData?.latest?.read_at ?? this._baliseObj?.reading?.read_at);
     },
-    baliseTrendArrow(){
+    get baliseTrendArrow(){
         const t=this._baliseObj?.reading?.trend ?? 0;
         return ['↓↓','↓','→','↑','↑↑'][t+2] ?? '→';
     },
-    baliseTrendColor(){
+    get baliseTrendColor(){
         const t=this._baliseObj?.reading?.trend ?? 0;
         if(t>=1)  return '#fb923c';
         if(t<=-1) return '#60a5fa';

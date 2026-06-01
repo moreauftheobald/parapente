@@ -289,7 +289,7 @@
                                 <template x-if="baliseData?.balise?.altitude_m">
                                     <span class="rp-meta"><span class="rp-dot">·</span><span class="mono" x-text="baliseData.balise.altitude_m + ' m'"></span></span>
                                 </template>
-                                <span class="rp-meta"><span class="rp-dot">·</span><span>maj <span x-text="baliseFreshness()"></span></span></span>
+                                <span class="rp-meta"><span class="rp-dot">·</span><span>maj <span x-text="baliseFreshness"></span></span></span>
                             </div>
                             <button class="rp-close" @click="closeRightPanel()" title="Fermer">✕</button>
                         </div>
@@ -330,7 +330,7 @@
                                                         <span style="font-size:26px;font-weight:600;color:#fff;font-family:'DM Mono',monospace;line-height:1;"
                                                               x-text="baliseData.latest.wind_speed_avg !== null ? baliseData.latest.wind_speed_avg.toFixed(1) : '—'"></span>
                                                         <span style="font-size:11px;color:#9ca3af;">km/h</span>
-                                                        <span x-text="baliseTrendArrow()" :style="`font-size:14px;color:${baliseTrendColor()};`"></span>
+                                                        <span x-text="baliseTrendArrow" :style="`font-size:14px;color:${baliseTrendColor};`"></span>
                                                     </div>
                                                     <div style="font-family:'DM Mono',monospace;font-size:11px;color:#9ca3af;margin-top:2px;">
                                                         rafales <span x-text="baliseData.latest.wind_speed_max !== null ? Math.round(baliseData.latest.wind_speed_max) : '—'"></span>
