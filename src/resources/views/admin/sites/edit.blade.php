@@ -32,14 +32,14 @@
     </div>
 
     @if ($errors->any())
-        <div class="mb-4 px-4 py-3 rounded bg-red-500/15 border border-red-500/30 text-red-300 text-sm">
-            <strong><i class="fa-solid fa-triangle-exclamation"></i> Quelques erreurs :</strong>
+        <x-admin.alert type="error">
+            <strong>Quelques erreurs :</strong>
             <ul class="list-disc list-inside mt-1">
                 @foreach ($errors->all() as $err)
                     <li>{{ $err }}</li>
                 @endforeach
             </ul>
-        </div>
+        </x-admin.alert>
     @endif
 
     <form method="POST" action="{{ route('admin.sites.update', $site) }}">
@@ -48,13 +48,7 @@
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
             {{-- Section Site ──────────────────────────────────────── --}}
-            <div class="bg-gray-900 border border-sky-500/20 rounded-xl p-5">
-                <div class="flex items-center gap-2 mb-4 pb-3 border-b border-sky-500/20">
-                    <span class="w-8 h-8 rounded-lg bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-300">
-                        <i class="fa-solid fa-mountain-sun"></i>
-                    </span>
-                    <h2 class="text-sm font-semibold text-sky-200 uppercase tracking-wider">Identité</h2>
-                </div>
+            <x-admin.section title="Identité" icon="fa-solid fa-mountain-sun" color="sky">
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div class="sm:col-span-2">
@@ -102,16 +96,10 @@
                         </label>
                     </div>
                 </div>
-            </div>
+            </x-admin.section>
 
             {{-- Section Coordonnées ───────────────────────────────── --}}
-            <div class="bg-gray-900 border border-violet-500/20 rounded-xl p-5">
-                <div class="flex items-center gap-2 mb-4 pb-3 border-b border-violet-500/20">
-                    <span class="w-8 h-8 rounded-lg bg-violet-500/15 border border-violet-500/30 flex items-center justify-center text-violet-300">
-                        <i class="fa-solid fa-location-dot"></i>
-                    </span>
-                    <h2 class="text-sm font-semibold text-violet-200 uppercase tracking-wider">Coordonnées</h2>
-                </div>
+            <x-admin.section title="Coordonnées" icon="fa-solid fa-location-dot" color="violet">
 
                 <div class="grid grid-cols-2 gap-3 mb-3">
                     <div>
@@ -173,17 +161,11 @@
                     <i class="fa-solid fa-circle-info"></i>
                     Glisser les marqueurs pour ajuster la position. Vert = décollage, orange = atterrissage.
                 </p>
-            </div>
+            </x-admin.section>
         </div>
 
         {{-- Section Conditions de vol ───────────────────────────── --}}
-        <div class="bg-gray-900 border border-emerald-500/20 rounded-xl p-5 mb-5">
-            <div class="flex items-center gap-2 mb-4 pb-3 border-b border-emerald-500/20">
-                <span class="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-300">
-                    <i class="fa-solid fa-wind"></i>
-                </span>
-                <h2 class="text-sm font-semibold text-emerald-200 uppercase tracking-wider">Conditions de vol favorables</h2>
-            </div>
+        <x-admin.section title="Conditions de vol favorables" icon="fa-solid fa-wind" color="emerald" class="mb-5">
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {{-- Ligne 1 : direction min, max, hint --}}
@@ -276,13 +258,11 @@
                 <label class="{{ $labelCls }}"><i class="fa-solid fa-pen-to-square text-gray-400 mr-1"></i> Notes</label>
                 <textarea name="notes" rows="2" class="{{ $inputCls }}">{{ old('notes', $cond?->notes) }}</textarea>
             </div>
-        </div>
+        </x-admin.section>
 
         {{-- Actions ─────────────────────────────────────────────── --}}
         <div class="flex items-center justify-between mb-8">
-            <button type="submit" class="px-5 py-2.5 bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-400 hover:to-sky-500 text-white text-sm font-medium rounded-md transition shadow-lg shadow-sky-500/20">
-                <i class="fa-solid fa-floppy-disk"></i> Enregistrer
-            </button>
+            <x-admin.button type="submit" icon="fa-solid fa-floppy-disk">Enregistrer</x-admin.button>
             <a href="{{ route('admin.sites.index') }}" class="text-sm text-gray-400 hover:text-white transition">
                 Annuler
             </a>
@@ -303,9 +283,7 @@
                   onsubmit="return confirm('Supprimer définitivement « {{ addslashes($site->name) }} » ?');">
                 @csrf
                 @method('DELETE')
-                <button type="submit" class="px-4 py-2 bg-red-500/15 border border-red-500/40 text-red-300 hover:bg-red-500/25 hover:text-red-200 text-sm rounded-md transition flex items-center gap-2">
-                    <i class="fa-solid fa-trash"></i> Supprimer
-                </button>
+                <x-admin.button type="submit" variant="danger" icon="fa-solid fa-trash">Supprimer</x-admin.button>
             </form>
         </div>
     </div>

@@ -25,12 +25,12 @@
     </div>
 
     @if ($errors->any())
-        <div class="mb-4 px-4 py-3 rounded bg-red-500/15 border border-red-500/30 text-red-300 text-sm">
-            <strong><i class="fa-solid fa-triangle-exclamation"></i> Quelques erreurs :</strong>
+        <x-admin.alert type="error">
+            <strong>Quelques erreurs :</strong>
             <ul class="list-disc list-inside mt-1">
                 @foreach ($errors->all() as $err)<li>{{ $err }}</li>@endforeach
             </ul>
-        </div>
+        </x-admin.alert>
     @endif
 
     <form method="POST" action="{{ route('admin.models.update', $model) }}">
@@ -38,13 +38,7 @@
         @method('PATCH')
 
         {{-- Identité ──────────────────────────────────────────── --}}
-        <div class="bg-gray-900 border border-sky-500/20 rounded-xl p-5 mb-5">
-            <div class="flex items-center gap-2 mb-4 pb-3 border-b border-sky-500/20">
-                <span class="w-8 h-8 rounded-lg bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-300">
-                    <i class="fa-solid fa-cloud"></i>
-                </span>
-                <h2 class="text-sm font-semibold text-sky-200 uppercase tracking-wider">Identité</h2>
-            </div>
+        <x-admin.section title="Identité" icon="fa-solid fa-cloud" color="sky" class="mb-5">
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
@@ -77,7 +71,7 @@
                     </label>
                 </div>
             </div>
-        </div>
+        </x-admin.section>
 
         {{-- API source ─────────────────────────────────────────── --}}
         @php
@@ -244,13 +238,7 @@
         </div>
 
         {{-- Caractéristiques techniques ──────────────────────────── --}}
-        <div class="bg-gray-900 border border-violet-500/20 rounded-xl p-5 mb-5">
-            <div class="flex items-center gap-2 mb-4 pb-3 border-b border-violet-500/20">
-                <span class="w-8 h-8 rounded-lg bg-violet-500/15 border border-violet-500/30 flex items-center justify-center text-violet-300">
-                    <i class="fa-solid fa-gauge"></i>
-                </span>
-                <h2 class="text-sm font-semibold text-violet-200 uppercase tracking-wider">Caractéristiques</h2>
-            </div>
+        <x-admin.section title="Caractéristiques" icon="fa-solid fa-gauge" color="violet" class="mb-5">
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
@@ -289,16 +277,10 @@
                     </p>
                 </div>
             </div>
-        </div>
+        </x-admin.section>
 
         {{-- Voting logic ─────────────────────────────────────────── --}}
-        <div class="bg-gray-900 border border-emerald-500/20 rounded-xl p-5 mb-5">
-            <div class="flex items-center gap-2 mb-4 pb-3 border-b border-emerald-500/20">
-                <span class="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-300">
-                    <i class="fa-solid fa-scale-balanced"></i>
-                </span>
-                <h2 class="text-sm font-semibold text-emerald-200 uppercase tracking-wider">Voting logic — poids statiques</h2>
-            </div>
+        <x-admin.section title="Voting logic — poids statiques" icon="fa-solid fa-scale-balanced" color="emerald" class="mb-5">
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
@@ -318,12 +300,10 @@
                 <i class="fa-solid fa-circle-info"></i>
                 Poids relatifs (échelle libre, 0 = ignoré). Phase 3 du système de fiabilité ajoutera une pondération dynamique en complément, par site et balise.
             </p>
-        </div>
+        </x-admin.section>
 
         <div class="flex items-center justify-between">
-            <button type="submit" class="px-5 py-2.5 bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-400 hover:to-sky-500 text-white text-sm font-medium rounded-md transition shadow-lg shadow-sky-500/20">
-                <i class="fa-solid fa-floppy-disk"></i> Enregistrer
-            </button>
+            <x-admin.button type="submit" icon="fa-solid fa-floppy-disk">Enregistrer</x-admin.button>
             <a href="{{ route('admin.models.index') }}" class="text-sm text-gray-400 hover:text-white transition">Annuler</a>
         </div>
     </form>
