@@ -23,35 +23,52 @@
         <x-admin.alert type="warning">
             <span x-text="error"></span>
         </x-admin.alert>
-        <x-admin.empty-state icon="fa-solid fa-satellite-dish" message="Le sidecar n'est pas joignable. Vérifiez que le conteneur consensus-grid est en ligne sur meteo-net." />
+        <x-admin.empty-state icon="fa-solid fa-satellite-dish" message="Le sidecar V2 n'est pas joignable. Vérifiez que le conteneur est en ligne sur meteo-net." />
     </div>
 
     <div x-show="config" x-cloak class="space-y-4">
         {{-- Métadonnées --}}
         <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
                 <div>
-                    <span class="text-gray-500 text-xs">Chargé le</span>
-                    <div class="text-white font-mono text-xs" x-text="config?.loaded_at || '—'"></div>
+                    <span class="text-gray-500 text-xs">Schema version</span>
+                    <div class="text-white font-mono text-xs" x-text="config?.schema_version || '—'"></div>
                 </div>
                 <div>
-                    <span class="text-gray-500 text-xs">Source consensus</span>
-                    <div class="text-white font-mono text-xs" x-text="config?.consensus_source || '—'"></div>
-                </div>
-                <div>
-                    <span class="text-gray-500 text-xs">Méthode par défaut</span>
+                    <span class="text-gray-500 text-xs">Statut BDD</span>
                     <div class="font-mono text-xs">
                         <span class="px-1.5 py-0.5 rounded border"
-                              :class="config?.default_method === 'B'
-                                  ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
-                                  : 'bg-gray-800 text-gray-300 border-gray-700'"
-                              x-text="config?.default_method || '—'"></span>
+                              :class="config?.meta?.db_status === 'ok'
+                                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                  : 'bg-red-500/15 text-red-300 border-red-500/30'"
+                              x-text="config?.meta?.db_status || '—'"></span>
                     </div>
+                </div>
+                <div>
+                    <span class="text-gray-500 text-xs">Cache version</span>
+                    <div class="text-white font-mono text-xs" x-text="config?.meta?.cache_version || '—'"></div>
+                </div>
+                <div>
+                    <span class="text-gray-500 text-xs">Résolution grille</span>
+                    <div class="text-white font-mono text-xs" x-text="config?.meta?.grid_resolution_deg ? config.meta.grid_resolution_deg + '°' : '—'"></div>
                 </div>
             </div>
         </div>
 
-        {{-- Modèles actifs --}}
+        {{-- Méthode par défaut --}}
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+            <div class="flex items-center gap-4">
+                <span class="text-gray-500 text-xs">Méthode par défaut</span>
+                <span class="px-1.5 py-0.5 rounded border font-mono text-xs"
+                      :class="config?.default_method === 'B'
+                          ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                          : 'bg-gray-800 text-gray-300 border-gray-700'"
+                      x-text="config?.default_method || '—'"></span>
+                <span class="text-[10px] text-gray-600" x-text="config?.default_method === 'B' ? 'Amélioré MAD/médiane' : 'Legacy inverse-carré'"></span>
+            </div>
+        </div>
+
+        {{-- Modèles actifs (si le sidecar expose cette info) --}}
         <div x-show="config?.models_active?.length" class="bg-gray-900 border border-gray-800 rounded-xl p-4">
             <h3 class="text-xs uppercase tracking-wider text-gray-500 mb-2">Modèles actifs</h3>
             <div class="flex flex-wrap gap-1">
@@ -61,8 +78,8 @@
             </div>
         </div>
 
-        {{-- Weight factors --}}
-        <div x-show="config?.models_weight_factor" class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+        {{-- Weight factors (si le sidecar expose cette info) --}}
+        <div x-show="config?.models_weight_factor && Object.keys(config?.models_weight_factor || {}).length" class="bg-gray-900 border border-gray-800 rounded-xl p-4">
             <h3 class="text-xs uppercase tracking-wider text-gray-500 mb-2">Weight factors par modèle</h3>
             <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2">
                 <template x-for="(wf, code) in (config?.models_weight_factor || {})" :key="code">
@@ -110,16 +127,16 @@
                                 :class="vc.use_mad_filtering ? 'text-sky-300' : 'text-gray-600'"></td>
                             <td class="px-2 py-1.5 text-center" x-text="vc.use_weighted_median ? '✓' : '—'"
                                 :class="vc.use_weighted_median ? 'text-sky-300' : 'text-gray-600'"></td>
-                            <td class="px-2 py-1.5 text-right font-mono text-gray-400" x-text="vc.z_threshold"></td>
-                            <td class="px-2 py-1.5 text-right font-mono text-gray-400" x-text="vc.mad_floor"></td>
-                            <td class="px-2 py-1.5 text-right font-mono text-gray-400" x-text="vc.epsilon"></td>
+                            <td class="px-2 py-1.5 text-right font-mono text-gray-400" x-text="vc.z_threshold ?? '—'"></td>
+                            <td class="px-2 py-1.5 text-right font-mono text-gray-400" x-text="vc.mad_floor ?? '—'"></td>
+                            <td class="px-2 py-1.5 text-right font-mono text-gray-400" x-text="vc.epsilon ?? '—'"></td>
                         </tr>
                     </template>
                 </tbody>
             </table>
         </div>
 
-        {{-- Scheduler --}}
+        {{-- Scheduler (si le sidecar expose cette info) --}}
         <div x-show="config?.scheduler" class="bg-gray-900 border border-gray-800 rounded-xl p-4">
             <h3 class="text-xs uppercase tracking-wider text-gray-500 mb-2">Scheduler</h3>
             <div class="flex gap-4 text-sm">
@@ -134,9 +151,21 @@
             </div>
         </div>
 
+        {{-- Données brutes (debug toggle) --}}
+        <div x-data="{ showRaw: false }">
+            <button type="button" @click="showRaw = !showRaw"
+                    class="text-[10px] text-gray-600 hover:text-gray-400 transition">
+                <i class="fa-solid" :class="showRaw ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
+                Payload JSON brut
+            </button>
+            <div x-show="showRaw" x-cloak class="mt-2 bg-gray-950 border border-gray-800 rounded-lg p-3 overflow-x-auto">
+                <pre class="text-[10px] text-gray-500 font-mono whitespace-pre-wrap" x-text="JSON.stringify(config, null, 2)"></pre>
+            </div>
+        </div>
+
         <p class="text-xs text-gray-500">
             <i class="fa-solid fa-circle-info text-gray-600"></i>
-            Cette vue reflète la configuration <strong>réellement chargée</strong> par le dernier run du sidecar.
+            Cette vue reflète la configuration <strong>réellement chargée</strong> par le sidecar V2.
             Les changements depuis l'onglet Consensus sont lus à chaque nouveau run.
         </p>
     </div>
@@ -168,7 +197,7 @@ function sidecarPanel() {
                 if (data.error) throw new Error(data.message || 'Erreur sidecar');
                 this.config = data;
             } catch (e) {
-                this.error = 'Sidecar injoignable : ' + e.message;
+                this.error = 'Sidecar V2 injoignable : ' + e.message;
             } finally {
                 this.loading = false;
             }
