@@ -100,15 +100,15 @@ class SectionSettingsController extends Controller
             $overrides = ModelVariableOverride::all()
                 ->keyBy(fn ($o) => "{$o->model_code}:{$o->variable}");
             $data['overrides'] = $overrides;
-            $data['sidecarVariablesEndpoint'] = route('admin.meteo.sidecar.models-variables');
+            $data['sidecarVariablesEndpoint'] = route('admin.meteo.sidecar.models-variables', [], false);
         }
 
         if ($tab === 'dependencies') {
-            $data['sidecarDependencyEndpoint'] = route('admin.meteo.sidecar.dependency-graph');
+            $data['sidecarDependencyEndpoint'] = route('admin.meteo.sidecar.dependency-graph', [], false);
         }
 
         if ($tab === 'sidecar') {
-            $data['sidecarConfigEndpoint'] = route('admin.meteo.sidecar.active-config');
+            $data['sidecarConfigEndpoint'] = route('admin.meteo.sidecar.active-config', [], false);
         }
 
         return view('admin.meteo.settings', $data);

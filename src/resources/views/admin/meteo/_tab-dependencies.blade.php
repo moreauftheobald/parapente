@@ -1,6 +1,6 @@
 {{-- Onglet Dépendances — graphe read-only depuis le sidecar /v1/consensus/dependency_graph --}}
 
-<div x-data="dependenciesPanel()" x-init="loadGraph()" data-proxy-url="{{ route('admin.meteo.sidecar.dependency-graph') }}">
+<div x-data="dependenciesPanel()" x-init="loadGraph()" data-proxy-url="{{ route('admin.meteo.sidecar.dependency-graph', [], false) }}">
     <div x-show="loading" class="text-center py-12 text-gray-500">
         <i class="fa-solid fa-spinner fa-spin text-2xl"></i>
         <p class="mt-2 text-sm">Chargement du graphe de dépendances…</p>
