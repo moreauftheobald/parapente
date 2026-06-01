@@ -122,6 +122,7 @@ function variablesPanel() {
             try {
                 const r = await fetch(@js($sidecarVariablesEndpoint), {
                     headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    credentials: 'same-origin',
                     signal: AbortSignal.timeout(10000),
                 });
                 if (!r.ok) throw new Error(`HTTP ${r.status}`);
