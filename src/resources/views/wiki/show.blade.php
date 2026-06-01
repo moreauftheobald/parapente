@@ -1,31 +1,3 @@
-@push('styles')
-<style>
-    .wiki-content { line-height: 1.7; }
-    .wiki-content > :first-child { margin-top: 0; }
-    .wiki-content h1, .wiki-content h2, .wiki-content h3, .wiki-content h4 {
-        font-weight: 600; color: #f1f5f9; line-height: 1.3; margin: 1.4em 0 .5em;
-    }
-    .wiki-content h1 { font-size: 1.5rem; }
-    .wiki-content h2 { font-size: 1.25rem; }
-    .wiki-content h3 { font-size: 1.1rem; }
-    .wiki-content p  { margin: .8em 0; }
-    .wiki-content ul, .wiki-content ol { margin: .8em 0; padding-left: 1.4em; }
-    .wiki-content ul { list-style: disc; }
-    .wiki-content ol { list-style: decimal; }
-    .wiki-content li { margin: .2em 0; }
-    .wiki-content a  { color: #38bdf8; text-decoration: underline; }
-    .wiki-content img { max-width: 100%; height: auto; border-radius: .5rem; margin: 1em 0; }
-    .wiki-content figure { margin: 1em 0; }
-    .wiki-content figcaption { font-size: .8rem; color: #94a3b8; text-align: center; margin-top: .4em; }
-    .wiki-content blockquote { border-left: 3px solid #334155; padding-left: 1em; color: #94a3b8; font-style: italic; margin: 1em 0; }
-    .wiki-content table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-    .wiki-content th, .wiki-content td { border: 1px solid #334155; padding: .4em .7em; text-align: left; }
-    .wiki-content pre { background: #0f172a; border: 1px solid #1e293b; border-radius: .5rem; padding: .8em 1em; overflow-x: auto; }
-    .wiki-content code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; }
-    .wiki-content hr { border: 0; border-top: 1px solid #1e293b; margin: 1.5em 0; }
-</style>
-@endpush
-
 <x-app-shell :title="$page->title" page-title="Aide" detail-title="Sommaire" help-title="Sur cette page" :left-default="true">
 
     <x-slot:detail>
@@ -80,7 +52,7 @@
             </header>
 
             {{-- HTML saisi par un administrateur via TinyMCE --}}
-            <div class="wiki-content text-gray-300">{!! $page->body !!}</div>
+            <div class="rich-content text-gray-300">{!! $page->body !!}</div>
 
             @if ($page->children->isNotEmpty())
                 <footer class="mt-8 pt-6 border-t border-gray-800">

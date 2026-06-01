@@ -71,7 +71,6 @@
 </form>
 
 @push('scripts')
-<script src="https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js" referrerpolicy="origin"></script>
 <script>
     (function () {
         var titleInput = document.getElementById('title');
@@ -89,36 +88,7 @@
         }
         titleInput.addEventListener('input', updatePreview);
         slugInput.addEventListener('input', updatePreview);
-
-        tinymce.init({
-            selector: '#wiki-body',
-            license_key: 'gpl',
-            height: 500,
-            menubar: false,
-            skin: 'oxide-dark',
-            content_css: 'dark',
-            plugins: 'lists link image table code autolink',
-            toolbar: 'undo redo | blocks | bold italic underline | bullist numlist | link image table | alignleft aligncenter alignright | code | removeformat',
-            branding: false,
-            promotion: false,
-            relative_urls: false,
-            convert_urls: false,
-            image_caption: true,
-            images_upload_handler: function (blobInfo) {
-                return new Promise(function (resolve, reject) {
-                    var fd = new FormData();
-                    fd.append('file', blobInfo.blob(), blobInfo.filename());
-                    fetch(@json(route('admin.wiki.upload')), {
-                        method: 'POST',
-                        headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
-                        body: fd
-                    })
-                    .then(function (r) { return r.ok ? r.json() : Promise.reject('HTTP ' + r.status); })
-                    .then(function (d) { (d && d.location) ? resolve(d.location) : reject('Réponse invalide du serveur'); })
-                    .catch(function (e) { reject("Échec de l'upload : " + e); });
-                });
-            }
-        });
     })();
 </script>
+@include('admin._tinymce', ['selector' => '#wiki-body', 'uploadUrl' => route('admin.wiki.upload')])
 @endpush
