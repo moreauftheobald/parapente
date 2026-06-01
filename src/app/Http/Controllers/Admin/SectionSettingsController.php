@@ -309,7 +309,7 @@ class SectionSettingsController extends Controller
 
     private function sidecarV2BaseUrl(): string
     {
-        return rtrim(config('services.consensus_grid_v2.base_url', 'http://parapente-consensus-grid-v2-api:8083'), '/') . '/v1';
+        return rtrim(config('services.consensus_grid_v2.base_url', 'http://parapente-consensus-grid-v2-api:8082'), '/') . '/v1';
     }
 
     /**

@@ -52,7 +52,7 @@ return [
         // /v1/models/variables). Cohabite avec le V1 pendant la migration.
         // - dev local : http://localhost:8083
         // - prod docker-compose : http://consensus-grid-v2:8083
-        'base_url' => env('CONSENSUS_GRID_V2_BASE_URL', 'http://parapente-consensus-grid-v2-api:8083'),
+        'base_url' => env('CONSENSUS_GRID_V2_BASE_URL', 'http://parapente-consensus-grid-v2-api:8082'),
         'timeout'  => (int) env('CONSENSUS_GRID_V2_TIMEOUT', 10),
     ],
 
