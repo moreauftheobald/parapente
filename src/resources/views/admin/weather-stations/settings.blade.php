@@ -154,6 +154,142 @@
             @endforeach
         </div>
 
+        {{-- Couverture prévisions stations ────────────────────────────── --}}
+        @php require resource_path('views/admin/_coverage-helpers.php'); @endphp
+
+        <h2 class="text-xs uppercase tracking-wider text-gray-400 mb-3">
+            <i class="fa-solid fa-box-archive text-violet-400"></i>
+            Prévisions stations — J-7 → J+5
+            <span class="text-gray-600 normal-case">({{ $stationForecasts['stations_active'] }} stations actives, horizon archivé limité à J+2)</span>
+        </h2>
+
+        <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-x-auto mb-8">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-900 border-b border-gray-800 text-gray-400">
+                    <tr>
+                        <th class="text-left px-3 py-2 font-medium sticky left-0 bg-gray-900 z-10">Modèle</th>
+                        @foreach ($stationForecasts['days'] as $day)
+                            <th class="text-center px-2 py-2 font-medium" title="{{ $day->format('Y-m-d') }}">
+                                <div class="text-white text-[11px]">{{ $fmtDay($day, $today) }}</div>
+                                <div class="text-[10px] text-gray-500">{{ $day->isoFormat('D/MM') }}</div>
+                            </th>
+                        @endforeach
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-800/70">
+                    @forelse ($stationForecasts['rows'] as $row)
+                        <tr @class(['opacity-60' => ! $row['archived']])>
+                            <td class="px-3 py-2 sticky left-0 bg-gray-900 z-10">
+                                <div class="text-white">
+                                    {{ $row['model']->name }}
+                                    @unless ($row['archived'])
+                                        <span class="ml-1 text-[10px] uppercase tracking-wider text-gray-500"
+                                              title="Modèle d'horizon < 24h — exclu de l'archive stations par FetchStationForecastsJob">non archivé</span>
+                                    @endunless
+                                </div>
+                                <div class="text-xs text-gray-500 font-mono">
+                                    {{ $row['model']->code }}
+                                    <span class="ml-1 text-gray-600">· {{ $row['model']->max_horizon_h }}h</span>
+                                </div>
+                            </td>
+                            @foreach ($row['cells'] as $cell)
+                                <td class="px-1 py-2 text-center">
+                                    <span class="inline-block min-w-[52px] px-1.5 py-1 rounded border text-[11px] font-mono {{ $coverageCellClass($cell) }}"
+                                          title="{{ $cellTooltip($cell) }}">
+                                        {{ $fmtCell($cell) }}
+                                    </span>
+                                </td>
+                            @endforeach
+                        </tr>
+                    @empty
+                        <tr><td colspan="{{ count($stationForecasts['days']) + 1 }}" class="px-3 py-6 text-center text-gray-500">Aucun modèle actif ou aucune station active.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+
+        {{-- Couverture relevés stations ──────────────────────────────── --}}
+        <h2 class="text-xs uppercase tracking-wider text-gray-400 mb-3">
+            <i class="fa-solid fa-tower-broadcast text-emerald-400"></i>
+            Relevés stations — J-7 → J
+            <span class="text-gray-600 normal-case">(observations de <code>weather_station_observations</code>)</span>
+        </h2>
+
+        <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-x-auto mb-4">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-900 border-b border-gray-800 text-gray-400">
+                    <tr>
+                        <th class="text-left px-3 py-2 font-medium sticky left-0 bg-gray-900 z-10">Réseau / Station</th>
+                        @foreach ($stationReadings['days'] as $day)
+                            <th class="text-center px-2 py-2 font-medium" title="{{ $day->format('Y-m-d') }}">
+                                <div class="text-white text-[11px]">{{ $fmtDay($day, $today) }}</div>
+                                <div class="text-[10px] text-gray-500">{{ $day->isoFormat('D/MM') }}</div>
+                            </th>
+                        @endforeach
+                        <th class="text-right px-3 py-2 font-medium">Dernière réception</th>
+                    </tr>
+                </thead>
+                @forelse ($stationReadings['groups'] as $group)
+                    <tbody class="divide-y divide-gray-800/70 border-t border-gray-800/70"
+                           x-data="{ open: false }">
+                        <tr class="bg-gray-800/40 hover:bg-gray-800/70 transition cursor-pointer select-none"
+                            @click="open = !open">
+                            <td class="px-3 py-2 sticky left-0 bg-gray-800/40 z-10">
+                                <div class="flex items-center gap-2">
+                                    <i class="fa-solid fa-chevron-right w-3 text-gray-400 transition-transform"
+                                       :class="open && 'rotate-90'"></i>
+                                    <span class="text-white font-medium">{{ $group['label'] }}</span>
+                                    <span class="text-xs text-gray-500">({{ $group['stations_count'] }} station{{ $group['stations_count'] > 1 ? 's' : '' }})</span>
+                                </div>
+                            </td>
+                            @foreach ($group['aggregate_cells'] as $pct)
+                                <td class="px-1 py-2 text-center">
+                                    <span class="inline-block min-w-[52px] px-1.5 py-1 rounded border text-[11px] font-mono {{ $coverageCellClass($pct) }}"
+                                          title="{{ $pct === null ? 'N/A' : 'Agrégat réseau : '.$pct.'%' }}">
+                                        {{ $fmtPct($pct) }}
+                                    </span>
+                                </td>
+                            @endforeach
+                            <td class="px-3 py-2 text-right text-xs text-gray-500" x-show="!open">
+                                <span class="text-gray-500">détail&hellip;</span>
+                            </td>
+                            <td class="px-3 py-2 text-right text-xs text-gray-500" x-show="open" x-cloak>
+                                <span class="text-gray-500">réduire</span>
+                            </td>
+                        </tr>
+
+                        @foreach ($group['stations'] as $row)
+                            <tr x-show="open" x-cloak class="hover:bg-gray-800/30 transition">
+                                <td class="px-3 py-1.5 sticky left-0 bg-gray-900 z-10 pl-8">
+                                    <div class="text-white text-[13px]">{{ $row['station']->name }}</div>
+                                    <div class="text-[10px] text-gray-500 font-mono">#{{ $row['station']->id }}</div>
+                                </td>
+                                @foreach ($row['cells'] as $pct)
+                                    <td class="px-1 py-1.5 text-center">
+                                        <span class="inline-block min-w-[52px] px-1.5 py-1 rounded border text-[11px] font-mono {{ $coverageCellClass($pct) }}"
+                                              title="{{ $pct === null ? 'N/A' : $pct.'%' }}">
+                                            {{ $fmtPct($pct) }}
+                                        </span>
+                                    </td>
+                                @endforeach
+                                <td class="px-3 py-1.5 text-right font-mono text-[11px] text-gray-300">{{ $fmtDateTime($row['last_reading_at']) }}</td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                @empty
+                    <tbody>
+                        <tr><td colspan="{{ count($stationReadings['days']) + 2 }}" class="px-3 py-6 text-center text-gray-500">Aucune station active.</td></tr>
+                    </tbody>
+                @endforelse
+            </table>
+        </div>
+
+        @include('admin._coverage-legend')
+
+        @push('styles')
+            <style>[x-cloak] { display: none !important; }</style>
+        @endpush
+
     @elseif ($tab === 'logs')
         <x-admin.empty-state icon="fa-solid fa-scroll" message="Logs et monitoring des stations météo — à venir." />
     @endif

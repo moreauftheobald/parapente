@@ -49,6 +49,23 @@ class OpenMeteoApi implements WeatherApiInterface
         'temperature_2m',
     ];
 
+    /**
+     * Variables horaires pour le batch stations météo (payload étendu :
+     * les stations pro mesurent humidité, précipitations, pression,
+     * couverture nuageuse — on archive tout ce qui est comparable).
+     */
+    private const HOURLY_VARS_STATIONS = [
+        'wind_speed_10m',
+        'wind_gusts_10m',
+        'wind_direction_10m',
+        'temperature_2m',
+        'dew_point_2m',
+        'relative_humidity_2m',
+        'precipitation',
+        'pressure_msl',
+        'cloud_cover',
+    ];
+
     // Variables journalières — agrégées à la volée par Open-Meteo.
     // temperature_2m_max sert de "température de déclenchement" des
     // thermiques pour l'estimation de la base des cumulus.
@@ -304,6 +321,127 @@ class OpenMeteoApi implements WeatherApiInterface
         }
 
         return $parsed;
+    }
+
+    /**
+     * Fetch batch multi-coordonnées pour les stations météo (payload
+     * étendu avec humidité, précip, pression, couverture nuageuse).
+     *
+     * @param  array<int, array{id:int|string, lat:float, lng:float}> $points
+     * @return array<int|string, array<string, array<string, float|int|null>>>
+     */
+    public function fetchBatchForStations(array $points, WeatherModel $model): array
+    {
+        if (empty($points)) {
+            return [];
+        }
+
+        $result = [];
+        $chunks = array_chunk(array_values($points), self::BATCH_CHUNK);
+        foreach ($chunks as $chunk) {
+            $partial = $this->fetchStationBatchChunk($chunk, $model);
+            foreach ($partial as $id => $parsed) {
+                $result[$id] = $parsed;
+            }
+        }
+        return $result;
+    }
+
+    private function fetchStationBatchChunk(array $points, WeatherModel $model): array
+    {
+        $lats = array_map(fn ($p) => (string) $p['lat'], $points);
+        $lngs = array_map(fn ($p) => (string) $p['lng'], $points);
+        $ids  = array_map(fn ($p) => $p['id'], $points);
+
+        try {
+            $response = Http::timeout(self::BATCH_TIMEOUT_S)
+                ->get($this->baseUrl . '/forecast', [
+                    'latitude'        => implode(',', $lats),
+                    'longitude'       => implode(',', $lngs),
+                    'hourly'          => implode(',', self::HOURLY_VARS_STATIONS),
+                    'models'          => $model->code,
+                    'forecast_days'   => self::DAYS,
+                    'wind_speed_unit' => self::WIND_UNIT,
+                    'timezone'        => self::TIMEZONE,
+                ]);
+
+            $this->config?->incrementRequestsToday();
+
+            if (! $response->successful()) {
+                Log::warning('OpenMeteo station batch error', [
+                    'model'       => $model->code,
+                    'status'      => $response->status(),
+                    'point_count' => count($points),
+                ]);
+                return [];
+            }
+
+            $payload  = $response->json();
+            $stations = isset($payload[0]) ? $payload : [$payload];
+
+            $result = [];
+            foreach ($stations as $idx => $stationData) {
+                $id = $ids[$idx] ?? null;
+                if ($id === null) {
+                    continue;
+                }
+                $parsed = $this->parseStationResponse($stationData);
+                if (! empty($parsed)) {
+                    $result[$id] = $parsed;
+                }
+            }
+            return $result;
+        } catch (\Exception $e) {
+            Log::error('OpenMeteo station batch failed', [
+                'model'       => $model->code,
+                'message'     => $e->getMessage(),
+                'point_count' => count($points),
+            ]);
+            return [];
+        }
+    }
+
+    private function parseStationResponse(array $data): array
+    {
+        $hourly = $data['hourly'] ?? [];
+        $times  = $hourly['time'] ?? [];
+        if (empty($times)) {
+            return [];
+        }
+
+        $parsed = [];
+        foreach ($times as $index => $time) {
+            $forecastAt = \Carbon\Carbon::parse($time, self::TIMEZONE);
+            if ($forecastAt->lt(now()->startOfDay())) {
+                continue;
+            }
+
+            $parsed[$forecastAt->format('Y-m-d H:i:s')] = [
+                'wind_direction' => $this->getIntValue($hourly, 'wind_direction_10m', $index),
+                'wind_speed_avg' => $this->getFloatValue($hourly, 'wind_speed_10m', $index),
+                'wind_speed_max' => $this->getFloatValue($hourly, 'wind_gusts_10m', $index),
+                'temperature'    => $this->getFloatValue($hourly, 'temperature_2m', $index),
+                'dew_point'      => $this->getFloatValue($hourly, 'dew_point_2m', $index),
+                'humidity'       => $this->getIntValue($hourly, 'relative_humidity_2m', $index),
+                'precipitation'  => $this->getFloatValue($hourly, 'precipitation', $index),
+                'pressure_hpa'   => $this->getFloatValue($hourly, 'pressure_msl', $index),
+                'cloud_cover'    => $this->getIntValue($hourly, 'cloud_cover', $index),
+            ];
+        }
+
+        return $parsed;
+    }
+
+    private function getFloatValue(array $hourly, string $key, int $index): ?float
+    {
+        $val = $this->getValue($hourly, $key, $index);
+        return $val !== null ? (float) $val : null;
+    }
+
+    private function getIntValue(array $hourly, string $key, int $index): ?int
+    {
+        $val = $this->getValue($hourly, $key, $index);
+        return $val !== null ? (int) $val : null;
     }
 
     private function parseResponse(array $data, int $siteAltitudeM = 0): array

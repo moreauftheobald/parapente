@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Models\Balise;
 use App\Models\Site;
 use App\Models\WeatherModel;
+use App\Models\WeatherStation;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -56,6 +57,13 @@ class DataCoverage
     /** Périmètre des relevés balises : J-7 → J */
     private const BALISE_READINGS_DAYS_PAST = 7;
 
+    /** Périmètre des prévisions stations : J-7 → J+5 */
+    private const STATION_FORECAST_DAYS_PAST   = 7;
+    private const STATION_FORECAST_DAYS_FUTURE = 6;
+
+    /** Périmètre des relevés stations : J-7 → J */
+    private const STATION_READINGS_DAYS_PAST = 7;
+
     /**
      * Vide les caches calculés. À appeler après un fetch manuel si on
      * veut une mise à jour immédiate de l'écran (non câblé pour l'instant).
@@ -66,6 +74,8 @@ class DataCoverage
         Cache::forget('data_coverage.' . self::CACHE_VERSION . '.site_forecasts');
         Cache::forget('data_coverage.' . self::CACHE_VERSION . '.balise_forecasts');
         Cache::forget('data_coverage.' . self::CACHE_VERSION . '.balise_readings');
+        Cache::forget('data_coverage.' . self::CACHE_VERSION . '.station_forecasts');
+        Cache::forget('data_coverage.' . self::CACHE_VERSION . '.station_readings');
     }
 
     /**
@@ -531,6 +541,192 @@ class DataCoverage
     }
 
     /**
+     * Section 5 — Couverture des prévisions stations météo sur J-7 → J+5.
+     * Même logique que baliseForecastCoverage() mais sur forecast_archive_stations.
+     */
+    public function stationForecastCoverage(): array
+    {
+        return $this->safeSection('data_coverage.' . self::CACHE_VERSION . '.station_forecasts', function () {
+            $days = $this->dayRange(
+                -self::STATION_FORECAST_DAYS_PAST,
+                self::STATION_FORECAST_DAYS_FUTURE - 1
+            );
+            $stationsActive = WeatherStation::where('active', true)->count();
+            $models = WeatherModel::query()->where('active', true)->orderBy('name')->get();
+
+            $payload = [
+                'days'            => $this->daysToStrings($days),
+                'rows'            => [],
+                'stations_active' => $stationsActive,
+            ];
+
+            if (! DB::getSchemaBuilder()->hasTable('forecast_archive_stations')
+                || $stationsActive === 0
+                || $models->isEmpty()
+            ) {
+                return $payload;
+            }
+
+            $start = $days[0]->startOfDay();
+            $end   = end($days)->endOfDay();
+
+            $rowsRaw = DB::table('forecast_archive_stations')
+                ->join('weather_stations', 'weather_stations.id', '=', 'forecast_archive_stations.weather_station_id')
+                ->where('weather_stations.active', true)
+                ->whereBetween('forecast_archive_stations.target_at', [$start, $end])
+                ->selectRaw('forecast_archive_stations.weather_model_id as model_id, DATE(forecast_archive_stations.target_at) as day, COUNT(DISTINCT forecast_archive_stations.weather_station_id, forecast_archive_stations.target_at) as n')
+                ->groupBy('model_id', 'day')
+                ->get();
+
+            $byModelDay = [];
+            foreach ($rowsRaw as $r) {
+                $byModelDay[$r->model_id][$r->day] = (int) $r->n;
+            }
+
+            $todayIdx = self::STATION_FORECAST_DAYS_PAST;
+            $tNow     = $this->hoursIntoToday();
+
+            $rows = [];
+            foreach ($models as $model) {
+                $horizonH = max(1, (int) $model->max_horizon_h);
+                $archived = $horizonH >= 24;
+
+                $cells = [];
+                foreach ($days as $idx => $day) {
+                    if (! $archived) {
+                        $cells[] = ['pct' => null, 'in_horizon' => false, 'expected_h' => 0];
+                        continue;
+                    }
+
+                    $offset    = $idx - $todayIdx;
+                    $expectedH = $offset <= 0
+                        ? 24
+                        : $this->expectedHoursForFutureDay(min($horizonH, 72), $offset, $tNow);
+
+                    $n      = $byModelDay[$model->id][$day->format('Y-m-d')] ?? 0;
+                    $cells[] = $this->cellFromCounts($n, $expectedH, $stationsActive);
+                }
+
+                $rows[] = [
+                    'model'    => $this->lightModel($model),
+                    'archived' => $archived,
+                    'cells'    => $cells,
+                ];
+            }
+
+            $payload['rows'] = $rows;
+            return $payload;
+        }, fn (array $payload) => $this->inflateDayPayload($payload), default: [
+            'days' => [], 'rows' => [], 'stations_active' => 0,
+        ]);
+    }
+
+    /**
+     * Section 6 — Couverture des relevés stations météo sur J-7 → J,
+     * groupés par réseau (mf / metar / infoclimat).
+     */
+    public function stationReadingsCoverage(): array
+    {
+        return $this->safeSection('data_coverage.' . self::CACHE_VERSION . '.station_readings', function () {
+            $days     = $this->dayRange(-self::STATION_READINGS_DAYS_PAST, 0);
+            $stations = WeatherStation::where('active', true)->orderBy('network')->orderBy('name')->get();
+
+            $payload = [
+                'days'   => $this->daysToStrings($days),
+                'groups' => [],
+            ];
+
+            if ($stations->isEmpty() || ! DB::getSchemaBuilder()->hasTable('weather_station_observations')) {
+                return $payload;
+            }
+
+            $start = $days[0]->startOfDay();
+            $end   = end($days)->endOfDay();
+
+            $countRaw = DB::table('weather_station_observations')
+                ->whereBetween('observed_at', [$start, $end])
+                ->whereIn('weather_station_id', $stations->pluck('id'))
+                ->selectRaw('weather_station_id, DATE(observed_at) as day, COUNT(DISTINCT HOUR(observed_at)) as n')
+                ->groupBy('weather_station_id', 'day')
+                ->get();
+
+            $byStationDay = [];
+            foreach ($countRaw as $r) {
+                $byStationDay[$r->weather_station_id][$r->day] = (int) $r->n;
+            }
+
+            $lastByStation = [];
+            $rawLast = DB::table('weather_station_observations')
+                ->whereIn('weather_station_id', $stations->pluck('id'))
+                ->selectRaw('weather_station_id, MAX(observed_at) as last_at')
+                ->groupBy('weather_station_id')
+                ->get();
+            foreach ($rawLast as $r) {
+                if ($r->last_at) {
+                    $lastByStation[$r->weather_station_id] = (string) $r->last_at;
+                }
+            }
+
+            $groupsByCode = [];
+            foreach ($stations as $station) {
+                $code  = $station->network ?: 'inconnu';
+                $cells = [];
+                foreach ($days as $day) {
+                    $key = $day->format('Y-m-d');
+                    $n   = $byStationDay[$station->id][$key] ?? 0;
+                    $cells[] = round(($n / 24) * 100, 1);
+                }
+
+                if (! isset($groupsByCode[$code])) {
+                    $groupsByCode[$code] = [
+                        'source'          => $code,
+                        'label'           => $this->stationNetworkLabel($code),
+                        'stations_count'  => 0,
+                        'hours_received'  => array_fill(0, count($days), 0),
+                        'stations'        => [],
+                    ];
+                }
+
+                $groupsByCode[$code]['stations_count']++;
+                foreach ($days as $i => $day) {
+                    $key = $day->format('Y-m-d');
+                    $groupsByCode[$code]['hours_received'][$i] += $byStationDay[$station->id][$key] ?? 0;
+                }
+                $groupsByCode[$code]['stations'][] = [
+                    'station'         => $this->lightStation($station),
+                    'cells'           => $cells,
+                    'last_reading_at' => $lastByStation[$station->id] ?? null,
+                ];
+            }
+
+            $groups = [];
+            foreach ($groupsByCode as $g) {
+                $expectedPerDay = 24 * $g['stations_count'];
+                $aggCells       = [];
+                foreach ($g['hours_received'] as $hours) {
+                    $aggCells[] = $expectedPerDay > 0
+                        ? round(($hours / $expectedPerDay) * 100, 1)
+                        : null;
+                }
+                $groups[] = [
+                    'source'          => $g['source'],
+                    'label'           => $g['label'],
+                    'stations_count'  => $g['stations_count'],
+                    'aggregate_cells' => $aggCells,
+                    'stations'        => $g['stations'],
+                ];
+            }
+
+            usort($groups, fn ($a, $b) => strcmp($a['label'], $b['label']));
+
+            $payload['groups'] = $groups;
+            return $payload;
+        }, fn (array $payload) => $this->inflateStationReadingsPayload($payload), default: [
+            'days' => [], 'groups' => [],
+        ]);
+    }
+
+    /**
      * Snapshot léger d'un modèle météo — limité aux champs utiles à la
      * vue. Évite de stocker un Eloquent complet dans le cache Redis
      * (risque de désérialisation foireuse si le schéma évolue ou si la
@@ -732,5 +928,51 @@ class DataCoverage
         }
 
         return $payload;
+    }
+
+    private function inflateStationReadingsPayload(array $payload): array
+    {
+        $payload = $this->inflateDayPayload($payload);
+
+        if (isset($payload['groups']) && is_array($payload['groups'])) {
+            foreach ($payload['groups'] as &$group) {
+                if (! isset($group['stations']) || ! is_array($group['stations'])) {
+                    continue;
+                }
+                foreach ($group['stations'] as &$s) {
+                    if (isset($s['last_reading_at']) && is_string($s['last_reading_at'])) {
+                        try {
+                            $s['last_reading_at'] = Carbon::parse($s['last_reading_at']);
+                        } catch (\Throwable) {
+                            $s['last_reading_at'] = null;
+                        }
+                    }
+                }
+                unset($s);
+            }
+            unset($group);
+        }
+
+        return $payload;
+    }
+
+    private function lightStation(WeatherStation $s): \stdClass
+    {
+        return (object) [
+            'id'      => (int) $s->id,
+            'name'    => (string) ($s->name ?? ('#' . $s->id)),
+            'network' => (string) ($s->network ?? ''),
+        ];
+    }
+
+    private function stationNetworkLabel(string $code): string
+    {
+        return match (strtolower($code)) {
+            'mf'         => 'Météo-France',
+            'metar'      => 'METAR',
+            'infoclimat' => 'Infoclimat',
+            'inconnu'    => 'Réseau inconnu',
+            default      => ucfirst($code),
+        };
     }
 }

@@ -12,6 +12,7 @@ use App\Jobs\FetchMetarStationReadingsJob;
 use App\Jobs\FetchMfStationReadingsJob;
 use App\Jobs\FetchPiouPiouReadingsJob;
 use App\Jobs\FetchWindyReadingsJob;
+use App\Jobs\FetchStationForecastsJob;
 use App\Jobs\PurgeOldForecastsJob;
 use App\Jobs\PurgePageViewsJob;
 
@@ -83,6 +84,15 @@ Schedule::job(FetchWindyReadingsJob::class)
 Schedule::job(FetchBaliseForecastsJob::class)
     ->hourly()
     ->name('fetch-balise-forecasts')
+    ->withoutOverlapping();
+
+// Archivage horaire des prévisions Open-Meteo aux coords des stations météo
+//   - Payload étendu (vent, temp, humidité, précip, pression, nuages)
+//   - Même batch multi-coordonnées que les balises
+//   - Décalé à :15 pour ne pas chevaucher le fetch balises
+Schedule::job(FetchStationForecastsJob::class)
+    ->hourlyAt(15)
+    ->name('fetch-station-forecasts')
     ->withoutOverlapping();
 
 // Agrégation horaire des lectures balises (dir / vit. moy / rafale / temp)

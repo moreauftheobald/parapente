@@ -284,7 +284,7 @@ class SectionSettingsController extends Controller
             ->with('status', 'Paramètres des sites enregistrés.');
     }
 
-    public function weatherStations(Request $request, Settings $settings): View
+    public function weatherStations(Request $request, Settings $settings, DataCoverage $coverage): View
     {
         $tab  = $this->resolveTab($request);
 
@@ -310,6 +310,9 @@ class SectionSettingsController extends Controller
                 'metar'      => \App\Models\WeatherStation::where('network', 'metar')->count(),
                 'infoclimat' => \App\Models\WeatherStation::where('network', 'infoclimat')->count(),
             ];
+            $data['stationForecasts'] = $coverage->stationForecastCoverage();
+            $data['stationReadings']  = $coverage->stationReadingsCoverage();
+            $data['today']            = CarbonImmutable::now()->startOfDay();
         }
 
         return view('admin.weather-stations.settings', $data);

@@ -88,6 +88,13 @@ class PurgeOldForecastsJob implements ShouldQueue
                 ->delete();
         }
 
+        $deletedArchiveStations = 0;
+        if (DB::getSchemaBuilder()->hasTable('forecast_archive_stations')) {
+            $deletedArchiveStations = DB::table('forecast_archive_stations')
+                ->where('target_at', '<', $archiveCutoff)
+                ->delete();
+        }
+
         $deletedHourly = 0;
         if (DB::getSchemaBuilder()->hasTable('balise_readings_hourly')) {
             $deletedHourly = DB::table('balise_readings_hourly')
@@ -106,6 +113,7 @@ class PurgeOldForecastsJob implements ShouldQueue
             'forecasts_deleted'         => $deletedForecasts,
             'site_scores_deleted'       => $deletedScores,
             'archive_balises_deleted'   => $deletedArchive,
+            'archive_stations_deleted'  => $deletedArchiveStations,
             'balise_hourly_deleted'     => $deletedHourly,
             'fetch_log_deleted'         => $deletedFetchLog,
             'forecast_cutoff'           => $forecastCutoff->toDateTimeString(),
