@@ -118,6 +118,11 @@ class SectionSettingsController extends Controller
             $data['sidecarConfigEndpoint'] = route('admin.meteo.sidecar.active-config', [], false);
         }
 
+        if ($tab === 'logs') {
+            $data['runsRecentEndpoint'] = route('admin.meteo.sidecar.runs-recent', [], false);
+            $data['runsStatsEndpoint']  = route('admin.meteo.sidecar.runs-stats', [], false);
+        }
+
         return view('admin.meteo.settings', $data);
     }
 
@@ -509,6 +514,24 @@ class SectionSettingsController extends Controller
     public function sidecarModelsVariables(): \Illuminate\Http\JsonResponse
     {
         return $this->proxySidecar('/models/variables');
+    }
+
+    /**
+     * Proxy GET — /v1/runs/recent?limit=N.
+     */
+    public function sidecarRunsRecent(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $limit = min((int) $request->query('limit', 10), 50);
+        return $this->proxySidecar("/runs/recent?limit={$limit}");
+    }
+
+    /**
+     * Proxy GET — /v1/runs/stats?window=N.
+     */
+    public function sidecarRunsStats(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $window = min((int) $request->query('window', 20), 100);
+        return $this->proxySidecar("/runs/stats?window={$window}");
     }
 
     private function proxySidecar(string $path): \Illuminate\Http\JsonResponse

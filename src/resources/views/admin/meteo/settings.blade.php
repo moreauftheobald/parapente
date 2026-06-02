@@ -31,7 +31,7 @@
         @include('admin.meteo._tab-sidecar')
 
     @elseif ($tab === 'logs')
-        <x-admin.empty-state icon="fa-solid fa-scroll" message="Logs et monitoring météo — à venir." />
+        @include('admin.meteo._tab-logs')
     @endif
 </div>
 @endsection

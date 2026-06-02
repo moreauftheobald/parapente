@@ -127,6 +127,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/meteo/sidecar/active-config',      [AdminSectionSettingsController::class, 'sidecarActiveConfig'])->name('meteo.sidecar.active-config');
         Route::get('/meteo/sidecar/dependency-graph',   [AdminSectionSettingsController::class, 'sidecarDependencyGraph'])->name('meteo.sidecar.dependency-graph');
         Route::get('/meteo/sidecar/models-variables',   [AdminSectionSettingsController::class, 'sidecarModelsVariables'])->name('meteo.sidecar.models-variables');
+        Route::get('/meteo/sidecar/runs-recent',      [AdminSectionSettingsController::class, 'sidecarRunsRecent'])->name('meteo.sidecar.runs-recent');
+        Route::get('/meteo/sidecar/runs-stats',        [AdminSectionSettingsController::class, 'sidecarRunsStats'])->name('meteo.sidecar.runs-stats');
         Route::get('/sites/settings',    [AdminSectionSettingsController::class, 'sites'])->name('sites.settings');
         Route::patch('/sites/settings/general', [AdminSectionSettingsController::class, 'updateSiteSettings'])->name('sites.settings.general');
         Route::get('/balises/settings',  [AdminSectionSettingsController::class, 'balises'])->name('balises.settings');
