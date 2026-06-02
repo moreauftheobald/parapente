@@ -55,6 +55,7 @@
             @include('map._partials.scripts.tooltip')
             @include('map._partials.scripts.balise-icon')
             @include('map._partials.scripts.balise-chart')
+            @include('map._partials.scripts.station-icon')
             @include('map._partials.scripts.app')
         </script>
     @endpush

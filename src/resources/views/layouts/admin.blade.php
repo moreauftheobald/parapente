@@ -76,6 +76,18 @@
                     <i class="fa-solid fa-gear w-4 text-center"></i> Paramètres
                 </a>
 
+                {{-- ── Stations météo ─────────────────────────── --}}
+                <div class="{{ $sectionLabel }}">Stations météo</div>
+                <a href="{{ route('admin.weather-stations.index') }}" class="{{ $adminLink($adminSegment === 'weather-stations' && request()->segment(3) !== 'settings') }}">
+                    <i class="fa-solid fa-tower-broadcast w-4 text-center" style="color:#3b82f6"></i> Stations
+                </a>
+                <a href="{{ route('admin.station-apis.index') }}" class="{{ $adminLink($adminSegment === 'station-apis') }}">
+                    <i class="fa-solid fa-plug w-4 text-center" style="color:#3b82f6"></i> APIs stations
+                </a>
+                <a href="{{ route('admin.weather-stations.settings') }}" class="{{ $adminSubLink($adminSegment === 'weather-stations' && request()->segment(3) === 'settings') }}">
+                    <i class="fa-solid fa-gear w-4 text-center"></i> Paramètres
+                </a>
+
                 {{-- ── Système ──────────────────────────────────── --}}
                 <div class="{{ $sectionLabel }}">Système</div>
                 <a href="{{ route('admin.users.index') }}" class="{{ $adminLink($adminSegment === 'users') }}">

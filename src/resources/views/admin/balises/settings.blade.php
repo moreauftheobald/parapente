@@ -40,7 +40,6 @@
         <div class="space-y-6 mb-8">
             @foreach ([
                 ['source' => 'pioupiou', 'title' => 'Découverte — PiouPiou',              'icon' => 'fa-solid fa-tower-broadcast', 'count' => $balisesPiou,  'desc' => 'Stations PiouPiou actives (dernières 24 h).'],
-                ['source' => 'metar',    'title' => 'Découverte — METAR (NOAA)',           'icon' => 'fa-solid fa-plane',           'count' => $balisesMetar, 'desc' => 'Stations aéroportuaires (observations METAR).'],
                 ['source' => 'windy',    'title' => 'Découverte — Windy.com (Open Data)',  'icon' => 'fa-solid fa-wind',            'count' => $balisesWindy, 'desc' => 'Stations Windy publiées sous licence ouverte.'],
             ] as $src)
                 <x-admin.section :title="$src['title']" :icon="$src['icon']" color="sky">

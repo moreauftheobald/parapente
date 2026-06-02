@@ -7,7 +7,6 @@ namespace App\Services;
 use App\Models\Balise;
 use App\Models\Site;
 use App\Services\Balises\BaliseProviderInterface;
-use App\Services\Balises\MetarProvider;
 use App\Services\Balises\PiouPiouProvider;
 use App\Services\Balises\WindyOpenDataProvider;
 use Illuminate\Support\Facades\Http;
@@ -17,7 +16,7 @@ use Illuminate\Support\Facades\Log;
  * Déploiement géographique : à partir d'une ville et d'un rayon en km,
  * active tous les sites de la base situés dans la zone, puis découvre
  * (via les providers) et active toutes les balises de chaque réseau
- * (pioupiou, metar) dans la même zone.
+ * (pioupiou, windy) dans la même zone.
  *
  * Règles :
  *  - Les sites/balises hors zone ne sont jamais désactivés (cumulatif).
@@ -36,7 +35,6 @@ class GeoDeploymentService
 
     public function __construct(
         private readonly PiouPiouProvider $piouPiou,
-        private readonly MetarProvider $metar,
         private readonly WindyOpenDataProvider $windy,
     ) {}
 
@@ -274,7 +272,6 @@ class GeoDeploymentService
     {
         return [
             $this->piouPiou->source() => $this->piouPiou,
-            $this->metar->source()    => $this->metar,
             $this->windy->source()    => $this->windy,
         ];
     }

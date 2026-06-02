@@ -1,7 +1,9 @@
 @extends('layouts.admin')
-@section('title', 'Balises')
+@section('title', 'Stations météo')
 
 @php
+    use App\Models\WeatherStation;
+
     $sortLink = function (string $field, string $label) use ($sort, $dir) {
         $newDir = ($sort === $field && $dir === 'asc') ? 'desc' : 'asc';
         $arrow  = $sort === $field ? ($dir === 'asc' ? '↑' : '↓') : '';
@@ -15,27 +17,36 @@
     $inputCls  = 'w-full mt-1 px-2 py-1 text-xs bg-gray-950 border border-gray-700 rounded text-gray-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/40';
     $selectCls = $inputCls . ' cursor-pointer';
 
-    /** Couleur du badge selon l'âge en minutes */
-    $ageBadge = function (?\Carbon\Carbon $readAt): array {
-        if (! $readAt) return ['—', 'bg-gray-800 text-gray-500 border-gray-700'];
-        $min = abs(now()->diffInMinutes($readAt));
-        if ($min < 30)  return [round($min) . " min",  'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'];
-        if ($min < 120) return [round($min) . " min",  'bg-amber-500/15 text-amber-300 border-amber-500/30'];
+    $ageBadge = function (?\Carbon\Carbon $obsAt): array {
+        if (! $obsAt) return ['—', 'bg-gray-800 text-gray-500 border-gray-700'];
+        $min = abs(now()->diffInMinutes($obsAt));
+        if ($min < 90)   return [round($min) . " min",    'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'];
+        if ($min < 360)  return [round($min/60, 1) . " h", 'bg-amber-500/15 text-amber-300 border-amber-500/30'];
         if ($min < 1440) return [round($min/60, 1) . " h", 'bg-red-500/15 text-red-300 border-red-500/30'];
-        return [round($min/1440) . " j",  'bg-gray-700 text-gray-400 border-gray-700'];
+        return [round($min/1440) . " j", 'bg-gray-700 text-gray-400 border-gray-700'];
+    };
+
+    $networkBadge = function (string $network): string {
+        $meta = WeatherStation::NETWORKS[$network] ?? null;
+        $label = $meta['label'] ?? $network;
+        $color = $meta['color'] ?? '#6b7280';
+        return sprintf(
+            '<span class="inline-flex items-center gap-1.5 px-2 py-0.5 text-xs rounded border border-gray-700" style="color:%s;border-color:%s40;background:%s15"><i class="fa-solid fa-tower-broadcast text-[10px]"></i> %s</span>',
+            $color, $color, $color, e($label)
+        );
     };
 @endphp
 
 @section('content')
 <div class="max-w-7xl">
-    <x-admin.page-title title="Balises météo">
+    <x-admin.page-title title="Stations météo">
         <x-slot:subtitle>
-            {{ number_format($totalCount, 0, ',', ' ') }} balise{{ $totalCount > 1 ? 's' : '' }} en base
-            · {{ number_format($balises->total(), 0, ',', ' ') }} après filtre
+            {{ number_format($totalCount, 0, ',', ' ') }} station{{ $totalCount > 1 ? 's' : '' }} en base
+            · {{ number_format($stations->total(), 0, ',', ' ') }} après filtre
         </x-slot:subtitle>
         <x-slot:actions>
             @if (request()->query())
-                <a href="{{ route('admin.balises.index') }}" class="text-xs text-gray-400 hover:text-white transition" title="Réinitialiser les filtres">
+                <a href="{{ route('admin.weather-stations.index') }}" class="text-xs text-gray-400 hover:text-white transition" title="Réinitialiser les filtres">
                     <i class="fa-solid fa-rotate-left"></i> Réinitialiser
                 </a>
             @endif
@@ -52,17 +63,19 @@
             <thead class="bg-gray-950 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-800">
                 <tr>
                     <th class="px-4 py-3 text-left align-top">
-                        {!! $sortLink('name', 'Balise') !!}
+                        {!! $sortLink('name', 'Station') !!}
                         <input form="filters-form" name="search" type="search"
-                               value="{{ request('search') }}" placeholder="Nom ou external_id…"
+                               value="{{ request('search') }}" placeholder="Nom ou code…"
                                class="{{ $inputCls }}">
                     </th>
-                    <th class="px-4 py-3 text-left align-top w-36">
-                        {!! $sortLink('source', 'Source') !!}
-                        <select form="filters-form" name="source" class="{{ $selectCls }}" onchange="this.form.submit()">
-                            <option value="">— toutes —</option>
-                            @foreach ($sources as $s)
-                                <option value="{{ $s }}" @selected(request('source') === $s)>{{ $s }}</option>
+                    <th class="px-4 py-3 text-left align-top w-40">
+                        {!! $sortLink('network', 'Réseau') !!}
+                        <select form="filters-form" name="network" class="{{ $selectCls }}" onchange="this.form.submit()">
+                            <option value="">— tous —</option>
+                            @foreach ($networks as $n)
+                                <option value="{{ $n }}" @selected(request('network') === $n)>
+                                    {{ WeatherStation::NETWORKS[$n]['label'] ?? $n }}
+                                </option>
                             @endforeach
                         </select>
                     </th>
@@ -76,15 +89,6 @@
                         </select>
                     </th>
                     <th class="px-4 py-3 text-left align-top w-40">
-                        {!! $sortLink('admin_region', 'Région') !!}
-                        <select form="filters-form" name="admin_region" class="{{ $selectCls }}" onchange="this.form.submit()">
-                            <option value="">— toutes —</option>
-                            @foreach ($adminRegions as $ar)
-                                <option value="{{ $ar }}" @selected(request('admin_region') === $ar)>{{ $ar }}</option>
-                            @endforeach
-                        </select>
-                    </th>
-                    <th class="px-4 py-3 text-left align-top w-40">
                         {!! $sortLink('department', 'Département') !!}
                         <select form="filters-form" name="department" class="{{ $selectCls }}" onchange="this.form.submit()">
                             <option value="">— tous —</option>
@@ -93,8 +97,8 @@
                             @endforeach
                         </select>
                     </th>
-                    <th class="px-4 py-3 text-left align-top w-44 text-gray-300">Dernière lecture</th>
-                    <th class="px-4 py-3 text-left align-top w-40 text-gray-300">Vent / Temp.</th>
+                    <th class="px-4 py-3 text-left align-top w-44 text-gray-300">Dernière obs.</th>
+                    <th class="px-4 py-3 text-left align-top w-48 text-gray-300">Vent / Temp. / Pression</th>
                     <th class="px-4 py-3 text-center align-top w-32">
                         {!! $sortLink('active', 'Statut') !!}
                         <select form="filters-form" name="active" class="{{ $selectCls }}" onchange="this.form.submit()">
@@ -107,44 +111,34 @@
                 </tr>
             </thead>
             <tbody class="divide-y divide-gray-800">
-                @forelse ($balises as $balise)
+                @forelse ($stations as $station)
                     @php
-                        $latest = $balise->latestReading;
-                        [$ageLabel, $ageCls] = $ageBadge($latest?->read_at);
+                        $obs = $station->latestObservation;
+                        [$ageLabel, $ageCls] = $ageBadge($obs?->observed_at);
                     @endphp
                     <tr class="hover:bg-gray-800/50">
                         <td class="px-4 py-3">
-                            <div class="text-gray-100 font-medium">{{ $balise->name }}</div>
+                            <div class="text-gray-100 font-medium">{{ $station->name ?: '(sans nom)' }}</div>
                             <div class="text-xs text-gray-500 font-mono">
-                                #{{ $balise->external_id }}
-                                · {{ number_format((float) $balise->latitude, 4) }}, {{ number_format((float) $balise->longitude, 4) }}
-                                @if ($balise->altitude_m)
-                                    · {{ $balise->altitude_m }}m
+                                #{{ $station->external_id }}
+                                · {{ number_format((float) $station->latitude, 4) }}, {{ number_format((float) $station->longitude, 4) }}
+                                @if ($station->altitude_m)
+                                    · {{ $station->altitude_m }}m
                                 @endif
                             </div>
                         </td>
-                        <td class="px-4 py-3">
-                            <span class="px-2 py-0.5 text-xs rounded
-                                @class([
-                                    'bg-sky-500/15 text-sky-300 border border-sky-500/30'         => $balise->source === 'pioupiou',
-                                    'bg-amber-500/15 text-amber-300 border border-amber-500/30'   => $balise->source === 'holfuy',
-                                    'bg-gray-800 text-gray-300 border border-gray-700'            => ! in_array($balise->source, ['pioupiou','holfuy']),
-                                ])">
-                                {{ $balise->source }}
-                            </span>
-                        </td>
+                        <td class="px-4 py-3">{!! $networkBadge($station->network) !!}</td>
                         <td class="px-4 py-3 text-gray-400">
-                            @if ($balise->country_code)
-                                <span class="font-mono text-xs px-1.5 py-0.5 rounded bg-gray-800 text-gray-300">{{ $balise->country_code }}</span>
+                            @if ($station->country_code)
+                                <span class="font-mono text-xs px-1.5 py-0.5 rounded bg-gray-800 text-gray-300">{{ $station->country_code }}</span>
                             @else
                                 <span class="text-gray-600">—</span>
                             @endif
                         </td>
-                        <td class="px-4 py-3 text-gray-400 truncate" title="{{ $balise->admin_region }}">{{ $balise->admin_region ?? '—' }}</td>
-                        <td class="px-4 py-3 text-gray-400 truncate" title="{{ $balise->department }}">{{ $balise->department ?? '—' }}</td>
+                        <td class="px-4 py-3 text-gray-400 truncate" title="{{ $station->department }}">{{ $station->department ?? '—' }}</td>
                         <td class="px-4 py-3">
-                            @if ($latest)
-                                <div class="text-xs text-gray-400 font-mono">{{ $latest->read_at->format('d/m H:i') }}</div>
+                            @if ($obs)
+                                <div class="text-xs text-gray-400 font-mono">{{ $obs->observed_at->format('d/m H:i') }}</div>
                                 <span class="inline-block mt-1 px-1.5 py-0.5 text-[10px] rounded border {{ $ageCls }}">
                                     il y a {{ $ageLabel }}
                                 </span>
@@ -153,26 +147,36 @@
                             @endif
                         </td>
                         <td class="px-4 py-3 text-xs font-mono text-gray-400">
-                            @if ($latest && $latest->wind_speed_avg !== null)
-                                <div>
-                                    <i class="fa-solid fa-wind text-emerald-400"></i>
-                                    {{ number_format((float) $latest->wind_speed_avg, 1) }} km/h
-                                    @if ($latest->wind_direction !== null)
-                                        @ {{ $latest->wind_direction }}°
-                                    @endif
-                                </div>
-                                @if ($latest->temperature !== null)
-                                    <div class="text-gray-500 mt-0.5">
-                                        <i class="fa-solid fa-temperature-half"></i>
-                                        {{ number_format((float) $latest->temperature, 1) }}°C
+                            @if ($obs && ($obs->wind_speed_avg !== null || $obs->temperature !== null))
+                                @if ($obs->wind_speed_avg !== null)
+                                    <div>
+                                        <i class="fa-solid fa-wind text-emerald-400"></i>
+                                        {{ number_format((float) $obs->wind_speed_avg, 1) }} km/h
+                                        @if ($obs->wind_direction !== null)
+                                            @ {{ $obs->wind_direction }}°
+                                        @endif
                                     </div>
                                 @endif
+                                <div class="flex items-center gap-3 mt-0.5">
+                                    @if ($obs->temperature !== null)
+                                        <span class="text-gray-500">
+                                            <i class="fa-solid fa-temperature-half"></i>
+                                            {{ number_format((float) $obs->temperature, 1) }}°C
+                                        </span>
+                                    @endif
+                                    @if ($obs->pressure_hpa !== null)
+                                        <span class="text-gray-500">
+                                            <i class="fa-solid fa-gauge"></i>
+                                            {{ number_format((float) $obs->pressure_hpa, 0) }} hPa
+                                        </span>
+                                    @endif
+                                </div>
                             @else
                                 <span class="text-gray-600">—</span>
                             @endif
                         </td>
                         <td class="px-4 py-3 text-center">
-                            @if ($balise->active)
+                            @if ($station->active)
                                 <i class="fa-solid fa-circle-check text-emerald-400 text-xl" title="Active"></i>
                             @else
                                 <i class="fa-solid fa-circle-xmark text-red-400 text-xl" title="Inactive"></i>
@@ -180,20 +184,20 @@
                         </td>
                         <td class="px-4 py-3 text-right whitespace-nowrap">
                             <div class="inline-flex items-center gap-1">
-                                <a href="{{ route('admin.balises.show', $balise) }}"
+                                <a href="{{ route('admin.weather-stations.show', $station) }}"
                                    class="w-8 h-8 inline-flex items-center justify-center rounded border border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white transition"
                                    title="Détail">
                                     <i class="fa-solid fa-eye text-xs"></i>
                                 </a>
-                                <form method="POST" action="{{ route('admin.balises.toggle', $balise) }}" class="inline">
+                                <form method="POST" action="{{ route('admin.weather-stations.toggle', $station) }}" class="inline">
                                     @csrf
                                     <button type="submit"
                                             class="w-8 h-8 inline-flex items-center justify-center rounded border transition
                                                 @class([
-                                                    'border-amber-500/40 text-amber-300 hover:bg-amber-500/10' => $balise->active,
-                                                    'border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10' => ! $balise->active,
+                                                    'border-amber-500/40 text-amber-300 hover:bg-amber-500/10' => $station->active,
+                                                    'border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10' => ! $station->active,
                                                 ])"
-                                            title="{{ $balise->active ? 'Désactiver' : 'Activer' }}">
+                                            title="{{ $station->active ? 'Désactiver' : 'Activer' }}">
                                         <i class="fa-solid fa-power-off text-xs"></i>
                                     </button>
                                 </form>
@@ -202,8 +206,8 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="9" class="px-0 py-0">
-                            <x-admin.empty-state icon="fa-solid fa-tower-broadcast" message="Aucune balise." class="border-0 rounded-none" />
+                        <td colspan="8" class="px-0 py-0">
+                            <x-admin.empty-state icon="fa-solid fa-tower-broadcast" message="Aucune station météo." class="border-0 rounded-none" />
                         </td>
                     </tr>
                 @endforelse
@@ -212,7 +216,16 @@
     </div>
 
     <div class="mt-4">
-        {{ $balises->links() }}
+        {{ $stations->links() }}
     </div>
+
+    <p class="text-xs text-gray-500 mt-4">
+        <i class="fa-solid fa-circle-info"></i>
+        Les stations sont auto-découvertes par les jobs de fetch horaires.
+        Quatre réseaux disponibles :
+        @foreach (WeatherStation::NETWORKS as $key => $meta)
+            <span style="color:{{ $meta['color'] }}"><i class="fa-solid fa-tower-broadcast"></i> {{ $meta['label'] }}</span>{{ ! $loop->last ? ',' : '.' }}
+        @endforeach
+    </p>
 </div>
 @endsection

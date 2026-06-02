@@ -49,6 +49,26 @@
                         </div>
 
                         <div class="lp-section">
+                            <div class="lp-title">Stations météo</div>
+                            <template x-for="net in STATION_NETWORKS" :key="net.key">
+                                <button class="lp-toggle"
+                                        :class="stationNetworksVisible[net.key] ? 'is-on' : ''"
+                                        @click="toggleStationNetwork(net.key)"
+                                        :title="(stationNetworksVisible[net.key] ? 'Masquer' : 'Afficher') + ' les stations ' + net.label">
+                                    <span class="lp-lbl">
+                                        <span style="display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:4px;vertical-align:middle;flex-shrink:0;" :style="{background:net.color}"></span>
+                                        <span x-text="net.label"></span>
+                                    </span>
+                                    <span class="lp-count mono" x-text="stationsCountByNetwork(net.key) || ''"></span>
+                                    <span class="lp-switch"></span>
+                                </button>
+                            </template>
+                            <div class="lp-note" x-show="!stationZoomOk()" style="color:#6b7280;font-size:11px;margin-top:4px;">
+                                Zoomez davantage pour afficher les stations.
+                            </div>
+                        </div>
+
+                        <div class="lp-section">
                             <div class="lp-title">Sites affichés</div>
                             <button class="lp-toggle" :class="showGreen ? 'is-on' : ''" @click="showGreen = !showGreen; renderMarkers()">
                                 <span class="dot dot-green"></span>
@@ -185,6 +205,25 @@
                                     <span>Balise hors service</span>
                                 </div>
                             </div>
+                        </div>
+
+                        <div class="lp-section">
+                            <div class="lp-title">Stations météo</div>
+                            <div class="lp-legend-icons">
+                                <div class="lp-li">
+                                    <span class="lp-icon-ex"><img src="/icons-cache/station/mf/fresh.svg" alt="" style="width:24px;height:24px;"></span>
+                                    <span>Météo-France</span>
+                                </div>
+                                <div class="lp-li">
+                                    <span class="lp-icon-ex"><img src="/icons-cache/station/metar/fresh.svg" alt="" style="width:24px;height:24px;"></span>
+                                    <span>METAR (aéroports)</span>
+                                </div>
+                                <div class="lp-li">
+                                    <span class="lp-icon-ex"><img src="/icons-cache/station/infoclimat/fresh.svg" alt="" style="width:24px;height:24px;"></span>
+                                    <span>Infoclimat (StatIC)</span>
+                                </div>
+                            </div>
+                            <div class="lp-note">Stations météo professionnelles. Données horaires (MF/METAR) ou toutes les 10 min (Infoclimat).</div>
                         </div>
 
                         <div class="lp-section">

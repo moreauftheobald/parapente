@@ -50,25 +50,45 @@ function mapApp(){return{
     // notamment pour les cellules split (2 valeurs à afficher).
     votingTip:{visible:false, x:0, y:0, lines:[]},
 
-    // Balises météo — un layerGroup et un toggle par réseau
+    // Balises météo — un MarkerClusterGroup par réseau
     // (les clés DOIVENT correspondre à `balises.source` côté API
-    //  : pioupiou / metar / windy)
+    //  : pioupiou / windy)
     BALISE_NETWORKS: [
         { key:'pioupiou', label:'PiouPiou', icon:'🪁' },
-        { key:'metar',    label:'METAR',    icon:'✈️' },
         { key:'windy',    label:'Windy',    icon:'🌬️' },
     ],
     balises:[],
-    networksVisible:{ pioupiou:true, metar:true, windy:true },
-    _balisesLayers:{},        // { source: L.layerGroup() }
-    _balisesMarkers:{},       // { baliseId: L.marker } (toutes sources confondues)
+    networksVisible:{ pioupiou:true, windy:true },
+    _balisesLayers:{},        // { source: L.markerClusterGroup() }
+    _balisesMarkers:{},       // { baliseId: L.marker }
     _balisesTimer:null,
-    _balisesAbort:null,       // AbortController du fetch /api/balises en cours (dédup polling)
+    _balisesAbort:null,
     // Volet droit (balise) : relevés + historique du jour
     baliseData:null, baliseLoading:false, _baliseObj:null,
 
+    // Stations météo (MF / METAR / Infoclimat) — MarkerClusterGroup par réseau
+    // Désactivées par défaut (perf) ; visibles uniquement à partir de zoom 9.
+    STATION_NETWORKS: [
+        { key:'mf',         label:'Météo-France', icon:'🏛️', color:'#3b82f6' },
+        { key:'metar',      label:'METAR',        icon:'✈️',  color:'#7c3aed' },
+        { key:'infoclimat', label:'Infoclimat',   icon:'🌡️', color:'#16a34a' },
+    ],
+    STATION_MIN_ZOOM: 9,
+    weatherStations:[],
+    stationNetworksVisible:{ mf:false, metar:false, infoclimat:false },
+    _stationsLayers:{},
+    _stationsMarkers:{},
+    _stationsTimer:null,
+    _stationsAbort:null,
+    _stationsMoveTimer:null,  // debounce pour rechargement bbox au pan/zoom
+
     // Configuration des graphes exposée pour le template
     CHART_CONFIGS,
+
+    // Cluster group dédié aux sites de vol (perf : chunkedLoading évite le freeze
+    // quand le nombre de sites augmente ; disableClusteringAtZoom=11 pour garder
+    // les markers individuels en zoom rapproché).
+    _sitesCluster: null,
 
     async init(){
         await this.$nextTick();
@@ -76,6 +96,24 @@ function mapApp(){return{
         await this.loadSites();
         await this.loadBalises();
         this._balisesTimer = setInterval(() => this.loadBalises(), 5 * 60 * 1000);
+        // Stations désactivées par défaut — le premier loadStations() est
+        // déclenché par toggleStationNetwork() quand l'utilisateur active un réseau.
+        this._stationsTimer = setInterval(() => {
+            if(this._anyStationNetworkOn()) this.loadStations();
+        }, 5 * 60 * 1000);
+
+        // Rechargement bbox des stations au pan/zoom (debounce 500ms).
+        // Gère aussi le seuil de zoom : retire/ajoute les layers
+        // quand on franchit STATION_MIN_ZOOM.
+        this.map.on('moveend', () => {
+            if(!this._anyStationNetworkOn()) return;
+            clearTimeout(this._stationsMoveTimer);
+            if(this.map.getZoom() < this.STATION_MIN_ZOOM){
+                this._removeAllStationLayers();
+                return;
+            }
+            this._stationsMoveTimer = setTimeout(() => this.loadStations(), 500);
+        });
 
         // Re-dimensionner Leaflet quand un volet s'ouvre ou se ferme + forcer
         // un repaint complet du document. Sur Chrome Android, on a observé
@@ -382,30 +420,46 @@ function mapApp(){return{
         this.renderMarkers();
     },
     renderMarkers(){
+        if(!this._sitesCluster){
+            this._sitesCluster = L.markerClusterGroup({
+                chunkedLoading:true,
+                disableClusteringAtZoom:11,
+                maxClusterRadius:45,
+                spiderfyOnMaxZoom:true,
+                showCoverageOnHover:false,
+                iconCreateFunction: function(cluster){
+                    const count = cluster.getChildCount();
+                    let cls = 'pg-cluster pg-cluster-sites';
+                    if(count >= 20) cls += ' pg-cluster-lg';
+                    else if(count >= 5) cls += ' pg-cluster-md';
+                    return L.divIcon({html:'<span>'+count+'</span>',className:cls,iconSize:[36,36]});
+                }
+            });
+            this.map.addLayer(this._sitesCluster);
+        }
         const day=this.days[this.selectedDayIdx]?.raw;
-        this.sites.forEach(site=>{
-            // Statut du jour = qualité de la journée (viabilité : continuité + créneaux midi)
-            const st=this.dayQuality[site.id]?.[day]?.status ?? 'unknown';
+        const toAdd = [];
+        const oldMarkers = this.markers;
+        this.markers = {};
 
-            // Filtres : statut météo + « Mes sites »
-            if(! this._siteVisible(site, st)){
-                if(this.markers[site.id]){this.map.removeLayer(this.markers[site.id]);delete this.markers[site.id];}
-                return;
-            }
+        this.sites.forEach(site=>{
+            const st=this.dayQuality[site.id]?.[day]?.status ?? 'unknown';
+            if(! this._siteVisible(site, st)) return;
 
             const icon=L.divIcon({className:'',html:siteIconHtml(site,st),iconSize:[40,40],iconAnchor:[20,20]});
-            if(this.markers[site.id]){
-                const was=this._markerEl(this.markers[site.id])?.classList.contains('selected');
-                this.markers[site.id].setIcon(icon);
-                if(was)setTimeout(()=>this._markerEl(this.markers[site.id])?.classList.add('selected'),10);
-            }else{
-                const mk=L.marker([site.lat,site.lng],{icon}).addTo(this.map).bindTooltip(site.name,{permanent:false,direction:'top',offset:[0,-22]});
-                mk.on('click',(e)=>{L.DomEvent.stopPropagation(e);this.clickSite(site,mk.getElement());});
-                this.markers[site.id]=mk;
-                if(this.selectedFeature?.type==='site'&&this.selectedFeature.id===site.id)
-                    setTimeout(()=>this._markerEl(mk)?.classList.add('selected'),10);
-            }
+            const mk=L.marker([site.lat,site.lng],{icon})
+                .bindTooltip(site.name,{permanent:false,direction:'top',offset:[0,-22]});
+            mk.on('click',(e)=>{L.DomEvent.stopPropagation(e);this.clickSite(site,mk.getElement());});
+            this.markers[site.id]=mk;
+            toAdd.push(mk);
         });
+
+        this._sitesCluster.clearLayers();
+        if(toAdd.length) this._sitesCluster.addLayers(toAdd);
+
+        if(this.selectedFeature?.type==='site' && this.markers[this.selectedFeature.id]){
+            setTimeout(()=>this._markerEl(this.markers[this.selectedFeature.id])?.classList.add('selected'),50);
+        }
     },
 
     // ── Clic sur un site → volet droit (onglet Synthèse par défaut) ──
@@ -765,10 +819,21 @@ function mapApp(){return{
         const known = this.BALISE_NETWORKS.map(n => n.key);
         return known.includes(b.source) ? b.source : 'pioupiou';
     },
-    /** layerGroup d'un réseau, créé à la volée si nécessaire. */
     _ensureNetworkLayer(key){
         if(!this._balisesLayers[key]){
-            this._balisesLayers[key] = L.layerGroup();
+            this._balisesLayers[key] = L.markerClusterGroup({
+                chunkedLoading:true,
+                disableClusteringAtZoom:13,
+                maxClusterRadius:50,
+                showCoverageOnHover:false,
+                iconCreateFunction: function(cluster){
+                    const count = cluster.getChildCount();
+                    let cls = 'pg-cluster pg-cluster-balises';
+                    if(count >= 20) cls += ' pg-cluster-lg';
+                    else if(count >= 5) cls += ' pg-cluster-md';
+                    return L.divIcon({html:'<span>'+count+'</span>',className:cls,iconSize:[32,32]});
+                }
+            });
             if(this.networksVisible[key]) this._balisesLayers[key].addTo(this.map);
         }
         return this._balisesLayers[key];
@@ -782,44 +847,25 @@ function mapApp(){return{
     },
     renderBalises(){
         if(!this.map) return;
-        const seen = new Set();
+        const byNet = {};
+        this._balisesMarkers = {};
+
         for(const b of this.balises){
-            seen.add(b.id);
-            const netKey  = this._baliseNetworkKey(b);
-            const layer   = this._ensureNetworkLayer(netKey);
-            const icon    = L.icon({iconUrl:baliseIconUrl(b.reading), iconSize:[40,40], iconAnchor:[20,20]});
-            const tooltip = baliseTooltipHtml(b);
-            const existing = this._balisesMarkers[b.id];
-            if(existing){
-                existing.setIcon(icon);
-                existing.setLatLng([b.lat,b.lng]);
-                existing.setTooltipContent(tooltip);
-                // Si la source d'une balise change (rare mais possible
-                // si on l'a rebadgée côté admin), on la déplace de layer
-                if(existing._netKey !== netKey){
-                    if(this._balisesLayers[existing._netKey]){
-                        this._balisesLayers[existing._netKey].removeLayer(existing);
-                    }
-                    layer.addLayer(existing);
-                    existing._netKey = netKey;
-                }
-            }else{
-                const m = L.marker([b.lat,b.lng],{icon})
-                    .bindTooltip(tooltip,{direction:'top',offset:[0,-22],opacity:.95});
-                m._netKey = netKey;
-                m.on('click',(e)=>{L.DomEvent.stopPropagation(e);this.clickBalise(b.id,m.getElement());});
-                m.addTo(layer);
-                this._balisesMarkers[b.id] = m;
-            }
+            const netKey = this._baliseNetworkKey(b);
+            const icon   = L.icon({iconUrl:baliseIconUrl(b.reading), iconSize:[40,40], iconAnchor:[20,20]});
+            const m = L.marker([b.lat,b.lng],{icon})
+                .bindTooltip(baliseTooltipHtml(b),{direction:'top',offset:[0,-22],opacity:.95});
+            m._netKey = netKey;
+            m.on('click',(e)=>{L.DomEvent.stopPropagation(e);this.clickBalise(b.id,m.getElement());});
+            this._balisesMarkers[b.id] = m;
+            if(!byNet[netKey]) byNet[netKey] = [];
+            byNet[netKey].push(m);
         }
-        for(const id of Object.keys(this._balisesMarkers)){
-            if(!seen.has(parseInt(id,10))){
-                const m = this._balisesMarkers[id];
-                if(m._netKey && this._balisesLayers[m._netKey]){
-                    this._balisesLayers[m._netKey].removeLayer(m);
-                }
-                delete this._balisesMarkers[id];
-            }
+
+        for(const net of this.BALISE_NETWORKS){
+            const layer = this._ensureNetworkLayer(net.key);
+            layer.clearLayers();
+            if(byNet[net.key]?.length) layer.addLayers(byNet[net.key]);
         }
     },
     /** Affiche / masque un réseau de balises sans toucher aux autres. */
@@ -874,5 +920,118 @@ function mapApp(){return{
     },
     get baliseReseauLabel(){
         return (this.baliseData?.balise?.source ?? this.selectedFeature?.source ?? '').toUpperCase();
+    },
+
+    // ── Stations météo ──────────────────────────────────────────
+    _anyStationNetworkOn(){
+        return Object.values(this.stationNetworksVisible).some(v => v);
+    },
+    _removeAllStationLayers(){
+        for(const key of Object.keys(this._stationsLayers)){
+            if(this.map.hasLayer(this._stationsLayers[key])){
+                this.map.removeLayer(this._stationsLayers[key]);
+            }
+        }
+    },
+    _addVisibleStationLayers(){
+        for(const key of Object.keys(this._stationsLayers)){
+            if(this.stationNetworksVisible[key] && !this.map.hasLayer(this._stationsLayers[key])){
+                this._stationsLayers[key].addTo(this.map);
+            }
+        }
+    },
+    stationZoomOk(){ return this.map && this.map.getZoom() >= this.STATION_MIN_ZOOM; },
+    async loadStations(){
+        if(!this._anyStationNetworkOn() || !this.stationZoomOk()){
+            this._removeAllStationLayers();
+            return;
+        }
+        if(this._stationsAbort) this._stationsAbort.abort();
+        this._stationsAbort=new AbortController();
+        try{
+            const b = this.map.getBounds();
+            const url = '/api/weather-stations?bbox=' + [
+                b.getSouth().toFixed(4),
+                b.getNorth().toFixed(4),
+                b.getWest().toFixed(4),
+                b.getEast().toFixed(4),
+            ].join(',');
+            const r=await fetch(url,{signal:this._stationsAbort.signal});
+            if(!r.ok) throw new Error('HTTP '+r.status);
+            this.weatherStations=await r.json();
+            this.renderStations();
+        }catch(e){
+            if(e.name!=='AbortError') console.warn('loadStations failed',e);
+        }
+    },
+    _stationNetworkKey(s){
+        const known = this.STATION_NETWORKS.map(n => n.key);
+        return known.includes(s.network) ? s.network : 'mf';
+    },
+    _ensureStationLayer(key){
+        if(!this._stationsLayers[key]){
+            this._stationsLayers[key] = L.markerClusterGroup({
+                chunkedLoading:true,
+                disableClusteringAtZoom:12,
+                maxClusterRadius:55,
+                showCoverageOnHover:false,
+                iconCreateFunction: function(cluster){
+                    const count = cluster.getChildCount();
+                    let cls = 'pg-cluster pg-cluster-stations';
+                    if(count >= 20) cls += ' pg-cluster-lg';
+                    else if(count >= 5) cls += ' pg-cluster-md';
+                    return L.divIcon({html:'<span>'+count+'</span>',className:cls,iconSize:[30,30]});
+                }
+            });
+            if(this.stationNetworksVisible[key]) this._stationsLayers[key].addTo(this.map);
+        }
+        return this._stationsLayers[key];
+    },
+    stationsCountByNetwork(key){
+        let n = 0;
+        for(const s of this.weatherStations){
+            if(this._stationNetworkKey(s) === key) n++;
+        }
+        return n;
+    },
+    renderStations(){
+        if(!this.map) return;
+        const byNet = {};
+        this._stationsMarkers = {};
+
+        for(const s of this.weatherStations){
+            const netKey = this._stationNetworkKey(s);
+            const fKey   = stationFreshnessKey(s.reading?.observed_at);
+            const icon   = L.icon({iconUrl:stationIconUrl(netKey, fKey),iconSize:[24,24],iconAnchor:[12,12]});
+            const m = L.marker([s.lat,s.lng],{icon})
+                .bindTooltip(stationTooltipHtml(s),{direction:'top',offset:[0,-14],opacity:.95});
+            m._netKey = netKey;
+            this._stationsMarkers[s.id] = m;
+            if(!byNet[netKey]) byNet[netKey] = [];
+            byNet[netKey].push(m);
+        }
+
+        for(const net of this.STATION_NETWORKS){
+            const layer = this._ensureStationLayer(net.key);
+            layer.clearLayers();
+            if(byNet[net.key]?.length) layer.addLayers(byNet[net.key]);
+        }
+    },
+    toggleStationNetwork(key){
+        if(!(key in this.stationNetworksVisible)) return;
+        this.stationNetworksVisible[key] = !this.stationNetworksVisible[key];
+        if(this.stationNetworksVisible[key]){
+            if(!this.stationZoomOk()) return;
+            if(!this.weatherStations.length){
+                this.loadStations();
+                return;
+            }
+            const layer = this._stationsLayers[key];
+            if(layer) layer.addTo(this.map);
+            else this.renderStations();
+        } else {
+            const layer = this._stationsLayers[key];
+            if(layer && this.map) this.map.removeLayer(layer);
+        }
     },
 };}

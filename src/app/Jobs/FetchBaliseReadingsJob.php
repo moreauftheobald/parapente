@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Base abstraite pour les jobs de polling des balises (PiouPiou, METAR,
+ * Base abstraite pour les jobs de polling des balises (PiouPiou,
  * Windy…).
  *
  * Chaque source partage la même logique :

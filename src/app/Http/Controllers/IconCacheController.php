@@ -22,6 +22,18 @@ class IconCacheController extends Controller
     private const SPOTAIR_SITE_URL = 'https://www.spotair.mobi/icones/spots/spot.svg.php';
     private const SPOTAIR_BALISE_URL = 'https://www.spotair.mobi/icones/balises/balise.svg.php';
 
+    private const STATION_NETWORK_COLORS = [
+        'mf'         => '#3b82f6',
+        'metar'      => '#7c3aed',
+        'infoclimat' => '#16a34a',
+    ];
+
+    private const STATION_FRESHNESS_BORDERS = [
+        'fresh' => null,
+        'stale' => '#6b7280',
+        'dead'  => '#4b5563',
+    ];
+
     public function site(int $p, int $t, int $n, int $o): Response
     {
         $params = ["p={$p}", "t={$t}"];
@@ -50,6 +62,50 @@ class IconCacheController extends Controller
         $relPath = "icons-cache/balise/{$d}/{$v}/{$t}/{$bg}/{$c}.svg";
 
         return $this->fetchAndSave($url, $relPath);
+    }
+
+    public function station(string $network, string $freshness): Response
+    {
+        if (! isset(self::STATION_NETWORK_COLORS[$network])) {
+            abort(404);
+        }
+        if (! array_key_exists($freshness, self::STATION_FRESHNESS_BORDERS)) {
+            abort(404);
+        }
+
+        $relPath = "icons-cache/station/{$network}/{$freshness}.svg";
+        $absPath = public_path($relPath);
+
+        if (is_file($absPath)) {
+            return response((string) file_get_contents($absPath), 200, $this->svgHeaders());
+        }
+
+        $svg = $this->buildStationSvg($network, $freshness);
+
+        $dir = dirname($absPath);
+        if (! is_dir($dir) && ! @mkdir($dir, 0755, true) && ! is_dir($dir)) {
+            abort(500, 'Impossible de créer le répertoire tampon');
+        }
+
+        $tmp = $absPath . '.' . bin2hex(random_bytes(4)) . '.tmp';
+        if (file_put_contents($tmp, $svg) === false) {
+            abort(500, 'Écriture tampon échouée');
+        }
+        @rename($tmp, $absPath);
+
+        return response($svg, 200, $this->svgHeaders());
+    }
+
+    private function buildStationSvg(string $network, string $freshness): string
+    {
+        $bg = self::STATION_NETWORK_COLORS[$network];
+        $border = self::STATION_FRESHNESS_BORDERS[$freshness] ?? $bg;
+
+        return '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">'
+            . '<circle cx="12" cy="12" r="10" fill="' . $bg . '" stroke="' . $border . '" stroke-width="2"/>'
+            . '<svg x="5" y="4.5" width="14" height="15" viewBox="0 0 576 544">'
+            . '<path fill="#fff" d="M80 192v16c0 8.8-7.2 16-16 16s-16-7.2-16-16v-16c0-53 43-96 96-96h48V48c0-26.5 21.5-48 48-48s48 21.5 48 48v48h48c53 0 96 43 96 96v16c0 8.8-7.2 16-16 16s-16-7.2-16-16v-16c0-35.3-28.7-64-64-64H192c-35.3 0-64 28.7-64 64zm176-144a16 16 0 1 0 32 0 16 16 0 1 0-32 0zm-16 208a32 32 0 1 1 32 32 32 32 0 0 1-32-32zm-96 176v80h224v-80l-64-64H208l-64 64zm-32 80c0 17.7 14.3 32 32 32h224c17.7 0 32-14.3 32-32v-92.4l-73.4-73.4c-6-6-14.1-9.4-22.6-9.4H240c-8.5 0-16.6 3.4-22.6 9.4L144 419.6V512z"/>'
+            . '</svg></svg>';
     }
 
     private function fetchAndSave(string $url, string $relPath): Response

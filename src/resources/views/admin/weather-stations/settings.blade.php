@@ -1,0 +1,161 @@
+@extends('layouts.admin')
+@section('title', 'Paramètres — Stations météo')
+
+@section('content')
+<div>
+    <x-admin.page-title title="Paramètres — Stations météo">
+        <x-slot:subtitle>Configuration des réseaux, clés API et monitoring des stations météo.</x-slot:subtitle>
+    </x-admin.page-title>
+
+    @include('admin._settings-tabs', ['tab' => $tab, 'baseRoute' => 'admin.weather-stations.settings'])
+
+    @if ($tab === 'general')
+        @include('admin.settings._groups-form', [
+            'settingsGroups' => $settingsGroups,
+            'saveAction'     => route('admin.weather-stations.settings.general'),
+        ])
+
+        <div class="mt-8 space-y-4">
+            <h2 class="text-xs uppercase tracking-wider text-gray-400">
+                <i class="fa-solid fa-circle-info text-sky-400"></i> Réseaux disponibles
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                @foreach ([
+                    ['key' => 'mf',         'label' => 'Météo-France',  'color' => '#3b82f6', 'icon' => 'fa-cloud-sun',          'auth' => 'OAuth2 (portail MF)',           'configured' => $mfKeyConfigured, 'desc' => 'Stations synoptiques et climatologiques + Nivose haute altitude. ~1800 stations en France métropolitaine. Observations horaires (vent, température, pression, humidité, précipitations).'],
+                    ['key' => 'metar',      'label' => 'METAR',         'color' => '#7c3aed', 'icon' => 'fa-plane',               'auth' => 'Aucune',                       'configured' => true,             'desc' => 'Observations aéronautiques (NOAA). ~115 aérodromes en France. Vent, température, pression, visibilité.'],
+                    ['key' => 'infoclimat', 'label' => 'Infoclimat',    'color' => '#16a34a', 'icon' => 'fa-temperature-half',    'auth' => 'API key (infoclimat.fr)',       'configured' => $icKeyConfigured, 'desc' => 'Réseau de stations amateurs. ~1000+ stations en France. Couverture rurale dense. Qualité variable (filtrage nécessaire).'],
+                ] as $net)
+                    <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                        <div class="flex items-center gap-3 mb-2">
+                            <i class="fa-solid {{ $net['icon'] }} w-5 text-center" style="color:{{ $net['color'] }}"></i>
+                            <span class="text-sm font-medium text-white">{{ $net['label'] }}</span>
+                            @if ($net['configured'])
+                                <span class="ml-auto px-2 py-0.5 text-[10px] rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+                                    <i class="fa-solid fa-circle-check"></i> Prêt
+                                </span>
+                            @else
+                                <span class="ml-auto px-2 py-0.5 text-[10px] rounded border border-amber-500/30 bg-amber-500/10 text-amber-300">
+                                    <i class="fa-solid fa-key"></i> Clé requise
+                                </span>
+                            @endif
+                        </div>
+                        <p class="text-xs text-gray-500 leading-relaxed">{{ $net['desc'] }}</p>
+                        <div class="mt-2 text-[11px] text-gray-600">
+                            <span class="text-gray-500">Auth :</span> {{ $net['auth'] }}
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+
+    @elseif ($tab === 'data')
+
+        @if (session('sync_output'))
+            <div class="mb-6 bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                <div class="px-4 py-2 text-xs uppercase tracking-wider text-gray-500 border-b border-gray-800">
+                    Résultat de la dernière opération
+                </div>
+                <pre class="px-4 py-3 text-xs text-gray-300 whitespace-pre-wrap font-mono leading-relaxed">{{ session('sync_output') }}</pre>
+            </div>
+        @endif
+
+        @if ($errors->any())
+            <x-admin.alert type="error">
+                <ul class="list-disc list-inside">
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </x-admin.alert>
+        @endif
+
+        <div class="space-y-6 mb-8">
+            @foreach ([
+                [
+                    'network' => 'mf',
+                    'title'   => 'Découverte — Météo-France',
+                    'icon'    => 'fa-solid fa-cloud-sun',
+                    'color'   => '#3b82f6',
+                    'desc'    => 'Stations synoptiques, climatologiques et Nivose. Découverte via /liste-stations (OAuth2 Bearer).',
+                    'auth'    => 'oauth2',
+                ],
+                [
+                    'network' => 'metar',
+                    'title'   => 'Découverte — METAR (NOAA)',
+                    'icon'    => 'fa-solid fa-plane',
+                    'color'   => '#7c3aed',
+                    'desc'    => 'Stations aéroportuaires via Aviation Weather Center. Aucune clé requise.',
+                    'auth'    => 'none',
+                ],
+                [
+                    'network' => 'infoclimat',
+                    'title'   => 'Découverte — Infoclimat (StatIC)',
+                    'icon'    => 'fa-solid fa-temperature-half',
+                    'color'   => '#16a34a',
+                    'desc'    => 'Stations amateurs du réseau StatIC. Filtre les stations actives < 6 mois. Aucune clé requise pour la découverte.',
+                    'auth'    => 'none',
+                ],
+            ] as $src)
+                @php
+                    $api = $stationApis->get($src['network']);
+                    $count = $stationCounts[$src['network']] ?? 0;
+                    $credentialsOk = match ($src['auth']) {
+                        'oauth2' => $stationApis->get($src['network'])?->hasOAuth2Credentials() ?? false,
+                        'api_key' => ! empty($api?->api_key),
+                        default => true,
+                    };
+                    $apiActive = $api?->active ?? false;
+                @endphp
+                <x-admin.section :title="$src['title']" icon="{{ $src['icon'] }}" color="sky">
+                    <div class="flex items-center gap-3 mb-3">
+                        <i class="fa-solid fa-tower-broadcast" style="color:{{ $src['color'] }}"></i>
+                        <span class="text-xs text-gray-500">
+                            {{ number_format($count, 0, ',', ' ') }} station{{ $count > 1 ? 's' : '' }} en base
+                        </span>
+                        @if ($apiActive)
+                            <span class="px-2 py-0.5 text-[10px] rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+                                <i class="fa-solid fa-circle-check"></i> API active
+                            </span>
+                        @else
+                            <span class="px-2 py-0.5 text-[10px] rounded border border-gray-600 bg-gray-800 text-gray-400">
+                                <i class="fa-solid fa-circle-xmark"></i> API inactive
+                            </span>
+                        @endif
+                    </div>
+
+                    @if (! $credentialsOk)
+                        <x-admin.alert type="warning">
+                            Credentials non configurés.
+                            <a href="{{ route('admin.station-apis.index') }}" class="underline hover:text-amber-200">Configurer dans APIs stations</a>.
+                        </x-admin.alert>
+                    @endif
+
+                    <form method="POST" action="{{ route('admin.sync.weather-stations') }}"
+                          onsubmit="this.querySelector('button[type=submit]').disabled=true; this.querySelector('button[type=submit]').innerHTML='<i class=&quot;fa-solid fa-spinner fa-spin&quot;></i> Découverte en cours…';">
+                        @csrf
+                        <input type="hidden" name="network" value="{{ $src['network'] }}">
+                        <div class="flex items-center gap-4 flex-wrap">
+                            <x-admin.input name="lat_min" label="Lat min" type="number" step="0.01"
+                                           :value="old('lat_min', $bbox['lat_min'])" wrapperClass="w-36" />
+                            <x-admin.input name="lat_max" label="Lat max" type="number" step="0.01"
+                                           :value="old('lat_max', $bbox['lat_max'])" wrapperClass="w-36" />
+                            <x-admin.input name="lng_min" label="Lng min" type="number" step="0.01"
+                                           :value="old('lng_min', $bbox['lng_min'])" wrapperClass="w-36" />
+                            <x-admin.input name="lng_max" label="Lng max" type="number" step="0.01"
+                                           :value="old('lng_max', $bbox['lng_max'])" wrapperClass="w-36" />
+                            <x-admin.button type="submit" variant="primary" icon="fa-solid fa-tower-broadcast"
+                                            class="self-center" :disabled="! $credentialsOk">
+                                Découvrir
+                            </x-admin.button>
+                        </div>
+                        <p class="text-xs text-gray-600 mt-2">{{ $src['desc'] }}</p>
+                    </form>
+                </x-admin.section>
+            @endforeach
+        </div>
+
+    @elseif ($tab === 'logs')
+        <x-admin.empty-state icon="fa-solid fa-scroll" message="Logs et monitoring des stations météo — à venir." />
+    @endif
+</div>
+@endsection

@@ -284,6 +284,46 @@ class SectionSettingsController extends Controller
             ->with('status', 'Paramètres des sites enregistrés.');
     }
 
+    public function weatherStations(Request $request, Settings $settings): View
+    {
+        $tab  = $this->resolveTab($request);
+
+        $stationApis = \App\Models\StationApi::all()->keyBy('code');
+        $data = [
+            'tab'              => $tab,
+            'mfKeyConfigured'  => $stationApis->get('mf')?->hasOAuth2Credentials() ?? false,
+            'icKeyConfigured'  => ! empty($stationApis->get('infoclimat')?->api_key),
+        ];
+
+        if ($tab === 'general') {
+            $data['settingsGroups'] = $this->loadSettingsGroups(
+                ['stations'],
+                $settings->all(),
+            );
+        }
+
+        if ($tab === 'data') {
+            $data['bbox'] = DataSyncController::DEFAULT_BBOX;
+            $data['stationApis'] = $stationApis;
+            $data['stationCounts'] = [
+                'mf'         => \App\Models\WeatherStation::where('network', 'mf')->count(),
+                'metar'      => \App\Models\WeatherStation::where('network', 'metar')->count(),
+                'infoclimat' => \App\Models\WeatherStation::where('network', 'infoclimat')->count(),
+            ];
+        }
+
+        return view('admin.weather-stations.settings', $data);
+    }
+
+    public function updateWeatherStationSettings(Request $request, Settings $settings): RedirectResponse
+    {
+        $this->saveSettingsGroups($request, $settings, ['stations']);
+
+        return redirect()
+            ->route('admin.weather-stations.settings', ['tab' => 'general'])
+            ->with('status', 'Paramètres des stations météo enregistrés.');
+    }
+
     public function balises(Request $request, Settings $settings, DataCoverage $coverage): View
     {
         $tab  = $this->resolveTab($request);
@@ -291,7 +331,6 @@ class SectionSettingsController extends Controller
             'tab'                => $tab,
             'bbox'               => DataSyncController::DEFAULT_BBOX,
             'balisesPiou'        => Balise::where('source', 'pioupiou')->count(),
-            'balisesMetar'       => Balise::where('source', 'metar')->count(),
             'balisesWindy'       => Balise::where('source', 'windy')->count(),
             'windyKeyConfigured' => trim((string) $settings->get('windy.api_key', '')) !== '',
         ];
@@ -348,6 +387,7 @@ class SectionSettingsController extends Controller
             'viability'   => ['title' => "Viabilité d'une journée",  'icon' => 'fa-chart-line'],
             'quality'     => ['title' => 'Qualité des données',       'icon' => 'fa-clipboard-check'],
             'balises'     => ['title' => 'Sources balises',           'icon' => 'fa-tower-broadcast'],
+            'stations'    => ['title' => 'Stations météo',              'icon' => 'fa-tower-broadcast'],
             'reliability' => ['title' => 'Fiabilité des modèles',     'icon' => 'fa-flask-vial'],
         ];
 

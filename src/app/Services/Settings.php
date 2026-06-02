@@ -171,6 +171,23 @@ class Settings
             'type'        => 'secret',
         ],
 
+        // ── Stations météo (configuration) ───────────────────────
+        // Les clés API vivent dans la table `station_apis` (page /admin/station-apis).
+        'stations.fetch_enabled' => [
+            'default'     => false,
+            'label'       => 'Fetch automatique actif',
+            'description' => "Active le fetch horaire automatique des observations depuis les 3 réseaux de stations météo (MF, METAR, Infoclimat). Kill switch global.",
+            'group'       => 'stations',
+            'type'        => 'bool',
+        ],
+        'stations.retention_days' => [
+            'default'     => 30,
+            'label'       => 'Rétention des observations (jours)',
+            'description' => "Durée de conservation des observations en base. Au-delà, les anciennes observations sont purgées quotidiennement.",
+            'group'       => 'stations',
+            'type'        => 'int',
+        ],
+
         // ── Fiabilité des modèles (phase 2 + 2.5) ────────────────
         // Cf. FF_model_reliability.md. Tous ces paramètres pilotent
         // soit le calcul de la fiabilité dynamique d'un modèle météo

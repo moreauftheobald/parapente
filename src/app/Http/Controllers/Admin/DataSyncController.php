@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Balise;
 use App\Models\Site;
+use App\Models\WeatherStation;
 use App\Services\GeoDeploymentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,7 +19,7 @@ use Illuminate\Support\Facades\Artisan;
  * Déclenche depuis l'interface les imports/découvertes habituellement
  * lancés en CLI :
  *   - sites:import          → sites de vol depuis ParaglidingEarth
- *   - balises:discover      → balises PiouPiou / METAR dans une bbox
+ *   - balises:discover      → balises PiouPiou / Windy dans une bbox
  *
  * Les opérations sont exécutées de façon synchrone (un appel HTTP vers
  * l'API externe + upserts). La sortie de la commande Artisan est
@@ -77,7 +78,7 @@ class DataSyncController extends Controller
     public function discoverBalises(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'source'  => ['required', 'in:pioupiou,metar,windy'],
+            'source'  => ['required', 'in:pioupiou,windy'],
             'lat_min' => ['required', 'numeric', 'between:-90,90'],
             'lat_max' => ['required', 'numeric', 'between:-90,90', 'gt:lat_min'],
             'lng_min' => ['required', 'numeric', 'between:-180,180'],
@@ -96,7 +97,6 @@ class DataSyncController extends Controller
 
         $label = match ($data['source']) {
             'pioupiou' => 'PiouPiou',
-            'metar'    => 'METAR',
             'windy'    => 'Windy',
             default    => $data['source'],
         };
@@ -108,8 +108,44 @@ class DataSyncController extends Controller
     }
 
     /**
+     * Découvre / met à jour les stations météo d'un réseau dans une bbox.
+     */
+    public function discoverWeatherStations(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'network' => ['required', 'in:mf,metar,infoclimat'],
+            'lat_min' => ['required', 'numeric', 'between:-90,90'],
+            'lat_max' => ['required', 'numeric', 'between:-90,90', 'gt:lat_min'],
+            'lng_min' => ['required', 'numeric', 'between:-180,180'],
+            'lng_max' => ['required', 'numeric', 'between:-180,180', 'gt:lng_min'],
+        ]);
+
+        @set_time_limit(300);
+
+        Artisan::call('weather-stations:discover', [
+            '--network' => $data['network'],
+            '--lat-min' => $data['lat_min'],
+            '--lat-max' => $data['lat_max'],
+            '--lng-min' => $data['lng_min'],
+            '--lng-max' => $data['lng_max'],
+        ]);
+
+        $label = match ($data['network']) {
+            'mf'         => 'Météo-France',
+            'metar'      => 'METAR',
+            'infoclimat' => 'Infoclimat',
+            default      => $data['network'],
+        };
+
+        return redirect()
+            ->route('admin.weather-stations.settings', ['tab' => 'data'])
+            ->with('status', 'Découverte des stations ' . $label . ' terminée.')
+            ->with('sync_output', trim(Artisan::output()));
+    }
+
+    /**
      * Déploiement géographique : géocode une ville, calcule un rayon et
-     * active sites + balises (pioupiou, metar) dans la zone.
+     * active sites + balises (pioupiou, windy) dans la zone.
      */
     public function deploy(Request $request, GeoDeploymentService $service): RedirectResponse
     {

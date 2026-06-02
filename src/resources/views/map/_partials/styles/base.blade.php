@@ -72,6 +72,23 @@ body { font-family:'DM Sans',sans-serif; }
 }
 @endverbatim
 
+/* Marqueurs des stations météo — pastille ronde avec fa-tower-broadcast */
+.pg-station-marker { width:24px; height:24px; border-radius:50%; display:grid; place-items:center; cursor:pointer; transition:transform .15s; box-shadow:0 1px 4px rgba(0,0,0,.5); }
+.pg-station-marker:hover { transform:scale(1.25); }
+
+/* MarkerCluster — override des styles par défaut (bleu/vert clair)
+   pour le thème sombre de la carte. Trois familles de clusters :
+   sites (vert ambré), balises (bleu-gris), stations (violet). */
+.pg-cluster { border-radius:50%; display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-weight:700; color:#fff; box-shadow:0 2px 8px rgba(0,0,0,.5); }
+.pg-cluster span { line-height:1; }
+.pg-cluster-sites  { background:rgba(251,191,36,.85); border:2px solid rgba(251,191,36,.5); font-size:12px; }
+.pg-cluster-balises { background:rgba(100,116,139,.85); border:2px solid rgba(100,116,139,.5); font-size:11px; }
+.pg-cluster-stations { background:rgba(139,92,246,.85); border:2px solid rgba(139,92,246,.5); font-size:11px; }
+.pg-cluster-md { transform:scale(1.15); }
+.pg-cluster-lg { transform:scale(1.3); }
+/* Hide default MarkerCluster styles that leak through */
+.marker-cluster-small, .marker-cluster-medium, .marker-cluster-large { display:none !important; }
+
 @keyframes spin { to { transform:rotate(360deg); } }
 
 ::-webkit-scrollbar { width:3px; }

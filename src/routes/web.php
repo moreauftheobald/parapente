@@ -21,6 +21,8 @@ use App\Http\Controllers\Admin\TrafficController as AdminTrafficController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Admin\WeatherApiController as AdminApiController;
 use App\Http\Controllers\Admin\WeatherModelController as AdminModelController;
+use App\Http\Controllers\Admin\StationApiController as AdminStationApiController;
+use App\Http\Controllers\Admin\WeatherStationController as AdminWeatherStationController;
 use App\Http\Controllers\Admin\WikiPageController as AdminWikiPageController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
@@ -72,6 +74,8 @@ Route::get('/icons-cache/site/{p}/{t}/{n}/{o}.svg', [IconCacheController::class,
     ->where(['p' => '[0-9]+', 't' => '[0-9]+', 'n' => '[0-9]+', 'o' => '[0-9]+']);
 Route::get('/icons-cache/balise/{d}/{v}/{t}/{bg}/{c}.svg', [IconCacheController::class, 'balise'])
     ->where(['d' => '[0-9]+', 'v' => '[0-9]+', 't' => '-?[0-9]+', 'bg' => '[wld]', 'c' => '[gbo]']);
+Route::get('/icons-cache/station/{network}/{freshness}.svg', [IconCacheController::class, 'station'])
+    ->where(['network' => 'mf|metar|infoclimat', 'freshness' => 'fresh|stale|dead']);
 
 // ───────────────────────────────────────────────────────────────
 // Auth front (compte « user »)
@@ -126,6 +130,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/sites/settings',    [AdminSectionSettingsController::class, 'sites'])->name('sites.settings');
         Route::patch('/sites/settings/general', [AdminSectionSettingsController::class, 'updateSiteSettings'])->name('sites.settings.general');
         Route::get('/balises/settings',  [AdminSectionSettingsController::class, 'balises'])->name('balises.settings');
+        Route::get('/weather-stations/settings',          [AdminSectionSettingsController::class, 'weatherStations'])->name('weather-stations.settings');
+        Route::patch('/weather-stations/settings/general', [AdminSectionSettingsController::class, 'updateWeatherStationSettings'])->name('weather-stations.settings.general');
         Route::patch('/balises/settings/general', [AdminSectionSettingsController::class, 'updateBaliseSettings'])->name('balises.settings.general');
         Route::patch('/meteo/settings/general',   [AdminSectionSettingsController::class, 'updateMeteoGeneralSettings'])->name('meteo.settings.general');
 
@@ -166,10 +172,24 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::patch('/apis/{api}',        [AdminApiController::class, 'update'])->name('apis.update');
         Route::post('/apis/{api}/toggle',  [AdminApiController::class, 'toggleActive'])->name('apis.toggle');
 
+        // ── Stations météo ───────────────────────────────────────────
+        Route::get('/weather-stations',                                      [AdminWeatherStationController::class, 'index'])->name('weather-stations.index');
+        Route::get('/weather-stations/{weatherStation}',                     [AdminWeatherStationController::class, 'show'])->name('weather-stations.show');
+        Route::post('/weather-stations/{weatherStation}/toggle',             [AdminWeatherStationController::class, 'toggleActive'])->name('weather-stations.toggle');
+        Route::post('/weather-stations/{weatherStation}/toggle-panel',       [AdminWeatherStationController::class, 'togglePanel'])->name('weather-stations.toggle-panel');
+        Route::delete('/weather-stations/{weatherStation}',                  [AdminWeatherStationController::class, 'destroy'])->name('weather-stations.destroy');
+
+        // ── APIs stations météo ──────────────────────────────────
+        Route::get('/station-apis',                   [AdminStationApiController::class, 'index'])->name('station-apis.index');
+        Route::get('/station-apis/{stationApi}/edit',  [AdminStationApiController::class, 'edit'])->name('station-apis.edit');
+        Route::patch('/station-apis/{stationApi}',     [AdminStationApiController::class, 'update'])->name('station-apis.update');
+        Route::post('/station-apis/{stationApi}/toggle', [AdminStationApiController::class, 'toggleActive'])->name('station-apis.toggle');
+
         // ── Synchronisation des données (actions POST, vues intégrées aux pages Paramètres) ──
-        Route::post('/sync/sites',   [AdminSyncController::class, 'importSites'])->name('sync.sites');
-        Route::post('/sync/balises', [AdminSyncController::class, 'discoverBalises'])->name('sync.balises');
-        Route::post('/sync/deploy',  [AdminSyncController::class, 'deploy'])->name('sync.deploy');
+        Route::post('/sync/sites',              [AdminSyncController::class, 'importSites'])->name('sync.sites');
+        Route::post('/sync/balises',            [AdminSyncController::class, 'discoverBalises'])->name('sync.balises');
+        Route::post('/sync/weather-stations',   [AdminSyncController::class, 'discoverWeatherStations'])->name('sync.weather-stations');
+        Route::post('/sync/deploy',             [AdminSyncController::class, 'deploy'])->name('sync.deploy');
 
         // ── Qualité des données (doublons sites / balises) ────────
         Route::get('/data-quality',                            [AdminDataQualityController::class, 'index'])->name('data-quality.index');

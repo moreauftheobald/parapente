@@ -7,7 +7,9 @@ use App\Jobs\ComputeBaliseConsensusCompareJob;
 use App\Jobs\ComputeModelReliabilityJob;
 use App\Jobs\FetchBaliseForecastsJob;
 use App\Jobs\FetchForecastsJob;
-use App\Jobs\FetchMetarReadingsJob;
+use App\Jobs\FetchInfoclimatStationReadingsJob;
+use App\Jobs\FetchMetarStationReadingsJob;
+use App\Jobs\FetchMfStationReadingsJob;
 use App\Jobs\FetchPiouPiouReadingsJob;
 use App\Jobs\FetchWindyReadingsJob;
 use App\Jobs\PurgeOldForecastsJob;
@@ -39,12 +41,29 @@ Schedule::job(FetchPiouPiouReadingsJob::class)
     ->name('fetch-pioupiou')
     ->withoutOverlapping();
 
-// Polling METAR (NOAA Aviation Weather) toutes les 30 minutes
-//   - Stations aéroportuaires officielles, fréquence native ~30 min
-//   - Mêmes mécaniques de dédup et désactivation que PiouPiou
-Schedule::job(FetchMetarReadingsJob::class)
+// Polling METAR (NOAA) via le système stations météo
+//   - Cible weather_stations / weather_station_observations
+//   - Observations enrichies (pression, visibilité, couverture nuageuse…)
+//   - Activé via /admin/station-apis (API METAR = active)
+Schedule::job(FetchMetarStationReadingsJob::class)
     ->everyThirtyMinutes()
-    ->name('fetch-metar')
+    ->name('fetch-metar-stations')
+    ->withoutOverlapping();
+
+// Polling Météo-France (observations horaires) toutes les heures
+//   - 1 appel HTTP → toutes les stations MF de France (/paquet/stations/horaire)
+//   - Activé via /admin/station-apis (API MF = active + credentials OAuth2)
+Schedule::job(FetchMfStationReadingsJob::class)
+    ->hourly()
+    ->name('fetch-mf-stations')
+    ->withoutOverlapping();
+
+// Polling Infoclimat (réseau StatIC) toutes les heures
+//   - N appels batch (50 stations/appel) → ~600+ stations amateurs
+//   - Activé via /admin/station-apis (API Infoclimat = active + API key)
+Schedule::job(FetchInfoclimatStationReadingsJob::class)
+    ->hourly()
+    ->name('fetch-infoclimat-stations')
     ->withoutOverlapping();
 
 // Polling Windy.com (Open Data v2) toutes les 30 minutes

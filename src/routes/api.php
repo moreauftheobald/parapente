@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\MeScoringController;
 use App\Http\Controllers\Api\SiteController;
 use App\Http\Controllers\Api\UserHiddenSiteController;
 use App\Http\Controllers\Api\UserScoringController;
+use App\Http\Controllers\Api\WeatherStationController;
 use Illuminate\Support\Facades\Route;
 
 // ── Map bundle (cache pré-calculé partagé) ───────────────────────
@@ -26,6 +27,8 @@ Route::prefix('balises')->group(function () {
     Route::get('/',             [BaliseController::class, 'index']);
     Route::get('/{id}/history', [BaliseController::class, 'history']);
 });
+
+Route::get('weather-stations', [WeatherStationController::class, 'index']);
 
 // ── Scorings perso de l'utilisateur authentifié ──────────────────
 // Routes sous `auth:web` car on partage le cookie de session du site

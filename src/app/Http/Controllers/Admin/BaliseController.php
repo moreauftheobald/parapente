@@ -13,10 +13,10 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * BackOffice — gestion des balises météo (PiouPiou, METAR, …).
+ * BackOffice — gestion des balises météo (PiouPiou, Windy, …).
  *
  * Les balises sont auto-découvertes et auto-mises-à-jour par les jobs
- * d'ingest (FetchPiouPiouReadingsJob, FetchMetarReadingsJob, …). On
+ * d'ingest (FetchPiouPiouReadingsJob, FetchWindyReadingsJob, …). On
  * n'expose donc PAS d'édition de coordonnées/nom (ces données viennent
  * des fournisseurs). Les seules actions admin sont :
  *   - Voir la liste / les dernières lectures

@@ -6,7 +6,6 @@ namespace App\Console\Commands;
 
 use App\Models\Balise;
 use App\Services\Balises\BaliseProviderInterface;
-use App\Services\Balises\MetarProvider;
 use App\Services\Balises\PiouPiouProvider;
 use App\Services\Balises\WindyOpenDataProvider;
 use Illuminate\Console\Command;
@@ -27,7 +26,7 @@ use Illuminate\Console\Command;
 class BalisesDiscover extends Command
 {
     protected $signature = 'balises:discover
-        {--source=pioupiou : Identifiant du fournisseur (pioupiou, metar, windy)}
+        {--source=pioupiou : Identifiant du fournisseur (pioupiou, windy)}
         {--lat-min=47.0 : Latitude minimum de la bbox}
         {--lat-max=50.5 : Latitude maximum de la bbox}
         {--lng-min=3.5  : Longitude minimum de la bbox}
@@ -45,7 +44,7 @@ class BalisesDiscover extends Command
 
         $provider = $this->resolveProvider($source);
         if (! $provider) {
-            $this->error("Source inconnue : '{$source}' (sources gérées : pioupiou, metar, windy)");
+            $this->error("Source inconnue : '{$source}' (sources gérées : pioupiou, windy)");
             return self::FAILURE;
         }
 
@@ -106,7 +105,6 @@ class BalisesDiscover extends Command
     {
         return match ($source) {
             'pioupiou' => app(PiouPiouProvider::class),
-            'metar'    => app(MetarProvider::class),
             'windy'    => app(WindyOpenDataProvider::class),
             default    => null,
         };
