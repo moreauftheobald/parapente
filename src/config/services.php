@@ -36,24 +36,15 @@ return [
     ],
 
     'consensus_grid' => [
-        // Sidecar V1 — calcul du consensus météo (grille pré-calculée
-        // toutes les heures, exposée en HTTP). Sert la carte météo
-        // et le fetch consensus. Voir la doc du conteneur
-        // `consensus-grid` du docker-compose.
-        // - dev local : http://localhost:8082
-        // - prod docker-compose : http://consensus-grid:8082
-        'base_url' => env('CONSENSUS_GRID_BASE_URL', 'http://consensus-grid:8082'),
+        // Sidecar consensus-grid V2 — source unique pour :
+        //   - le consensus multi-modèles (/v1/forecast)
+        //   - les overlays carte météo (/v1/overlay)
+        //   - l'introspection admin (/v1/consensus/active_config,
+        //     /v1/consensus/dependency_graph, /v1/models/variables)
+        // - dev local : http://localhost:8083 (mapping hôte → port interne 8082)
+        // - prod docker-compose : http://parapente-consensus-grid-v2-api:8082
+        'base_url' => env('CONSENSUS_GRID_BASE_URL', 'http://parapente-consensus-grid-v2-api:8082'),
         'timeout'  => (int) env('CONSENSUS_GRID_TIMEOUT', 10),
-    ],
-
-    'consensus_grid_v2' => [
-        // Sidecar V2 — expose les endpoints d'introspection admin
-        // (/v1/consensus/active_config, /v1/consensus/dependency_graph,
-        // /v1/models/variables). Cohabite avec le V1 pendant la migration.
-        // - dev local : http://localhost:8083
-        // - prod docker-compose : http://consensus-grid-v2:8083
-        'base_url' => env('CONSENSUS_GRID_V2_BASE_URL', 'http://parapente-consensus-grid-v2-api:8082'),
-        'timeout'  => (int) env('CONSENSUS_GRID_V2_TIMEOUT', 10),
     ],
 
     'geocoding' => [

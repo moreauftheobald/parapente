@@ -71,7 +71,7 @@ class ConsensusApi implements WeatherApiInterface
         'qui_vole_models_converging',
     ];
 
-    private string $baseUrl = 'http://parapente-consensus-grid:8082/v1';
+    private string $baseUrl = 'http://parapente-consensus-grid-v2-api:8082/v1';
     private ?WeatherApi $config = null;
 
     public function code(): string

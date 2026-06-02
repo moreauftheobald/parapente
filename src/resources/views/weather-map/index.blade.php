@@ -531,25 +531,11 @@
             }
 
             function makeArrowIcon(direction) {
-                // Convention parapente / manche à air : la flèche pointe vers
-                // D'OÙ vient le vent (= valeur de direction FROM directement,
-                // sans offset). Un pilote lit la manche à air comme "le vent
-                // vient de là", il atterrit face à elle.
-                //
-                // Dessin minimaliste type "→" : un trait droit + une pointe
-                // en V au sommet. Deux passes :
-                //   - un stroke blanc épais en dessous = halo de contraste
-                //     (lisible sur basemap sombre, satellite, OSM clair)
-                //   - un stroke noir-bleuté plus fin par-dessus = forme nette
-                // Beaucoup plus léger à rendre que l'ancien polygon plein.
-                //
-                // Avec `transform-origin: 11px 11px` (centre exact), rotation
-                // CSS positive horaire :
-                //   angle = 0   → pointe en haut    (= Nord, wind FROM N)
-                //   angle = 90  → pointe à droite   (= Est,  wind FROM E)
-                //   angle = 180 → pointe en bas     (= Sud,  wind FROM S)
-                //   angle = 270 → pointe à gauche   (= Ouest, wind FROM W)
-                const angle = ((direction % 360) + 360) % 360;
+                // La flèche pointe où le vent VA (+180° par rapport au FROM).
+                // direction = FROM (convention météo), on ajoute 180° pour
+                // que la flèche indique le sens du flux — cohérent avec la
+                // carte de volabilité.
+                const angle = ((direction + 180) % 360 + 360) % 360;
                 const path = 'M11 18 V4 M6 10 L11 4 L16 10';
                 const svg = `
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22"

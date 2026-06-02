@@ -62,7 +62,7 @@ class WeatherApiSeeder extends Seeder
             ['code' => 'consensus'],
             [
                 'name'        => 'Consensus Qui-Vole (sidecar)',
-                'base_url'    => env('CONSENSUS_API_URL', 'http://parapente-consensus-grid:8082/v1'),
+                'base_url'    => env('CONSENSUS_API_URL', 'http://parapente-consensus-grid-v2-api:8082/v1'),
                 'auth_type'   => 'none',
                 'daily_quota' => null,
                 'active'      => true,
