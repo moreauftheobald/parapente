@@ -10,7 +10,7 @@
     @include('admin._settings-tabs', ['tab' => $tab, 'baseRoute' => 'admin.meteo.settings', 'tabs' => $tabs])
 
     @if ($tab === 'general')
-        <x-admin.empty-state icon="fa-solid fa-sliders" message="Les paramètres de scoring seront redistribués ici prochainement." />
+        @include('admin.meteo._tab-general')
 
     @elseif ($tab === 'data')
         @include('admin.meteo._tab-data')

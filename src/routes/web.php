@@ -123,8 +123,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/meteo/sidecar/active-config',      [AdminSectionSettingsController::class, 'sidecarActiveConfig'])->name('meteo.sidecar.active-config');
         Route::get('/meteo/sidecar/dependency-graph',   [AdminSectionSettingsController::class, 'sidecarDependencyGraph'])->name('meteo.sidecar.dependency-graph');
         Route::get('/meteo/sidecar/models-variables',   [AdminSectionSettingsController::class, 'sidecarModelsVariables'])->name('meteo.sidecar.models-variables');
-        Route::get('/sites/settings',   [AdminSectionSettingsController::class, 'sites'])->name('sites.settings');
-        Route::get('/balises/settings', [AdminSectionSettingsController::class, 'balises'])->name('balises.settings');
+        Route::get('/sites/settings',    [AdminSectionSettingsController::class, 'sites'])->name('sites.settings');
+        Route::patch('/sites/settings/general', [AdminSectionSettingsController::class, 'updateSiteSettings'])->name('sites.settings.general');
+        Route::get('/balises/settings',  [AdminSectionSettingsController::class, 'balises'])->name('balises.settings');
+        Route::patch('/balises/settings/general', [AdminSectionSettingsController::class, 'updateBaliseSettings'])->name('balises.settings.general');
+        Route::patch('/meteo/settings/general',   [AdminSectionSettingsController::class, 'updateMeteoGeneralSettings'])->name('meteo.settings.general');
 
         // ── Sites ────────────────────────────────────────────────
         Route::get('/sites',                   [AdminSiteController::class, 'index'])->name('sites.index');

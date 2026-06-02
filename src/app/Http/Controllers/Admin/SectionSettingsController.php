@@ -56,6 +56,13 @@ class SectionSettingsController extends Controller
             'tabs' => self::METEO_TABS,
         ];
 
+        if ($tab === 'general') {
+            $data['settingsGroups'] = $this->loadSettingsGroups(
+                ['reliability'],
+                $settings->all(),
+            );
+        }
+
         if ($tab === 'data') {
             $data['modelFreshness'] = $coverage->modelFreshness();
             $data['today']          = CarbonImmutable::now()->startOfDay();
@@ -243,7 +250,7 @@ class SectionSettingsController extends Controller
             ->with('status', "Override {$data['variable']} pour {$data['model_code']} enregistré.");
     }
 
-    public function sites(Request $request, DataCoverage $coverage): View
+    public function sites(Request $request, Settings $settings, DataCoverage $coverage): View
     {
         $tab  = $this->resolveTab($request);
         $data = [
@@ -253,12 +260,28 @@ class SectionSettingsController extends Controller
             'sitesPge'   => Site::where('source', 'paraglidingearth')->count(),
         ];
 
+        if ($tab === 'general') {
+            $data['settingsGroups'] = $this->loadSettingsGroups(
+                ['precip', 'gust', 'viability', 'quality'],
+                $settings->all(),
+            );
+        }
+
         if ($tab === 'data') {
             $data['siteForecasts'] = $coverage->siteForecastCoverage();
             $data['today']         = CarbonImmutable::now()->startOfDay();
         }
 
         return view('admin.sites.settings', $data);
+    }
+
+    public function updateSiteSettings(Request $request, Settings $settings): RedirectResponse
+    {
+        $this->saveSettingsGroups($request, $settings, ['precip', 'gust', 'viability', 'quality']);
+
+        return redirect()
+            ->route('admin.sites.settings', ['tab' => 'general'])
+            ->with('status', 'Paramètres des sites enregistrés.');
     }
 
     public function balises(Request $request, Settings $settings, DataCoverage $coverage): View
@@ -273,6 +296,13 @@ class SectionSettingsController extends Controller
             'windyKeyConfigured' => trim((string) $settings->get('windy.api_key', '')) !== '',
         ];
 
+        if ($tab === 'general') {
+            $data['settingsGroups'] = $this->loadSettingsGroups(
+                ['balises'],
+                $settings->all(),
+            );
+        }
+
         if ($tab === 'data') {
             $data['baliseForecasts'] = $coverage->baliseForecastCoverage();
             $data['baliseReadings']  = $coverage->baliseReadingsCoverage();
@@ -280,6 +310,113 @@ class SectionSettingsController extends Controller
         }
 
         return view('admin.balises.settings', $data);
+    }
+
+    public function updateBaliseSettings(Request $request, Settings $settings): RedirectResponse
+    {
+        $this->saveSettingsGroups($request, $settings, ['balises']);
+
+        return redirect()
+            ->route('admin.balises.settings', ['tab' => 'general'])
+            ->with('status', 'Paramètres des balises enregistrés.');
+    }
+
+    public function updateMeteoGeneralSettings(Request $request, Settings $settings): RedirectResponse
+    {
+        $this->saveSettingsGroups($request, $settings, ['reliability']);
+
+        return redirect()
+            ->route('admin.meteo.settings', ['tab' => 'general'])
+            ->with('status', 'Paramètres de fiabilité enregistrés.');
+    }
+
+    // ── Helpers settings groupés ─────────────────────────────────
+
+    /**
+     * Construit le tableau $settingsGroups pour les groupes demandés,
+     * en lisant les valeurs courantes depuis Settings::DEFAULTS + $values.
+     *
+     * @param  string[] $groupKeys  Groupes à inclure (ex: ['precip', 'gust'])
+     * @param  array    $values     Résultat de Settings::all()
+     * @return array
+     */
+    private function loadSettingsGroups(array $groupKeys, array $values): array
+    {
+        $definitions = [
+            'precip'      => ['title' => 'Précipitations',           'icon' => 'fa-cloud-rain'],
+            'gust'        => ['title' => 'Rafales',                   'icon' => 'fa-tornado'],
+            'viability'   => ['title' => "Viabilité d'une journée",  'icon' => 'fa-chart-line'],
+            'quality'     => ['title' => 'Qualité des données',       'icon' => 'fa-clipboard-check'],
+            'balises'     => ['title' => 'Sources balises',           'icon' => 'fa-tower-broadcast'],
+            'reliability' => ['title' => 'Fiabilité des modèles',     'icon' => 'fa-flask-vial'],
+        ];
+
+        $groups = [];
+        foreach ($groupKeys as $gk) {
+            $groups[$gk] = ($definitions[$gk] ?? ['title' => $gk, 'icon' => 'fa-gear']) + ['keys' => []];
+        }
+
+        foreach (Settings::DEFAULTS as $key => $meta) {
+            if (($meta['type'] ?? 'float') === 'json') {
+                continue;
+            }
+            $g = $meta['group'] ?? '';
+            if (! isset($groups[$g])) {
+                continue;
+            }
+            $groups[$g]['keys'][$key] = $meta + ['value' => $values[$key] ?? $meta['default']];
+        }
+
+        return array_filter($groups, fn ($g) => ! empty($g['keys']));
+    }
+
+    /**
+     * Valide et sauvegarde les settings appartenant aux groupes donnés.
+     *
+     * @param  string[] $groupKeys
+     */
+    private function saveSettingsGroups(Request $request, Settings $settings, array $groupKeys): void
+    {
+        $rules = [];
+        foreach (Settings::DEFAULTS as $key => $meta) {
+            if (($meta['type'] ?? 'float') === 'json') {
+                continue;
+            }
+            if (! in_array($meta['group'] ?? '', $groupKeys, true)) {
+                continue;
+            }
+            $field          = str_replace('.', '__', $key);
+            $rules[$field]  = match ($meta['type'] ?? 'float') {
+                'int'              => ['required', 'integer', 'min:0'],
+                'bool'             => ['required', 'boolean'],
+                'string', 'secret' => ['nullable', 'string', 'max:500'],
+                default            => ['required', 'numeric', 'min:0'],
+            };
+        }
+
+        $data   = $request->validate($rules);
+        $values = [];
+
+        foreach (Settings::DEFAULTS as $key => $meta) {
+            if (($meta['type'] ?? 'float') === 'json') {
+                continue;
+            }
+            if (! in_array($meta['group'] ?? '', $groupKeys, true)) {
+                continue;
+            }
+            $field  = str_replace('.', '__', $key);
+            $raw    = $data[$field] ?? null;
+            $type   = $meta['type'] ?? 'float';
+
+            $values[$key] = match ($type) {
+                'int'              => (int) $raw,
+                'bool'             => (bool) filter_var($raw, FILTER_VALIDATE_BOOLEAN),
+                'string', 'secret' => trim((string) ($raw ?? '')),
+                default            => (float) $raw,
+            };
+        }
+
+        $settings->setMany($values);
     }
 
     // ── Tab resolution ──────────────────────────────────────────

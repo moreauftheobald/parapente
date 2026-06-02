@@ -14,7 +14,10 @@
     @include('admin._settings-tabs', ['tab' => $tab, 'baseRoute' => 'admin.sites.settings'])
 
     @if ($tab === 'general')
-        <x-admin.empty-state icon="fa-solid fa-sliders" message="Les paramètres des sites seront redistribués ici prochainement." />
+        @include('admin.settings._groups-form', [
+            'settingsGroups' => $settingsGroups,
+            'saveAction'     => route('admin.sites.settings.general'),
+        ])
 
     @elseif ($tab === 'data')
 

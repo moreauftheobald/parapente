@@ -11,20 +11,20 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * BackOffice — paramètres globaux de l'application.
+ * BackOffice — paramètres analytics / trafic.
  *
- * Tous les seuils de scoring (précipitations, rafales, viabilité du jour)
- * sont stockés dans la table `settings` et accessibles via le service
- * `App\Services\Settings`. Cette page permet de les éditer en bloc.
- *
- * Les modifications prennent effet immédiatement (cache Redis invalidé
- * à l'enregistrement) pour les nouveaux scores. Les scores déjà en base
- * sont mis à jour au prochain fetch horaire — ou immédiatement via
- * `php artisan scores:recompute-detail-colors` pour les couleurs des
- * paramètres (le statut global est recalculé au prochain fetch).
+ * Les autres groupes de paramètres (scoring, balises, fiabilité) ont été
+ * migrés dans leurs sections dédiées :
+ *   - precip / gust / viability / quality → admin.sites.settings (onglet général)
+ *   - balises                             → admin.balises.settings (onglet général)
+ *   - reliability                         → admin.meteo.settings (onglet général)
+ *   - consensus_global / consensus_scheduler → admin.meteo.settings (onglets consensus / orchestration)
  */
 class SettingsController extends Controller
 {
+    /** Groupes gérés par ce contrôleur (les autres sont dans SectionSettingsController). */
+    private const MANAGED_GROUPS = ['analytics'];
+
     public function __construct(private Settings $settings)
     {
     }
@@ -33,27 +33,17 @@ class SettingsController extends Controller
     {
         $values = $this->settings->all();
 
-        // Regroupement par section (cf. catalogue Settings::DEFAULTS) :
         $groups = [
-            'precip'               => ['title' => 'Précipitations',                'icon' => 'fa-cloud-rain',      'keys' => []],
-            'gust'                 => ['title' => 'Rafales',                       'icon' => 'fa-tornado',         'keys' => []],
-            'viability'            => ['title' => "Viabilité d'une journée",       'icon' => 'fa-chart-line',      'keys' => []],
-            'quality'              => ['title' => 'Qualité des données',           'icon' => 'fa-clipboard-check', 'keys' => []],
-            'balises'              => ['title' => 'Sources balises',               'icon' => 'fa-tower-broadcast', 'keys' => []],
-            'analytics'            => ['title' => 'Trafic / analytics',            'icon' => 'fa-chart-line',      'keys' => []],
-            'reliability'          => ['title' => 'Fiabilité des modèles',         'icon' => 'fa-flask-vial',      'keys' => []],
-            'consensus_global'     => ['title' => 'Consensus sidecar — globaux',   'icon' => 'fa-sliders',         'keys' => []],
-            'consensus_scheduler'  => ['title' => 'Orchestration sidecar',         'icon' => 'fa-clock',           'keys' => []],
+            'analytics' => ['title' => 'Trafic / analytics', 'icon' => 'fa-chart-line', 'keys' => []],
         ];
-        // JSON-typed settings (consensus per-variable config) are managed
-        // on their own dedicated page — exclude them from the generic form.
+
         foreach (Settings::DEFAULTS as $key => $meta) {
             if (($meta['type'] ?? 'float') === 'json') {
                 continue;
             }
             $g = $meta['group'] ?? 'misc';
             if (! isset($groups[$g])) {
-                $groups[$g] = ['title' => ucfirst($g), 'icon' => 'fa-gear', 'keys' => []];
+                continue;
             }
             $groups[$g]['keys'][$key] = $meta + [
                 'value'   => $values[$key] ?? $meta['default'],
@@ -66,27 +56,32 @@ class SettingsController extends Controller
 
     public function update(Request $request): RedirectResponse
     {
-        // Construction dynamique des règles de validation à partir du
-        // catalogue (int / float / bool / secret-string).
-        // JSON-typed settings are excluded (managed on their own page).
+        // Seuls les settings du groupe analytics sont traités ici.
         $rules = [];
         foreach (Settings::DEFAULTS as $key => $meta) {
             if (($meta['type'] ?? 'float') === 'json') {
                 continue;
             }
-            $name = $this->keyToField($key);
-            $rules[$name] = match ($meta['type'] ?? 'float') {
+            if (! in_array($meta['group'] ?? '', self::MANAGED_GROUPS, true)) {
+                continue;
+            }
+            $name          = $this->keyToField($key);
+            $rules[$name]  = match ($meta['type'] ?? 'float') {
                 'int'              => ['required', 'integer', 'min:0'],
                 'bool'             => ['required', 'boolean'],
                 'string', 'secret' => ['nullable', 'string', 'max:500'],
                 default            => ['required', 'numeric', 'min:0'],
             };
         }
+
         $data = $request->validate($rules);
 
         $values = [];
         foreach (Settings::DEFAULTS as $key => $meta) {
             if (($meta['type'] ?? 'float') === 'json') {
+                continue;
+            }
+            if (! in_array($meta['group'] ?? '', self::MANAGED_GROUPS, true)) {
                 continue;
             }
             $name = $this->keyToField($key);
@@ -105,11 +100,11 @@ class SettingsController extends Controller
 
         return redirect()
             ->route('admin.settings.index')
-            ->with('status', 'Paramètres généraux enregistrés.');
+            ->with('status', 'Paramètres analytics enregistrés.');
     }
 
     /**
-     * Les noms de champs HTML utilisent `_` à la place du `.` (qui n'est
+     * Les noms de champs HTML utilisent `__` à la place du `.` (qui n'est
      * pas un caractère valide en clé de formulaire validé par Laravel).
      */
     private function keyToField(string $key): string
