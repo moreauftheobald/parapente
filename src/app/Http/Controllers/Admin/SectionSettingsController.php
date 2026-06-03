@@ -82,7 +82,6 @@ class SectionSettingsController extends Controller
             $data['varConfigs']     = $varConfigs;
             $data['defaultMethod']  = $allValues['consensus.global.default_method'] ?? 'B';
             $data['previewEnabled'] = (bool) ($allValues['consensus.global.preview_enabled'] ?? false);
-            $data['renderTiles']    = (bool) ($allValues['consensus.global.render_tiles'] ?? false);
         }
 
         if ($tab === 'orchestration') {
@@ -135,7 +134,6 @@ class SectionSettingsController extends Controller
         $data = $request->validate([
             'default_method'      => ['required', 'string', 'in:A,B'],
             'preview_enabled'     => ['nullable', 'boolean'],
-            'render_tiles'        => ['nullable', 'boolean'],
             'vars'                => ['required', 'array'],
             'vars.*.method'       => ['required', 'string', 'in:A,B'],
             'vars.*.z_threshold'  => ['required', 'numeric', 'min:0.5', 'max:10'],
@@ -145,12 +143,12 @@ class SectionSettingsController extends Controller
             'vars.*.use_bias_correction'  => ['nullable', 'boolean'],
             'vars.*.use_mad_filtering'    => ['nullable', 'boolean'],
             'vars.*.use_weighted_median'  => ['nullable', 'boolean'],
+            'vars.*.render_tiles'         => ['nullable', 'boolean'],
         ]);
 
         $values = [
             'consensus.global.default_method'  => $data['default_method'],
             'consensus.global.preview_enabled' => (bool) ($data['preview_enabled'] ?? false),
-            'consensus.global.render_tiles'    => (bool) ($data['render_tiles'] ?? false),
         ];
 
         foreach ($data['vars'] as $var => $cfg) {
@@ -166,6 +164,7 @@ class SectionSettingsController extends Controller
                 'use_mad_filtering'   => (bool) ($cfg['use_mad_filtering'] ?? false),
                 'use_weighted_median' => (bool) ($cfg['use_weighted_median'] ?? false),
                 'epsilon'             => (float) $cfg['epsilon'],
+                'render_tiles'        => (bool) ($cfg['render_tiles'] ?? false),
             ];
         }
 
@@ -184,7 +183,6 @@ class SectionSettingsController extends Controller
         $values = [
             'consensus.global.default_method'  => Settings::DEFAULTS['consensus.global.default_method']['default'],
             'consensus.global.preview_enabled' => Settings::DEFAULTS['consensus.global.preview_enabled']['default'],
-            'consensus.global.render_tiles'    => Settings::DEFAULTS['consensus.global.render_tiles']['default'],
         ];
 
         foreach (self::CONSENSUS_VARIABLES as $var) {

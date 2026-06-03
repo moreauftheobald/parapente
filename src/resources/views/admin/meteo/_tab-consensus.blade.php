@@ -31,16 +31,6 @@
                 </select>
             </x-admin.field>
             <div>
-                <input type="hidden" name="render_tiles" value="0">
-                <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-400">
-                    <input type="checkbox" name="render_tiles" value="1"
-                           @checked(old('render_tiles', $renderTiles))
-                           class="h-4 w-4 rounded border-gray-700 bg-gray-800 text-sky-500 focus:ring-sky-500/30">
-                    Render tiles
-                    <x-admin.tooltip text="Active le rendu des tuiles PNG (overlays carte météo) à chaque run du sidecar. Désactivé = économie de ressources." />
-                </label>
-            </div>
-            <div>
                 <input type="hidden" name="preview_enabled" value="0">
                 <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-400">
                     <input type="checkbox" name="preview_enabled" value="1"
@@ -108,6 +98,16 @@
                                    @checked(old("vars.{$var}.use_bias_correction", $cfg['use_bias_correction'] ?? false))
                                    class="h-3.5 w-3.5 rounded border-gray-700 bg-gray-800 text-amber-500 focus:ring-amber-500/30">
                             Bias corr.
+                        </label>
+
+                        <span class="text-gray-700">|</span>
+
+                        <input type="hidden" name="vars[{{ $var }}][render_tiles]" value="0">
+                        <label class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-400">
+                            <input type="checkbox" name="vars[{{ $var }}][render_tiles]" value="1"
+                                   @checked(old("vars.{$var}.render_tiles", $cfg['render_tiles'] ?? false))
+                                   class="h-3.5 w-3.5 rounded border-gray-700 bg-gray-800 text-emerald-500 focus:ring-emerald-500/30">
+                            Render tiles
                         </label>
 
                         {{-- Méthode B : MAD + médiane --}}
