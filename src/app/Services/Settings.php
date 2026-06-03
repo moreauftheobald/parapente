@@ -286,6 +286,13 @@ class Settings
             'group'       => 'consensus_global',
             'type'        => 'bool',
         ],
+        'consensus.global.render_tiles' => [
+            'default'     => false,
+            'label'       => 'Render tiles',
+            'description' => "Active le rendu des tuiles PNG (overlays carte météo) à chaque run du sidecar. Désactivé par défaut pour économiser les ressources.",
+            'group'       => 'consensus_global',
+            'type'        => 'bool',
+        ],
 
         // ── Consensus sidecar — config par variable ──────────────
         // Chaque clé `consensus.config.<variable>` est un objet JSON

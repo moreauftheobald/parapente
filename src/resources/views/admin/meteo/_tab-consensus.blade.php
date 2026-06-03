@@ -31,6 +31,16 @@
                 </select>
             </x-admin.field>
             <div>
+                <input type="hidden" name="render_tiles" value="0">
+                <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-400">
+                    <input type="checkbox" name="render_tiles" value="1"
+                           @checked(old('render_tiles', $renderTiles))
+                           class="h-4 w-4 rounded border-gray-700 bg-gray-800 text-sky-500 focus:ring-sky-500/30">
+                    Render tiles
+                    <x-admin.tooltip text="Active le rendu des tuiles PNG (overlays carte météo) à chaque run du sidecar. Désactivé = économie de ressources." />
+                </label>
+            </div>
+            <div>
                 <input type="hidden" name="preview_enabled" value="0">
                 <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-400">
                     <input type="checkbox" name="preview_enabled" value="1"
