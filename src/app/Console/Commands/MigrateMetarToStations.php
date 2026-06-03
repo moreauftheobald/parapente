@@ -6,6 +6,7 @@ namespace App\Console\Commands;
 
 use App\Models\Balise;
 use App\Models\BaliseReading;
+use App\Models\StationApi;
 use App\Models\WeatherStation;
 use App\Models\WeatherStationObservation;
 use Illuminate\Console\Command;
@@ -19,18 +20,27 @@ use Illuminate\Support\Facades\DB;
  * Idempotent : les stations déjà existantes (même external_id) sont
  * mises à jour, les observations en doublon (même station + observed_at)
  * sont ignorées.
+ *
+ * L'option --seed-apis crée les entrées station_apis (MF, METAR,
+ * Infoclimat) si absentes — nécessaire avant toute découverte ou
+ * polling de stations.
  */
 class MigrateMetarToStations extends Command
 {
     protected $signature = 'stations:migrate-metar
+        {--seed-apis : Créer les station_apis (MF, METAR, Infoclimat) si absentes}
         {--readings : Migrer aussi les lectures (balise_readings → weather_station_observations)}
         {--chunk=500 : Taille des lots pour l\'insertion des observations}
         {--deactivate : Désactiver les balises METAR source après migration}';
 
-    protected $description = 'Migre les balises METAR vers le système stations météo';
+    protected $description = 'Migre les balises METAR vers le système stations météo (+ seed APIs)';
 
     public function handle(): int
     {
+        if ($this->option('seed-apis')) {
+            $this->seedStationApis();
+        }
+
         $metarBalises = Balise::where('source', 'metar')->get();
 
         if ($metarBalises->isEmpty()) {
@@ -167,6 +177,50 @@ class MigrateMetarToStations extends Command
 
         foreach ($latestObs as $stationId => $latest) {
             WeatherStation::where('id', $stationId)->update(['last_obs_at' => $latest]);
+        }
+    }
+
+    private function seedStationApis(): void
+    {
+        $this->info('Seed des station_apis…');
+
+        $apis = [
+            [
+                'code'      => 'metar',
+                'name'      => 'METAR / NOAA',
+                'base_url'  => 'https://aviationweather.gov/api/data/metar',
+                'auth_type' => 'none',
+                'active'    => true,
+                'config'    => ['description' => 'Observations aéronautiques NOAA (~200 aérodromes en France).'],
+            ],
+            [
+                'code'      => 'mf',
+                'name'      => 'Météo-France',
+                'base_url'  => 'https://portail-api.meteofrance.fr',
+                'auth_type' => 'oauth2',
+                'active'    => false,
+                'config'    => [
+                    'description' => 'Stations synoptiques et climatologiques (~600 en France métropolitaine).',
+                    'token_url'   => 'https://portail-api.meteofrance.fr/token',
+                ],
+            ],
+            [
+                'code'      => 'infoclimat',
+                'name'      => 'Infoclimat',
+                'base_url'  => 'https://www.infoclimat.fr/opendata/',
+                'auth_type' => 'api_key',
+                'active'    => false,
+                'config'    => ['description' => 'Réseau de stations amateurs (~1000+ stations en France).'],
+            ],
+        ];
+
+        foreach ($apis as $data) {
+            $api = StationApi::updateOrCreate(
+                ['code' => $data['code']],
+                $data,
+            );
+            $status = $api->wasRecentlyCreated ? 'créée' : 'déjà présente';
+            $this->line("  {$data['name']} ({$data['code']}) : {$status}");
         }
     }
 }

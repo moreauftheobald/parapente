@@ -20,6 +20,7 @@ class DatabaseSeeder extends Seeder
             ModuleSeeder::class,
             WeatherApiSeeder::class,
             WeatherModelSeeder::class,
+            StationApiSeeder::class,
             SiteSeeder::class,
             GrandEstSitesSeeder::class,
             SettingsSeeder::class,
