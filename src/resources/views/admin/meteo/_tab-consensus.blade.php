@@ -1,9 +1,12 @@
 @php
     $inputCls = 'w-full px-2.5 py-1.5 bg-gray-950 border border-gray-700 rounded-md text-sm text-gray-100 font-mono focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/40';
     $categories = [
-        'Base sol (10 m / 2 m)' => ['wind_speed_10m', 'wind_gusts_10m', 'wind_direction_10m', 'temperature_2m', 'relative_humidity_2m', 'precipitation', 'cloud_cover_low', 'cloud_cover_mid', 'cloud_cover_high'],
-        'Altitude 850 hPa'     => ['temperature_850hPa', 'wind_speed_850hPa', 'wind_direction_850hPa'],
-        'Instabilité convective' => ['cape', 'convective_inhibition', 'lifted_index', 'convective_precipitation', 'boundary_layer_height'],
+        'Sol (10 m / 2 m)' => ['wind_speed_10m', 'wind_direction_10m', 'wind_gusts_10m', 'temperature_2m', 'relative_humidity_2m', 'precipitation', 'cloud_cover_low', 'cloud_cover_mid', 'cloud_cover_high', 'shortwave_radiation', 'visibility', 'freezing_level_height'],
+        'Vent en altitude AGL'  => ['wind_speed_80m', 'wind_direction_80m', 'wind_speed_120m', 'wind_direction_120m', 'wind_speed_180m', 'wind_direction_180m'],
+        'Niveau 850 hPa'       => ['temperature_850hPa', 'wind_speed_850hPa', 'wind_direction_850hPa', 'cloud_cover_850hPa', 'relative_humidity_850hPa'],
+        'Instabilité convective' => ['cape', 'convective_inhibition', 'convective_precipitation'],
+        'Pipeline dédié'        => ['weather_code'],
+        'Dérivées Qui-Vole'    => ['dew_point_2m', 'qui_vole_storm_risk', 'qui_vole_cloud_base'],
     ];
 @endphp
 
@@ -56,14 +59,39 @@
                     if (! $vc) continue;
                     $cfg = $vc['config'];
                     $lbl = $vc['label'];
+                    $isDerived = in_array($cfg['method'] ?? 'B', ['derived', 'vote']);
                 @endphp
                 <div class="bg-gray-900 border border-gray-800 rounded-xl p-4"
                      x-data="{ method: '{{ old("vars.{$var}.method", $cfg['method'] ?? 'B') }}' }">
                     <div class="flex items-center gap-3 mb-3">
                         <span class="text-sm font-medium text-white">{{ $lbl }}</span>
                         <span class="text-[10px] font-mono text-gray-600 px-1.5 py-0.5 bg-gray-950 rounded border border-gray-800">{{ $var }}</span>
+                        @if ($isDerived)
+                            <span class="text-[10px] px-1.5 py-0.5 rounded border bg-violet-500/15 text-violet-300 border-violet-500/30">{{ $cfg['method'] === 'vote' ? 'vote WMO' : 'dérivée' }}</span>
+                        @endif
                     </div>
 
+                    @if ($isDerived)
+                        {{-- Variables dérivées / vote : seul render_tiles est configurable --}}
+                        <input type="hidden" name="vars[{{ $var }}][method]" value="{{ $cfg['method'] }}">
+                        <input type="hidden" name="vars[{{ $var }}][use_weight_factor]" value="0">
+                        <input type="hidden" name="vars[{{ $var }}][use_bias_correction]" value="0">
+                        <input type="hidden" name="vars[{{ $var }}][use_mad_filtering]" value="0">
+                        <input type="hidden" name="vars[{{ $var }}][use_weighted_median]" value="0">
+                        <input type="hidden" name="vars[{{ $var }}][z_threshold]" value="{{ $cfg['z_threshold'] ?? 3.0 }}">
+                        <input type="hidden" name="vars[{{ $var }}][mad_floor]" value="{{ $cfg['mad_floor'] ?? 0.5 }}">
+                        <input type="hidden" name="vars[{{ $var }}][epsilon]" value="{{ $cfg['epsilon'] ?? 0.001 }}">
+                        <div class="flex items-center gap-4">
+                            <input type="hidden" name="vars[{{ $var }}][render_tiles]" value="0">
+                            <label class="flex items-center gap-1.5 cursor-pointer text-xs text-gray-400">
+                                <input type="checkbox" name="vars[{{ $var }}][render_tiles]" value="1"
+                                       @checked(old("vars.{$var}.render_tiles", $cfg['render_tiles'] ?? false))
+                                       class="h-3.5 w-3.5 rounded border-gray-700 bg-gray-800 text-emerald-500 focus:ring-emerald-500/30">
+                                Render tiles
+                            </label>
+                            <span class="text-[10px] text-gray-600">Les autres paramètres ne s'appliquent pas à cette variable.</span>
+                        </div>
+                    @else
                     <div class="flex flex-wrap items-center gap-4">
                         {{-- Méthode --}}
                         <div class="flex items-center gap-2">
@@ -164,6 +192,7 @@
                             <input type="hidden" name="vars[{{ $var }}][epsilon]" value="{{ $cfg['epsilon'] ?? 0.001 }}">
                         </template>
                     </div>
+                    @endif
                 </div>
             @endforeach
         </div>

@@ -290,7 +290,7 @@ class Settings
         // ── Consensus sidecar — config par variable ──────────────
         // Chaque clé `consensus.config.<variable>` est un objet JSON
         // avec la méthode de consensus et ses options.
-        // Base sol (8 + precipitation)
+        // Sol (12)
         'consensus.config.wind_speed_10m' => [
             'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001, 'render_tiles' => false],
             'label'       => 'Vent moyen 10 m',
@@ -298,17 +298,17 @@ class Settings
             'group'       => 'consensus_vars',
             'type'        => 'json',
         ],
-        'consensus.config.wind_gusts_10m' => [
-            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001, 'render_tiles' => false],
-            'label'       => 'Rafales 10 m',
-            'description' => "Config consensus pour wind_gusts_10m.",
-            'group'       => 'consensus_vars',
-            'type'        => 'json',
-        ],
         'consensus.config.wind_direction_10m' => [
             'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 5.0, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001, 'render_tiles' => false],
             'label'       => 'Direction vent 10 m',
             'description' => "Config consensus pour wind_direction_10m (circulaire, mad_floor en degrés).",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.wind_gusts_10m' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001, 'render_tiles' => false],
+            'label'       => 'Rafales 10 m',
+            'description' => "Config consensus pour wind_gusts_10m.",
             'group'       => 'consensus_vars',
             'type'        => 'json',
         ],
@@ -354,7 +354,71 @@ class Settings
             'group'       => 'consensus_vars',
             'type'        => 'json',
         ],
-        // Pression 850 hPa (3)
+        'consensus.config.shortwave_radiation' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001, 'render_tiles' => false],
+            'label'       => 'Rayonnement solaire',
+            'description' => "Config consensus pour shortwave_radiation (W/m²).",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.visibility' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001, 'render_tiles' => false],
+            'label'       => 'Visibilité',
+            'description' => "Config consensus pour visibility (m).",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.freezing_level_height' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001, 'render_tiles' => false],
+            'label'       => 'Isotherme 0 °C',
+            'description' => "Config consensus pour freezing_level_height (m AMSL).",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        // Vent en altitude AGL (6)
+        'consensus.config.wind_speed_80m' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001, 'render_tiles' => false],
+            'label'       => 'Vent 80 m',
+            'description' => "Config consensus pour wind_speed_80m.",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.wind_direction_80m' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 5.0, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001, 'render_tiles' => false],
+            'label'       => 'Direction vent 80 m',
+            'description' => "Config consensus pour wind_direction_80m (circulaire).",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.wind_speed_120m' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001, 'render_tiles' => false],
+            'label'       => 'Vent 120 m',
+            'description' => "Config consensus pour wind_speed_120m.",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.wind_direction_120m' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 5.0, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001, 'render_tiles' => false],
+            'label'       => 'Direction vent 120 m',
+            'description' => "Config consensus pour wind_direction_120m (circulaire).",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.wind_speed_180m' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001, 'render_tiles' => false],
+            'label'       => 'Vent 180 m',
+            'description' => "Config consensus pour wind_speed_180m.",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.wind_direction_180m' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 5.0, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001, 'render_tiles' => false],
+            'label'       => 'Direction vent 180 m',
+            'description' => "Config consensus pour wind_direction_180m (circulaire).",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        // Niveau 850 hPa (5)
         'consensus.config.temperature_850hPa' => [
             'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 2.5, 'mad_floor' => 0.5, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001, 'render_tiles' => false],
             'label'       => 'Température 850 hPa',
@@ -376,7 +440,21 @@ class Settings
             'group'       => 'consensus_vars',
             'type'        => 'json',
         ],
-        // Instabilité convective (5)
+        'consensus.config.cloud_cover_850hPa' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001, 'render_tiles' => false],
+            'label'       => 'Couverture nuageuse 850 hPa',
+            'description' => "Config consensus pour cloud_cover_850hPa.",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.relative_humidity_850hPa' => [
+            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 2.5, 'mad_floor' => 0.5, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001, 'render_tiles' => false],
+            'label'       => 'Humidité relative 850 hPa',
+            'description' => "Config consensus pour relative_humidity_850hPa.",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        // Instabilité convective (3)
         'consensus.config.cape' => [
             'default'     => ['method' => 'A', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => false, 'use_weighted_median' => false, 'epsilon' => 1.0, 'render_tiles' => false],
             'label'       => 'CAPE',
@@ -391,13 +469,6 @@ class Settings
             'group'       => 'consensus_vars',
             'type'        => 'json',
         ],
-        'consensus.config.lifted_index' => [
-            'default'     => ['method' => 'A', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => false, 'use_weighted_median' => false, 'epsilon' => 1.0, 'render_tiles' => false],
-            'label'       => 'Lifted Index',
-            'description' => "Config consensus pour lifted_index. Méthode A par défaut.",
-            'group'       => 'consensus_vars',
-            'type'        => 'json',
-        ],
         'consensus.config.convective_precipitation' => [
             'default'     => ['method' => 'A', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => false, 'use_weighted_median' => false, 'epsilon' => 1.0, 'render_tiles' => false],
             'label'       => 'Précipitations convectives',
@@ -405,10 +476,33 @@ class Settings
             'group'       => 'consensus_vars',
             'type'        => 'json',
         ],
-        'consensus.config.boundary_layer_height' => [
-            'default'     => ['method' => 'B', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => true, 'use_weighted_median' => true, 'epsilon' => 0.001, 'render_tiles' => false],
-            'label'       => 'Hauteur couche limite',
-            'description' => "Config consensus pour boundary_layer_height.",
+        // Pipeline dédié (1) — seul render_tiles est pris en compte
+        'consensus.config.weather_code' => [
+            'default'     => ['method' => 'vote', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => false, 'use_weighted_median' => false, 'epsilon' => 0.001, 'render_tiles' => false],
+            'label'       => 'Code météo WMO',
+            'description' => "Config consensus pour weather_code. Pipeline dédié (vote de mode WMO) — seul render_tiles est pris en compte par le sidecar.",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        // Dérivées Qui-Vole post-pipeline (3) — seul render_tiles est pris en compte
+        'consensus.config.dew_point_2m' => [
+            'default'     => ['method' => 'derived', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => false, 'use_weighted_median' => false, 'epsilon' => 0.001, 'render_tiles' => false],
+            'label'       => 'Point de rosée 2 m',
+            'description' => "Dérivée de temperature_2m + relative_humidity_2m (Magnus-Tetens). Seul render_tiles est pris en compte.",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.qui_vole_storm_risk' => [
+            'default'     => ['method' => 'derived', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => false, 'use_weighted_median' => false, 'epsilon' => 0.001, 'render_tiles' => true],
+            'label'       => 'Risque orageux Qui-Vole',
+            'description' => "Dérivée de CAPE, CIN, LPI, cloud_cover, conv_precip, weather_code (vote pondéré, catégoriel 0-3). Seul render_tiles est pris en compte.",
+            'group'       => 'consensus_vars',
+            'type'        => 'json',
+        ],
+        'consensus.config.qui_vole_cloud_base' => [
+            'default'     => ['method' => 'derived', 'use_weight_factor' => false, 'use_bias_correction' => false, 'z_threshold' => 3.0, 'mad_floor' => 0.5, 'use_mad_filtering' => false, 'use_weighted_median' => false, 'epsilon' => 0.001, 'render_tiles' => true],
+            'label'       => 'Plafond de vol Qui-Vole',
+            'description' => "Dérivée de temperature_2m + dew_point_2m + DEM Copernicus (formule d'Espy). Seul render_tiles est pris en compte.",
             'group'       => 'consensus_vars',
             'type'        => 'json',
         ],

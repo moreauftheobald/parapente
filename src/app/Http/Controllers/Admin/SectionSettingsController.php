@@ -33,12 +33,24 @@ class SectionSettingsController extends Controller
      * List of valid consensus variables (the 16 consensus-eligible vars).
      */
     public const CONSENSUS_VARIABLES = [
-        'wind_speed_10m', 'wind_gusts_10m', 'wind_direction_10m',
+        // Sol (12)
+        'wind_speed_10m', 'wind_direction_10m', 'wind_gusts_10m',
         'temperature_2m', 'relative_humidity_2m', 'precipitation',
         'cloud_cover_low', 'cloud_cover_mid', 'cloud_cover_high',
+        'shortwave_radiation', 'visibility', 'freezing_level_height',
+        // Vent en altitude AGL (6)
+        'wind_speed_80m', 'wind_direction_80m',
+        'wind_speed_120m', 'wind_direction_120m',
+        'wind_speed_180m', 'wind_direction_180m',
+        // Niveau 850 hPa (5)
         'temperature_850hPa', 'wind_speed_850hPa', 'wind_direction_850hPa',
-        'cape', 'convective_inhibition', 'lifted_index',
-        'convective_precipitation', 'boundary_layer_height',
+        'cloud_cover_850hPa', 'relative_humidity_850hPa',
+        // Instabilité convective (3)
+        'cape', 'convective_inhibition', 'convective_precipitation',
+        // Pipeline dédié (1)
+        'weather_code',
+        // Dérivées Qui-Vole (3)
+        'dew_point_2m', 'qui_vole_storm_risk', 'qui_vole_cloud_base',
     ];
 
     public function contenu(Request $request): View
@@ -135,7 +147,7 @@ class SectionSettingsController extends Controller
             'default_method'      => ['required', 'string', 'in:A,B'],
             'preview_enabled'     => ['nullable', 'boolean'],
             'vars'                => ['required', 'array'],
-            'vars.*.method'       => ['required', 'string', 'in:A,B'],
+            'vars.*.method'       => ['required', 'string', 'in:A,B,derived,vote'],
             'vars.*.z_threshold'  => ['required', 'numeric', 'min:0.5', 'max:10'],
             'vars.*.mad_floor'    => ['required', 'numeric', 'min:0', 'max:100'],
             'vars.*.epsilon'      => ['required', 'numeric', 'gt:0', 'max:1'],
