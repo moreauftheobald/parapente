@@ -132,6 +132,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/sites/settings',    [AdminSectionSettingsController::class, 'sites'])->name('sites.settings');
         Route::patch('/sites/settings/general', [AdminSectionSettingsController::class, 'updateSiteSettings'])->name('sites.settings.general');
         Route::get('/balises/settings',  [AdminSectionSettingsController::class, 'balises'])->name('balises.settings');
+        Route::get('/weather-stations/settings',          [AdminSectionSettingsController::class, 'weatherStations'])->name('weather-stations.settings');
+        Route::patch('/weather-stations/settings/general', [AdminSectionSettingsController::class, 'updateWeatherStationSettings'])->name('weather-stations.settings.general');
         Route::patch('/balises/settings/general', [AdminSectionSettingsController::class, 'updateBaliseSettings'])->name('balises.settings.general');
         Route::get('/weather-stations/settings',          [AdminSectionSettingsController::class, 'weatherStations'])->name('weather-stations.settings');
         Route::patch('/weather-stations/settings/general', [AdminSectionSettingsController::class, 'updateWeatherStationSettings'])->name('weather-stations.settings.general');
