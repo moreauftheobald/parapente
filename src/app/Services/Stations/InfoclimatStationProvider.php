@@ -169,6 +169,7 @@ class InfoclimatStationProvider implements StationProviderInterface
 
                 $parsed = [];
                 foreach ($observations as $obs) {
+                    if (! is_array($obs)) continue;
                     $row = $this->parseRow($obs);
                     if ($row) $parsed[] = $row;
                 }
