@@ -223,11 +223,30 @@ class MfStationProvider implements StationProviderInterface
         }
 
         $result = [];
+        $skippedNoId = 0;
+        $sampleKeys = null;
         foreach ($features as $feature) {
             $props = $feature['properties'] ?? $feature;
 
-            $stationId = (string) ($props['geo_id_insee'] ?? $props['geo_id_station'] ?? $props['Id_station'] ?? $props['numero_sta'] ?? '');
-            if ($stationId === '') continue;
+            if ($sampleKeys === null) {
+                $sampleKeys = array_keys($props);
+                $sampleIdFields = array_filter([
+                    'Id_station'     => $props['Id_station'] ?? null,
+                    'numero_sta'     => $props['numero_sta'] ?? null,
+                    'geo_id_station' => $props['geo_id_station'] ?? null,
+                    'geo_id_insee'   => $props['geo_id_insee'] ?? null,
+                ], fn ($v) => $v !== null);
+                Log::info('MF parseObservations: sample feature keys', [
+                    'keys'      => $sampleKeys,
+                    'id_fields' => $sampleIdFields,
+                ]);
+            }
+
+            $stationId = (string) ($props['Id_station'] ?? $props['numero_sta'] ?? $props['geo_id_station'] ?? $props['geo_id_insee'] ?? '');
+            if ($stationId === '') {
+                $skippedNoId++;
+                continue;
+            }
 
             $obsTimeRaw = $props['validity_time'] ?? $props['date_obs'] ?? null;
             if (! $obsTimeRaw) continue;
@@ -265,19 +284,35 @@ class MfStationProvider implements StationProviderInterface
             ];
         }
 
+        if ($skippedNoId > 0) {
+            Log::warning('MF parseObservations: features without station ID', ['count' => $skippedNoId]);
+        }
+
+        Log::info('MF parseObservations: parsed', [
+            'features_count' => count($features),
+            'result_count'   => count($result),
+            'sample_ids'     => array_slice(array_keys($result), 0, 5),
+        ]);
+
         return $result;
     }
 
     private function extractFeatures(mixed $data): array
     {
         if (is_array($data) && isset($data['type']) && $data['type'] === 'FeatureCollection') {
+            Log::info('MF extractFeatures: FeatureCollection', ['features_count' => count($data['features'] ?? [])]);
             return $data['features'] ?? [];
         }
 
         if (is_array($data) && ! isset($data['type'])) {
+            Log::info('MF extractFeatures: flat array', ['count' => count($data)]);
             return $data;
         }
 
+        Log::warning('MF extractFeatures: unrecognized structure', [
+            'type'    => gettype($data),
+            'preview' => is_array($data) ? array_keys(array_slice($data, 0, 3, true)) : mb_substr((string) $data, 0, 200),
+        ]);
         return [];
     }
 

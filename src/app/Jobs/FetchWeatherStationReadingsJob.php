@@ -81,16 +81,31 @@ abstract class FetchWeatherStationReadingsJob implements ShouldQueue
                 ->all();
         }
 
+        $readingKeys = array_keys($readings);
+        $stationKeys = $stations->keys()->all();
+
+        Log::info(static::class . ' matching diagnostic', [
+            'readings_count'      => count($readings),
+            'stations_count'      => count($stationKeys),
+            'sample_reading_keys' => array_slice($readingKeys, 0, 5),
+            'sample_station_keys' => array_slice($stationKeys, 0, 5),
+            'matched_count'       => count(array_intersect($readingKeys, $stationKeys)),
+        ]);
+
         $inserted = 0;
+        $skippedNoReading = 0;
+        $skippedDedup = 0;
         foreach ($stations as $extId => $station) {
             $r = $readings[$extId] ?? null;
             if (! $r || ! ($r['observed_at'] ?? null)) {
+                $skippedNoReading++;
                 continue;
             }
 
             $previousLatest = $latestPerStation[$station->id] ?? null;
             if ($previousLatest !== null
                 && $r['observed_at']->lessThanOrEqualTo(Carbon::parse($previousLatest))) {
+                $skippedDedup++;
                 continue;
             }
 
@@ -142,6 +157,8 @@ abstract class FetchWeatherStationReadingsJob implements ShouldQueue
 
         Log::info(static::class . ' completed', [
             'observations_inserted'  => $inserted,
+            'skipped_no_reading'     => $skippedNoReading,
+            'skipped_dedup'          => $skippedDedup,
             'stations_deactivated'   => $deactivated,
             'stations_polled'        => $stations->count(),
         ]);
