@@ -25,9 +25,8 @@ use Illuminate\Support\Facades\Log;
  * si le consensus est indisponible).
  *
  * ⚠️ Différences avec l'instance Open-Meteo classique :
- *  - le vent (`wind_speed_10m`, `wind_gusts_10m`) est renvoyé en **m/s**
- *    (l'endpoint n'accepte pas `wind_speed_unit`) → conversion ×3.6 en km/h,
- *    unité de toute l'app et des seuils de scoring ;
+ *  - le vent (`wind_speed_10m`, `wind_gusts_10m`) est renvoyé en **km/h**
+ *    directement par le sidecar → pas de conversion nécessaire ;
  *  - le plafond de vol consensus est fourni directement
  *    (`qui_vole_cloud_base`, m AMSL) → mappé sur `cloud_base_m` sans
  *    recalcul d'Espy ;
@@ -41,7 +40,6 @@ class ConsensusApi implements WeatherApiInterface
 
     private const DAYS         = 5;
     private const TIMEZONE     = 'Europe/Paris';
-    private const MS_TO_KMH    = 3.6;
     private const HTTP_TIMEOUT = 10;
 
     // Mode batch multi-coordonnées (le sidecar accepte des listes CSV de
@@ -254,9 +252,9 @@ class ConsensusApi implements WeatherApiInterface
 
             $parsed[$forecastAt->format('Y-m-d H:i:s')] = [
                 'wind_direction'    => (int) round((float) $dir),
-                'wind_speed_avg'    => $this->msToKmh((float) $speed),
-                'wind_speed_min'    => $this->msToKmh((float) $speed),
-                'wind_speed_max'    => $gust !== null ? $this->msToKmh((float) $gust) : $this->msToKmh((float) $speed),
+                'wind_speed_avg'    => round((float) $speed, 1),
+                'wind_speed_min'    => round((float) $speed, 1),
+                'wind_speed_max'    => $gust !== null ? round((float) $gust, 1) : round((float) $speed, 1),
                 'precipitation'     => (float) $this->getValue($hourly, 'precipitation', $index, 0.0),
                 'cloud_cover_low'   => (int) $this->getValue($hourly, 'cloud_cover_low', $index, 0),
                 'cloud_cover_mid'   => (int) $this->getValue($hourly, 'cloud_cover_mid', $index, 0),
@@ -284,11 +282,6 @@ class ConsensusApi implements WeatherApiInterface
     private function getValue(array $hourly, string $key, int $index, mixed $default = null): mixed
     {
         return $hourly[$key][$index] ?? $default;
-    }
-
-    private function msToKmh(float $ms): float
-    {
-        return round($ms * self::MS_TO_KMH, 1);
     }
 
     private function intOrNull(mixed $value): ?int
