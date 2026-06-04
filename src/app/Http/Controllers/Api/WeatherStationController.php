@@ -6,7 +6,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\WeatherStation;
+use App\Models\WeatherStationObservation;
 use App\Services\Map\WeatherStationsBundleCache;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -26,6 +28,85 @@ class WeatherStationController extends Controller
 
         $payload = $this->cache->rememberBundle(fn () => $this->buildBundle());
         return response()->json($payload);
+    }
+
+    public function detail(int $id): JsonResponse
+    {
+        $station = WeatherStation::find($id);
+        if (! $station) {
+            return response()->json(['error' => 'Station not found'], 404);
+        }
+
+        $startOfDay = Carbon::now()->startOfDay();
+        $observations = WeatherStationObservation::where('weather_station_id', $id)
+            ->where('observed_at', '>=', $startOfDay)
+            ->orderBy('observed_at')
+            ->get();
+
+        $fallback = false;
+        if ($observations->isEmpty()) {
+            $observations = WeatherStationObservation::where('weather_station_id', $id)
+                ->where('observed_at', '>=', Carbon::now()->subHours(24))
+                ->orderBy('observed_at')
+                ->get();
+            $fallback = true;
+        }
+
+        $latest = $observations->last();
+
+        $readings = $observations->map(function (WeatherStationObservation $obs) use ($startOfDay) {
+            $obsTime = $obs->observed_at;
+            $minOfDay = $obsTime->hour * 60 + $obsTime->minute;
+
+            return [
+                'observed_at'         => $obsTime->toIso8601String(),
+                'time'                => $obsTime->format('H:i'),
+                'min_of_day'          => $minOfDay,
+                'wind_direction'      => $obs->wind_direction,
+                'wind_speed_avg'      => $obs->wind_speed_avg,
+                'wind_speed_max'      => $obs->wind_speed_max,
+                'wind_speed_max_10m'  => $obs->wind_speed_max_10m,
+                'wind_direction_max'  => $obs->wind_direction_max,
+                'wind_direction_gust' => $obs->wind_direction_gust,
+                'temperature'         => $obs->temperature,
+                'temperature_min'     => $obs->temperature_min,
+                'temperature_max'     => $obs->temperature_max,
+                'humidity'            => $obs->humidity,
+                'humidity_min'        => $obs->humidity_min,
+                'humidity_max'        => $obs->humidity_max,
+                'pressure_hpa'        => $obs->pressure_hpa,
+                'precipitation_mm'    => $obs->precipitation_mm,
+                'cloud_cover_pct'     => $obs->cloud_cover_pct,
+                'visibility_m'        => $obs->visibility_m,
+                'dew_point'           => $obs->dew_point,
+            ];
+        })->values()->all();
+
+        return response()->json([
+            'station' => [
+                'id'         => $station->id,
+                'network'    => $station->network,
+                'name'       => $station->name,
+                'latitude'   => (float) $station->latitude,
+                'longitude'  => (float) $station->longitude,
+                'altitude_m' => $station->altitude_m,
+            ],
+            'latest'   => $latest ? [
+                'observed_at'         => $latest->observed_at->toIso8601String(),
+                'wind_direction'      => $latest->wind_direction,
+                'wind_speed_avg'      => $latest->wind_speed_avg,
+                'wind_speed_max'      => $latest->wind_speed_max,
+                'temperature'         => $latest->temperature,
+                'humidity'            => $latest->humidity,
+                'pressure_hpa'        => $latest->pressure_hpa,
+                'precipitation_mm'    => $latest->precipitation_mm,
+                'cloud_cover_pct'     => $latest->cloud_cover_pct,
+                'visibility_m'        => $latest->visibility_m,
+                'dew_point'           => $latest->dew_point,
+            ] : null,
+            'readings' => $readings,
+            'fallback' => $fallback,
+        ]);
     }
 
     /**

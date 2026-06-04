@@ -397,5 +397,176 @@
                     </div>
                 </template>
 
+                {{-- ═══════════ STATION MÉTÉO ═══════════ --}}
+                <template x-if="selectedFeature?.type === 'station'">
+                    <div class="rp-wrap">
+
+                        <div class="rp-head">
+                            <div class="rp-headline">
+                                <span class="rp-name" x-text="selectedFeature?.name ?? ''"></span>
+                                <template x-if="stationNetworkLabel">
+                                    <span class="rp-meta"><span class="rp-dot">·</span><span x-text="stationNetworkLabel"></span></span>
+                                </template>
+                                <template x-if="selectedFeature?.altitude_m != null">
+                                    <span class="rp-meta"><span class="rp-dot">·</span><span class="mono" x-text="selectedFeature.altitude_m + ' m'"></span></span>
+                                </template>
+                                <span class="rp-meta"><span class="rp-dot">·</span><span>maj <span x-text="stationFreshness"></span></span></span>
+                            </div>
+                            <button class="rp-close" @click="closeRightPanel()" title="Fermer">✕</button>
+                        </div>
+
+                        <div class="rp-tabs">
+                            <button class="rp-tab active">Relevés météo</button>
+                        </div>
+
+                        <div class="rp-pane rp-pane-scroll">
+                            <div x-show="stationLoading" class="rp-loader"><div class="rp-spinner"></div></div>
+
+                            <template x-if="!stationLoading && stationData">
+                                <div>
+                                    <template x-if="!stationData.readings || !stationData.readings.length">
+                                        <div style="padding:24px 18px;color:#9ca3af;font-size:13px;">Aucun relevé du jour pour cette station.</div>
+                                    </template>
+
+                                    {{-- Section 1 : Dernier relevé --}}
+                                    <template x-if="stationData.latest">
+                                        <div class="rp-station-now">
+                                            <div class="rp-station-now-header">
+                                                <span class="rp-station-freshness-dot" :class="'rp-station-fresh-' + stationFreshnessClass"></span>
+                                                <span x-text="'Mis à jour ' + stationFreshness"></span>
+                                            </div>
+
+                                            <div class="rp-station-metrics-main">
+                                                <div class="rp-station-metric rp-station-metric-dir">
+                                                    <svg width="52" height="52" viewBox="-22 -22 44 44" style="overflow:visible;">
+                                                        <circle r="20" fill="none" stroke="#374151" stroke-width="1.2"/>
+                                                        <g x-show="stationData.latest.wind_direction !== null"
+                                                           :transform="`rotate(${((stationData.latest.wind_direction ?? 0) + 180) % 360})`">
+                                                            <polygon points="0,-15 6,6 0,1 -6,6" fill="#38bdf8"/>
+                                                        </g>
+                                                    </svg>
+                                                    <span class="rp-station-metric-val" x-text="stationData.latest.wind_direction !== null ? (Math.round(stationData.latest.wind_direction) + '° ' + degToCompass(stationData.latest.wind_direction)) : '—'"></span>
+                                                    <span class="rp-station-metric-lbl">Direction</span>
+                                                </div>
+                                                <div class="rp-station-metric">
+                                                    <span class="rp-station-metric-big" x-text="stationData.latest.wind_speed_avg !== null ? stationData.latest.wind_speed_avg.toFixed(1) : '—'"></span>
+                                                    <span class="rp-station-metric-unit">km/h</span>
+                                                    <span class="rp-station-metric-lbl">Vent moyen</span>
+                                                </div>
+                                                <div class="rp-station-metric">
+                                                    <span class="rp-station-metric-big rp-station-gust" x-text="stationData.latest.wind_speed_max !== null ? stationData.latest.wind_speed_max.toFixed(1) : '—'"></span>
+                                                    <span class="rp-station-metric-unit">km/h</span>
+                                                    <span class="rp-station-metric-lbl">Rafales</span>
+                                                </div>
+                                            </div>
+
+                                            <div class="rp-station-metrics-sec">
+                                                <template x-if="stationData.latest.temperature !== null">
+                                                    <div class="rp-station-pill"><span class="rp-station-pill-lbl">Temp.</span><span class="rp-station-pill-val" x-text="stationData.latest.temperature.toFixed(1) + '°C'"></span></div>
+                                                </template>
+                                                <template x-if="stationData.latest.humidity !== null">
+                                                    <div class="rp-station-pill"><span class="rp-station-pill-lbl">Hum.</span><span class="rp-station-pill-val" x-text="stationData.latest.humidity + '%'"></span></div>
+                                                </template>
+                                                <template x-if="stationData.latest.pressure_hpa !== null">
+                                                    <div class="rp-station-pill"><span class="rp-station-pill-lbl">Pression</span><span class="rp-station-pill-val" x-text="stationData.latest.pressure_hpa.toFixed(1) + ' hPa'"></span></div>
+                                                </template>
+                                                <template x-if="stationData.latest.precipitation_mm !== null">
+                                                    <div class="rp-station-pill"><span class="rp-station-pill-lbl">Précip.</span><span class="rp-station-pill-val" x-text="stationData.latest.precipitation_mm.toFixed(1) + ' mm'"></span></div>
+                                                </template>
+                                            </div>
+                                            <div class="rp-station-metrics-sec" style="margin-top:0;">
+                                                <template x-if="stationData.latest.dew_point !== null">
+                                                    <div class="rp-station-pill"><span class="rp-station-pill-lbl">Pt rosée</span><span class="rp-station-pill-val" x-text="stationData.latest.dew_point.toFixed(1) + '°C'"></span></div>
+                                                </template>
+                                                <template x-if="stationData.latest.visibility_m !== null">
+                                                    <div class="rp-station-pill"><span class="rp-station-pill-lbl">Visib.</span><span class="rp-station-pill-val" x-text="(stationData.latest.visibility_m >= 1000 ? (stationData.latest.visibility_m / 1000).toFixed(1) + ' km' : stationData.latest.visibility_m + ' m')"></span></div>
+                                                </template>
+                                                <template x-if="stationData.latest.cloud_cover_pct !== null">
+                                                    <div class="rp-station-pill"><span class="rp-station-pill-lbl">Nébulosité</span><span class="rp-station-pill-val" x-text="stationData.latest.cloud_cover_pct + '%'"></span></div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </template>
+
+                                    {{-- Section 2 : Graphiques SVG --}}
+                                    <div x-show="stationData.readings && stationData.readings.length > 1">
+                                        <div style="padding:8px 18px 4px;">
+                                            <div style="font-size:13px;color:#e5e7eb;margin-bottom:4px;"
+                                                 x-text="stationData.fallback ? 'Vent — dernières 24 h' : 'Vent — relevés du jour'"></div>
+                                            <svg id="station-wind-svg" width="640" height="200" viewBox="0 0 440 140"
+                                                 style="display:block;width:100%;height:auto;overflow:visible;"></svg>
+                                            <div style="display:flex;gap:16px;font-size:11px;color:#9ca3af;margin-top:4px;padding:0 2px;">
+                                                <span><span style="color:#f97316;">▮</span> rafales</span>
+                                                <span><span style="color:#22c55e;">▬</span> moyen</span>
+                                            </div>
+                                        </div>
+
+                                        <template x-if="stationHasTemp">
+                                            <div style="padding:8px 18px 4px;">
+                                                <div style="font-size:13px;color:#e5e7eb;margin-bottom:4px;">Température &amp; Humidité</div>
+                                                <svg id="station-temp-svg" width="640" height="160" viewBox="0 0 440 110"
+                                                     style="display:block;width:100%;height:auto;overflow:visible;"></svg>
+                                                <div style="display:flex;gap:16px;font-size:11px;color:#9ca3af;margin-top:4px;padding:0 2px;">
+                                                    <span><span style="color:#f97316;">—</span> température (°C)</span>
+                                                    <span><span style="color:#60a5fa;">┄</span> humidité (%)</span>
+                                                </div>
+                                            </div>
+                                        </template>
+
+                                        <template x-if="stationHasPressure">
+                                            <div style="padding:8px 18px 4px;">
+                                                <div style="font-size:13px;color:#e5e7eb;margin-bottom:4px;">Pression</div>
+                                                <svg id="station-pressure-svg" width="640" height="120" viewBox="0 0 440 85"
+                                                     style="display:block;width:100%;height:auto;overflow:visible;"></svg>
+                                            </div>
+                                        </template>
+                                    </div>
+
+                                    {{-- Section 3 : Tableau dépliable --}}
+                                    <div x-show="stationData.readings && stationData.readings.length" style="padding:8px 18px 0;">
+                                        <button @click="stationTableOpen = !stationTableOpen"
+                                                style="background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:13px;padding:6px 0;width:100%;text-align:left;display:flex;align-items:center;gap:6px;">
+                                            <span :class="stationTableOpen ? '' : 'collapsed'" style="transition:transform .2s;display:inline-block;"
+                                                  :style="stationTableOpen ? '' : 'transform:rotate(-90deg)'">▾</span>
+                                            <span x-text="'Tableau horaire (' + stationData.readings.length + ' relevés)'"></span>
+                                        </button>
+                                        <div x-show="stationTableOpen" x-cloak class="rp-station-tablewrap">
+                                            <table class="rp-station-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Heure</th><th>Dir</th><th>Moy</th><th>Raf</th><th>T°C</th><th>Hum</th><th>hPa</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <template x-for="r in [...stationData.readings].reverse().slice(0, 50)" :key="r.observed_at">
+                                                        <tr>
+                                                            <td x-text="r.time" style="color:#e5e7eb;"></td>
+                                                            <td><span x-text="r.wind_direction !== null ? r.wind_direction + '°' : '—'"></span></td>
+                                                            <td x-text="r.wind_speed_avg !== null ? r.wind_speed_avg.toFixed(1) : '—'"></td>
+                                                            <td x-text="r.wind_speed_max !== null ? r.wind_speed_max.toFixed(1) : '—'"></td>
+                                                            <td x-text="r.temperature !== null ? r.temperature.toFixed(1) : '—'"></td>
+                                                            <td x-text="r.humidity !== null ? r.humidity + '%' : '—'"></td>
+                                                            <td x-text="r.pressure_hpa !== null ? r.pressure_hpa.toFixed(0) : '—'"></td>
+                                                        </tr>
+                                                    </template>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    <div style="padding:10px 18px;border-top:1px solid rgba(55,65,81,.4);font-size:12px;color:#9ca3af;margin-top:8px;">
+                                        <span x-text="(stationData.readings?.length ?? 0) + (stationData.fallback ? ' relevé(s) sur 24 h' : ' relevé(s) aujourd\'hui')"></span>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <template x-if="!stationLoading && !stationData">
+                                <div class="rp-placeholder">Données indisponibles pour cette station.</div>
+                            </template>
+                        </div>
+
+                    </div>
+                </template>
+
 
             </div>

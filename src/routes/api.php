@@ -29,6 +29,7 @@ Route::prefix('balises')->group(function () {
 });
 
 Route::get('weather-stations', [WeatherStationController::class, 'index']);
+Route::get('weather-stations/{id}/detail', [WeatherStationController::class, 'detail']);
 
 // ── Scorings perso de l'utilisateur authentifié ──────────────────
 // Routes sous `auth:web` car on partage le cookie de session du site

@@ -81,6 +81,8 @@ function mapApp(){return{
     _stationsTimer:null,
     _stationsAbort:null,
     _stationsMoveTimer:null,  // debounce pour rechargement bbox au pan/zoom
+    // Volet droit (station) : relevés + historique du jour
+    stationData:null, stationLoading:false, _stationObj:null, stationTableOpen:false,
 
     // Configuration des graphes exposée pour le template
     CHART_CONFIGS,
@@ -215,6 +217,7 @@ function mapApp(){return{
         this.multimodelData=null; this.multimodel5Data=null;
         this._multimodelByDay={};
         this.baliseData=null; this._baliseObj=null;
+        this.stationData=null; this._stationObj=null;
         this._clearAllMarkerSelection();
     },
 
@@ -1005,6 +1008,7 @@ function mapApp(){return{
             const icon   = L.icon({iconUrl:stationIconUrl(netKey, fKey),iconSize:[24,24],iconAnchor:[12,12]});
             const m = L.marker([s.lat,s.lng],{icon})
                 .bindTooltip(stationTooltipHtml(s),{direction:'top',offset:[0,-14],opacity:.95});
+            m.on('click',(e)=>{L.DomEvent.stopPropagation(e);this.clickStation(s.id,m.getElement());});
             m._netKey = netKey;
             this._stationsMarkers[s.id] = m;
             if(!byNet[netKey]) byNet[netKey] = [];
@@ -1017,6 +1021,58 @@ function mapApp(){return{
             if(byNet[net.key]?.length) layer.addLayers(byNet[net.key]);
         }
     },
+    // ── Clic sur une station météo → volet droit (relevés + historique du jour) ──
+    clickStation(id, markerEl){
+        const s=this.weatherStations.find(x=>x.id===id);
+        if(!s) return;
+        this._clearAllMarkerSelection();
+        this.site={};
+        this._stationObj=s;
+        this.selectedFeature={type:'station', ...s};
+        this.chartData=null; this.multimodelData=null; this.multimodel5Data=null;
+        this.baliseData=null; this._baliseObj=null;
+        this.stationData=null; this.stationTableOpen=false;
+        this.openRightPanel();
+        this.loadStationDetail(id);
+    },
+    async loadStationDetail(id){
+        this.stationLoading=true;
+        try{
+            const res=await fetch(`/api/weather-stations/${id}/detail`);
+            this.stationData=await res.json();
+        }catch(e){console.error('station detail failed',e);}
+        this.stationLoading=false;
+        this.$nextTick(()=>this.renderStationCharts());
+    },
+    renderStationCharts(){
+        if(!this.stationData?.readings?.length) return;
+        buildStationWindSVG(this.stationData);
+        buildStationTempSVG(this.stationData);
+        buildStationPressureSVG(this.stationData);
+    },
+    get stationNetworkLabel(){
+        const net = this.selectedFeature?.network ?? this._stationObj?.network ?? '';
+        const map = {mf:'Météo-France',metar:'METAR',infoclimat:'Infoclimat'};
+        return map[net] ?? net.toUpperCase();
+    },
+    get stationFreshness(){
+        return formatAge(this.stationData?.latest?.observed_at ?? this._stationObj?.reading?.observed_at);
+    },
+    get stationFreshnessClass(){
+        const ts = this.stationData?.latest?.observed_at ?? this._stationObj?.reading?.observed_at;
+        if(!ts) return 'dead';
+        const age = (Date.now() - new Date(ts).getTime()) / 60000;
+        if(age < 30) return 'fresh';
+        if(age < 120) return 'stale';
+        return 'dead';
+    },
+    get stationHasTemp(){
+        return (this.stationData?.readings ?? []).some(r => r.temperature !== null);
+    },
+    get stationHasPressure(){
+        return (this.stationData?.readings ?? []).some(r => r.pressure_hpa !== null);
+    },
+
     toggleStationNetwork(key){
         if(!(key in this.stationNetworksVisible)) return;
         this.stationNetworksVisible[key] = !this.stationNetworksVisible[key];

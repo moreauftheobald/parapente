@@ -145,6 +145,37 @@
         .rp-balise-dial svg { display:block; width:100%; height:auto; overflow:visible; }
         .rp-balise-leg  { flex:0 1 230px; min-width:0; font-size:12px; color:#9ca3af; line-height:1.6; }
 
+        /* ── Station météo (volet droit) ── */
+        .rp-station-now { padding:14px 18px 10px; }
+        .rp-station-now-header { display:flex; align-items:center; gap:8px; font-size:12px; color:#9ca3af; margin-bottom:14px; }
+        .rp-station-freshness-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+        .rp-station-fresh-fresh { background:#22c55e; }
+        .rp-station-fresh-stale { background:#f59e0b; }
+        .rp-station-fresh-dead  { background:#ef4444; }
+
+        .rp-station-metrics-main { display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+        .rp-station-metric { display:flex; flex-direction:column; align-items:center; gap:2px; }
+        .rp-station-metric-dir { flex:0 0 auto; }
+        .rp-station-metric-big { font-size:28px; font-weight:600; color:#fff; font-family:var(--font-mono); line-height:1; }
+        .rp-station-metric-unit { font-size:11px; color:#9ca3af; }
+        .rp-station-metric-val  { font-family:var(--font-mono); font-size:11px; color:#cbd5e1; margin-top:2px; }
+        .rp-station-metric-lbl  { font-size:11px; color:#6b7280; }
+        .rp-station-gust { color:#f97316; }
+
+        .rp-station-metrics-sec { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+        .rp-station-pill { display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border-radius:8px; background:rgba(31,41,55,.5); border:1px solid rgba(55,65,81,.4); font-family:var(--font-mono); font-size:12px; }
+        .rp-station-pill-lbl { color:#9ca3af; }
+        .rp-station-pill-val { color:#e5e7eb; }
+
+        .rp-station-tablewrap { overflow-x:auto; background:rgba(13,27,38,.4); border:1px solid rgba(55,65,81,.3); border-radius:8px; margin-top:4px; max-height:300px; overflow-y:auto; }
+        .rp-station-tablewrap::-webkit-scrollbar { height:6px; width:6px; }
+        .rp-station-tablewrap::-webkit-scrollbar-track { background:rgba(55,65,81,.3); }
+        .rp-station-tablewrap::-webkit-scrollbar-thumb { background:#38bdf8; border-radius:3px; }
+        .rp-station-table { border-collapse:collapse; width:100%; font-size:11px; font-family:var(--font-mono); }
+        .rp-station-table th { padding:6px 8px; text-align:center; color:#9ca3af; font-weight:500; border-bottom:1px solid rgba(55,65,81,.5); background:rgba(17,24,39,.6); position:sticky; top:0; }
+        .rp-station-table td { padding:4px 8px; text-align:center; color:#cbd5e1; border-bottom:1px solid rgba(55,65,81,.2); }
+        .rp-station-table tbody tr:hover { background:rgba(56,189,248,.06); }
+
         /* Le sélecteur de jour vit dans la 1ère .lp-section de l'onglet
            Paramètres (cf. left-panel.blade.php). Le bouton flottant qui
            était sur la carte a été supprimé (problèmes de positionnement
