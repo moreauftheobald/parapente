@@ -165,7 +165,7 @@ class MfStationBackfill extends Command
             $bar->advance();
 
             if ($i < count($slots) - 1) {
-                sleep($sleepSeconds);
+                usleep($sleepMs * 1000);
             }
         }
 
