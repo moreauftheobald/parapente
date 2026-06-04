@@ -91,7 +91,6 @@ class FetchInfoclimatStationReadingsJob extends FetchWeatherStationReadingsJob
                     'dew_point'          => $r['dew_point'] ?? null,
                     'raw_data'           => isset($r['raw_data']) ? json_encode($r['raw_data']) : null,
                     'created_at'         => now()->format('Y-m-d H:i:s'),
-                    'updated_at'         => now()->format('Y-m-d H:i:s'),
                 ];
             }
 
