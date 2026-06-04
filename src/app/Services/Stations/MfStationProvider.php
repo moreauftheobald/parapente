@@ -73,7 +73,10 @@ class MfStationProvider implements StationProviderInterface
     }
 
     /**
-     * Fetch horaire : /paquet/stations/horaire → toutes les stations, 1 appel.
+     * Fetch infrahoraire : /paquet/stations/infrahoraire-6m → toutes les
+     * stations, 2 appels par run (2 slots de 6 min dans la fenêtre de 12 min).
+     * Appelé toutes les 12 min à +9 min du slot pair (ex: xx:09 → xx:00 + xx:06).
+     * Coût : 10 appels/heure (quota MF = 100 req/h).
      */
     public function fetchLatestReadings(): array
     {
@@ -84,42 +87,64 @@ class MfStationProvider implements StationProviderInterface
 
         $token = $api->getOAuth2Token();
 
-        $date = now()->startOfHour()->format('Y-m-d\TH:i:s\Z');
+        $now = now();
+        $latestMinute = (int) floor($now->minute / 6) * 6;
+        $previousMinute = $latestMinute - 6;
 
-        $resp = Http::timeout(self::TIMEOUT_S)
-            ->withToken($token)
-            ->accept('*/*')
-            ->get(self::OBS_API_BASE . '/paquet/stations/horaire', [
-                'format' => 'json',
-                'date'   => $date,
+        $dates = [];
+        if ($previousMinute >= 0) {
+            $dates[] = $now->copy()->minute($previousMinute)->second(0)->format('Y-m-d\TH:i:s\Z');
+        } else {
+            $dates[] = $now->copy()->subHour()->minute(54)->second(0)->format('Y-m-d\TH:i:s\Z');
+        }
+        $dates[] = $now->copy()->minute($latestMinute)->second(0)->format('Y-m-d\TH:i:s\Z');
+
+        $result = [];
+
+        foreach ($dates as $date) {
+            $resp = Http::timeout(self::TIMEOUT_S)
+                ->withToken($token)
+                ->accept('*/*')
+                ->get(self::OBS_API_BASE . '/paquet/stations/infrahoraire-6m', [
+                    'format' => 'json',
+                    'date'   => $date,
+                ]);
+
+            $api->incrementRequestsToday();
+
+            if (! $resp->ok()) {
+                $msg = "MF infrahoraire-6m HTTP {$resp->status()} (date={$date})";
+                Log::warning($msg, ['body' => mb_substr($resp->body(), 0, 500)]);
+                $api->recordError($msg);
+                continue;
+            }
+
+            $api->recordSuccess();
+
+            $data = $resp->json();
+
+            if (! is_array($data)) {
+                Log::warning('MF infrahoraire-6m: réponse non-JSON', [
+                    'date'         => $date,
+                    'body_preview' => mb_substr($resp->body(), 0, 500),
+                ]);
+                continue;
+            }
+
+            $parsed = $this->parseObservations($data);
+
+            Log::info('MF infrahoraire-6m: OK', [
+                'date'      => $date,
+                'raw_items' => count($data),
+                'parsed'    => count($parsed),
             ]);
 
-        $api->incrementRequestsToday();
-
-        if (! $resp->ok()) {
-            $msg = "MF paquet/stations/horaire HTTP {$resp->status()}";
-            Log::warning($msg, ['body' => mb_substr($resp->body(), 0, 500)]);
-            $api->recordError($msg);
-            return [];
+            foreach ($parsed as $stationId => $reading) {
+                if (! isset($result[$stationId]) || $reading['observed_at']->gt($result[$stationId]['observed_at'])) {
+                    $result[$stationId] = $reading;
+                }
+            }
         }
-
-        $api->recordSuccess();
-
-        $data = $resp->json();
-
-        if (! is_array($data)) {
-            Log::warning('MF paquet/stations/horaire: réponse non-JSON', [
-                'body_preview' => mb_substr($resp->body(), 0, 500),
-            ]);
-            return [];
-        }
-
-        $result = $this->parseObservations($data);
-
-        Log::info('MF paquet/stations/horaire: OK', [
-            'raw_items' => is_array($data) ? count($data) : 0,
-            'parsed'    => count($result),
-        ]);
 
         return $result;
     }

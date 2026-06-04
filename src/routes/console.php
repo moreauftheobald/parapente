@@ -51,11 +51,14 @@ Schedule::job(FetchMetarStationReadingsJob::class)
     ->name('fetch-metar-stations')
     ->withoutOverlapping();
 
-// Polling Météo-France (observations horaires) toutes les heures
-//   - 1 appel HTTP → toutes les stations MF de France (/paquet/stations/horaire)
+// Polling Météo-France (infrahoraire 6m) toutes les 12 minutes
+//   - 2 appels HTTP par run (2 slots de 6 min) → toutes les stations MF
+//   - Cadence : xx:09, xx:21, xx:33, xx:45, xx:57
+//     ex: xx:09 fetche xx:00 + xx:06 (délai +3 min pour publication MF)
+//   - 10 appels/heure (quota MF = 100 req/h)
 //   - Activé via /admin/station-apis (API MF = active + credentials OAuth2)
 Schedule::job(FetchMfStationReadingsJob::class)
-    ->hourly()
+    ->cron('9,21,33,45,57 * * * *')
     ->name('fetch-mf-stations')
     ->withoutOverlapping();
 
