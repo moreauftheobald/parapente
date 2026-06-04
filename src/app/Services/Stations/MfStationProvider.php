@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Log;
  * - GET /paquet/stations/horaire    → observations horaires de toutes les stations
  *
  * Auth : OAuth2 client_credentials via StationApi::getOAuth2Token().
- * Quota : 100 req/min (très confortable pour 1-2 req/heure).
+ * Quota : 100 req/min (très confortable pour ~10 req/heure en nominal).
  */
 class MfStationProvider implements StationProviderInterface
 {
@@ -76,7 +76,7 @@ class MfStationProvider implements StationProviderInterface
      * Fetch infrahoraire : /paquet/stations/infrahoraire-6m → toutes les
      * stations, 2 appels par run (2 slots de 6 min dans la fenêtre de 12 min).
      * Appelé toutes les 12 min à +9 min du slot pair (ex: xx:09 → xx:00 + xx:06).
-     * Coût : 10 appels/heure (quota MF = 100 req/h).
+     * Coût : 10 appels/heure (quota MF = 100 req/min).
      */
     public function fetchLatestReadings(): array
     {

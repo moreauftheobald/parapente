@@ -55,7 +55,7 @@ Schedule::job(FetchMetarStationReadingsJob::class)
 //   - 2 appels HTTP par run (2 slots de 6 min) → toutes les stations MF
 //   - Cadence : xx:09, xx:21, xx:33, xx:45, xx:57
 //     ex: xx:09 fetche xx:00 + xx:06 (délai +3 min pour publication MF)
-//   - 10 appels/heure (quota MF = 100 req/h)
+//   - 10 appels/heure (quota MF = 100 req/min)
 //   - Activé via /admin/station-apis (API MF = active + credentials OAuth2)
 Schedule::job(FetchMfStationReadingsJob::class)
     ->cron('9,21,33,45,57 * * * *')

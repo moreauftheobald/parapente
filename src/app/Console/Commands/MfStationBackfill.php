@@ -17,7 +17,7 @@ class MfStationBackfill extends Command
     protected $signature = 'mf:backfill
         {--from= : Date/heure de début (ex: 2026-06-04T06:00)}
         {--to=   : Date/heure de fin (ex: 2026-06-04T18:00, défaut = maintenant)}
-        {--rate=50 : Nombre max de requêtes API par heure (défaut 50, max 60)}
+        {--rate=80 : Nombre max de requêtes API par minute (défaut 80, max 90)}
         {--dry-run : Afficher les slots sans appeler l\'API}';
 
     protected $description = 'Backfill historique des observations MF infrahoraire-6m sur une période';
@@ -38,8 +38,8 @@ class MfStationBackfill extends Command
             : now()->second(0);
         $to->minute((int) floor($to->minute / 6) * 6);
 
-        $rate = min(60, max(1, (int) $this->option('rate')));
-        $sleepSeconds = (int) ceil(3600 / $rate);
+        $ratePerMin = min(90, max(1, (int) $this->option('rate')));
+        $sleepMs = (int) ceil(60000 / $ratePerMin);
 
         $slots = [];
         $cursor = $from->copy();
@@ -50,10 +50,11 @@ class MfStationBackfill extends Command
 
         $this->info("Période : {$from->format('Y-m-d H:i')} → {$to->format('Y-m-d H:i')}");
         $this->info("Slots de 6 min : " . count($slots));
-        $this->info("Rate limit : {$rate} req/h → pause {$sleepSeconds}s entre chaque appel");
+        $this->info("Rate limit : {$ratePerMin} req/min → pause {$sleepMs}ms entre chaque appel");
 
-        $estimatedMinutes = (int) ceil(count($slots) * $sleepSeconds / 60);
-        $this->info("Durée estimée : ~{$estimatedMinutes} min");
+        $estimatedSeconds = (int) ceil(count($slots) * $sleepMs / 1000);
+        $estimatedMinutes = (int) ceil($estimatedSeconds / 60);
+        $this->info("Durée estimée : ~{$estimatedMinutes} min ({$estimatedSeconds}s)");
 
         if ($this->option('dry-run')) {
             $this->newLine();
@@ -64,7 +65,7 @@ class MfStationBackfill extends Command
             return self::SUCCESS;
         }
 
-        if (! $this->confirm("Lancer le backfill de " . count($slots) . " slots (~{$estimatedMinutes} min) ?")) {
+        if (! $this->confirm("Lancer le backfill de " . count($slots) . " slots (~{$estimatedSeconds}s) ?")) {
             return self::SUCCESS;
         }
 
@@ -102,7 +103,7 @@ class MfStationBackfill extends Command
                 $bar->setMessage("ERREUR {$date}: {$e->getMessage()}");
                 $bar->advance();
                 if ($i < count($slots) - 1) {
-                    sleep($sleepSeconds);
+                    usleep($sleepMs * 1000);
                 }
                 continue;
             }
@@ -110,7 +111,7 @@ class MfStationBackfill extends Command
             if (empty($readings)) {
                 $bar->advance();
                 if ($i < count($slots) - 1) {
-                    sleep($sleepSeconds);
+                    usleep($sleepMs * 1000);
                 }
                 continue;
             }
