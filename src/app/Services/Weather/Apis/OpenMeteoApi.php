@@ -347,7 +347,7 @@ class OpenMeteoApi implements WeatherApiInterface
         return $result;
     }
 
-    private function fetchStationBatchChunk(array $points, WeatherModel $model): array
+    public function fetchStationBatchChunk(array $points, WeatherModel $model): array
     {
         $lats = array_map(fn ($p) => (string) $p['lat'], $points);
         $lngs = array_map(fn ($p) => (string) $p['lng'], $points);
