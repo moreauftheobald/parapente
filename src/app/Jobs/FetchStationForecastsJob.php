@@ -33,7 +33,7 @@ class FetchStationForecastsJob implements ShouldQueue
 {
     use Queueable;
 
-    public int $timeout = 300;
+    public int $timeout = 600;
     public int $tries   = 2;
 
     private const MAX_HORIZON_HOURS = 72;
@@ -41,6 +41,7 @@ class FetchStationForecastsJob implements ShouldQueue
     public function handle(OpenMeteoApi $openMeteo): void
     {
         $stations = WeatherStation::active()
+            ->withWindSensor()
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
             ->get();
@@ -74,7 +75,13 @@ class FetchStationForecastsJob implements ShouldQueue
         $fetchedAt = Carbon::now();
         $totalUpsert = 0;
 
+        Log::info('FetchStationForecastsJob: starting', [
+            'stations' => count($points),
+            'models'   => $models->pluck('code')->all(),
+        ]);
+
         foreach ($models as $model) {
+            $modelStart = microtime(true);
             $openMeteo->setConfig($model->api);
 
             $batch = $openMeteo->fetchBatchForStations($points, $model);
@@ -147,6 +154,12 @@ class FetchStationForecastsJob implements ShouldQueue
                 $modelRows   += count($chunk);
                 $totalUpsert += count($chunk);
             }
+
+            $elapsed = round(microtime(true) - $modelStart, 1);
+            Log::info("FetchStationForecastsJob: model {$model->code}", [
+                'rows'    => $modelRows,
+                'elapsed' => "{$elapsed}s",
+            ]);
 
             WeatherFetchLog::create([
                 'weather_model_id' => $model->id,
