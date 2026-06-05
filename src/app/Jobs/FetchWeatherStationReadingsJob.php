@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\TracksExecution;
 use App\Models\StationApi;
 use App\Models\WeatherStation;
 use App\Models\WeatherStationObservation;
@@ -27,6 +28,7 @@ use Illuminate\Support\Facades\Log;
 abstract class FetchWeatherStationReadingsJob implements ShouldQueue
 {
     use Queueable;
+    use TracksExecution;
 
     public int $tries = 2;
 
@@ -42,10 +44,18 @@ abstract class FetchWeatherStationReadingsJob implements ShouldQueue
         return true;
     }
 
+    protected function monitorGroup(): string
+    {
+        return 'stations';
+    }
+
     public function handle(): void
     {
+        $this->trackStart();
+
         $api = StationApi::where('code', $this->network())->first();
         if (! $api || ! $api->active) {
+            $this->trackSuccess('API inactive ou manquante');
             Log::info(static::class . ': API inactive or missing, skipping');
             return;
         }
@@ -61,6 +71,7 @@ abstract class FetchWeatherStationReadingsJob implements ShouldQueue
             if ($this->warnOnEmptyBatch()) {
                 Log::warning(static::class . ': empty readings batch');
             }
+            $this->trackSuccess('Lot vide');
             $api->incrementRequestsToday();
             return;
         }
@@ -180,6 +191,8 @@ abstract class FetchWeatherStationReadingsJob implements ShouldQueue
         $api->incrementRequestsToday();
         $api->recordSuccess();
 
+        $this->trackSuccess("{$inserted} obs insérées, {$deactivated} désactivées", ['inserted' => $inserted, 'deactivated' => $deactivated, 'skipped_dedup' => $skippedDedup, 'polled' => $stations->count()]);
+
         Log::info(static::class . ' completed', [
             'observations_inserted'  => $inserted,
             'skipped_no_reading'     => $skippedNoReading,
@@ -187,6 +200,11 @@ abstract class FetchWeatherStationReadingsJob implements ShouldQueue
             'stations_deactivated'   => $deactivated,
             'stations_polled'        => $stations->count(),
         ]);
+    }
+
+    public function failed(\Throwable $e): void
+    {
+        $this->trackFailure($e);
     }
 
     private function lastObsCacheKey(): string

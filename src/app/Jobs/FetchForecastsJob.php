@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\TracksExecution;
 use App\Models\Site;
 use App\Models\WeatherModel;
 use App\Services\Weather\Apis\ConsensusApi;
@@ -41,14 +42,23 @@ use Illuminate\Support\Facades\Log;
 class FetchForecastsJob implements ShouldQueue
 {
     use Queueable;
+    use TracksExecution;
 
     public int $timeout = 60;
     public int $tries   = 3;
 
+    protected function monitorGroup(): string
+    {
+        return 'sites';
+    }
+
     public function handle(): void
     {
+        $this->trackStart();
+
         $sites = Site::active()->with('conditions')->get();
         if ($sites->isEmpty()) {
+            $this->trackSuccess('Aucun site actif');
             Log::info('FetchForecastsJob: aucun site actif.');
             return;
         }
@@ -81,6 +91,7 @@ class FetchForecastsJob implements ShouldQueue
         // même une passe de scoring (chaînes = [ScoreSiteJob]) pour répercuter
         // le consensus horaire frais sur les scores.
         if ($dueModels->isEmpty() && ! $dispatchConsensus) {
+            $this->trackSuccess('Aucun modèle dû pour refresh');
             Log::info('FetchForecastsJob: aucun modèle dû pour refresh.');
             return;
         }
@@ -112,6 +123,7 @@ class FetchForecastsJob implements ShouldQueue
         }
 
         if (empty($chains)) {
+            $this->trackSuccess('Aucun site éligible (pas de conditions)');
             Log::info('FetchForecastsJob: aucun site éligible (pas de conditions).');
             return;
         }
@@ -140,9 +152,16 @@ class FetchForecastsJob implements ShouldQueue
             $model->save();
         }
 
+        $this->trackSuccess(count($chains) . " chaîne(s), {$dueModels->count()} modèle(s) × {$sites->count()} site(s)", ['chains' => count($chains), 'models' => $dueModels->count(), 'sites' => $sites->count()]);
+
         Log::info(
             'FetchForecastsJob: batch dispatché ('
             . count($chains) . " chaîne(s), {$dueModels->count()} modèle(s) × {$sites->count()} site(s))."
         );
+    }
+
+    public function failed(\Throwable $e): void
+    {
+        $this->trackFailure($e);
     }
 }

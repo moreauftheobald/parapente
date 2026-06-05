@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\TracksExecution;
 use App\Services\Map\MapBundleBuilder;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -33,6 +34,7 @@ use Illuminate\Support\Facades\Log;
 class RebuildMapBundleJob implements ShouldQueue, ShouldBeUnique
 {
     use Queueable;
+    use TracksExecution;
 
     public int $timeout = 60;
     public int $tries   = 2;
@@ -45,15 +47,29 @@ class RebuildMapBundleJob implements ShouldQueue, ShouldBeUnique
         return 'rebuild-map-bundle';
     }
 
+    protected function monitorGroup(): string
+    {
+        return 'sites';
+    }
+
     public function handle(MapBundleBuilder $builder, CacheRepository $cache): void
     {
+        $this->trackStart();
+
         $bundle = $builder->build();
         $cache->put(MapBundleBuilder::cacheKey(), $bundle, MapBundleBuilder::CACHE_TTL_SECONDS);
+
+        $this->trackSuccess(count($bundle['sites'] ?? []) . ' sites, ' . count($bundle['days_summary'] ?? []) . ' jours');
 
         Log::info(
             'RebuildMapBundleJob: cache écrit, '
             . count($bundle['sites'] ?? []) . ' sites, '
             . count($bundle['days_summary'] ?? []) . ' jours.'
         );
+    }
+
+    public function failed(\Throwable $e): void
+    {
+        $this->trackFailure($e);
     }
 }

@@ -8,6 +8,7 @@ use App\Models\Balise;
 use App\Models\BaliseReading;
 use App\Services\Balises\BaliseConstants;
 use App\Services\Balises\BaliseProviderInterface;
+use App\Jobs\Concerns\TracksExecution;
 use App\Services\Map\BalisesBundleCache;
 use Carbon\Carbon;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -36,6 +37,7 @@ use Illuminate\Support\Facades\Log;
 abstract class FetchBaliseReadingsJob implements ShouldQueue
 {
     use Queueable;
+    use TracksExecution;
 
     public int $tries = 2;
 
@@ -68,13 +70,20 @@ abstract class FetchBaliseReadingsJob implements ShouldQueue
         return true;
     }
 
+    protected function monitorGroup(): string
+    {
+        return 'balises';
+    }
+
     public function handle(BalisesBundleCache $cache): void
     {
+        $this->trackStart();
         $readings = $this->provider()->fetchLatestReadings();
         if (empty($readings)) {
             if ($this->warnOnEmptyBatch()) {
                 Log::warning(static::class . ': empty readings batch');
             }
+            $this->trackSuccess('Aucune lecture');
             return;
         }
 
@@ -142,11 +151,18 @@ abstract class FetchBaliseReadingsJob implements ShouldQueue
         // Le bundle servi par /api/balises est désormais obsolète : purge.
         $cache->forgetBundle();
 
+        $this->trackSuccess("{$inserted} lectures insérées, {$deactivated} désactivées", ['inserted' => $inserted, 'deactivated' => $deactivated, 'polled' => $balises->count()]);
+
         Log::info(static::class . ' completed', [
             'readings_inserted'   => $inserted,
             'balises_deactivated' => $deactivated,
             'balises_polled'      => $balises->count(),
         ]);
+    }
+
+    public function failed(\Throwable $e): void
+    {
+        $this->trackFailure($e);
     }
 
     private function lastReadingCacheKey(): string

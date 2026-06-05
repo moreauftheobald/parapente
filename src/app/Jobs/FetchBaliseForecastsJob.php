@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\TracksExecution;
 use App\Models\Balise;
 use App\Models\WeatherApi;
 use App\Models\WeatherFetchLog;
@@ -38,6 +39,7 @@ use Illuminate\Support\Facades\Log;
 class FetchBaliseForecastsJob implements ShouldQueue
 {
     use Queueable;
+    use TracksExecution;
 
     public int $timeout = 300;
     public int $tries   = 2;
@@ -45,8 +47,14 @@ class FetchBaliseForecastsJob implements ShouldQueue
     /** Au-delà, on n'archive plus (voting logic dynamique limitée à J+2) */
     private const MAX_HORIZON_HOURS = 72;
 
+    protected function monitorGroup(): string
+    {
+        return 'balises';
+    }
+
     public function handle(OpenMeteoApi $openMeteo): void
     {
+        $this->trackStart();
         $balises = Balise::active()
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
@@ -54,6 +62,7 @@ class FetchBaliseForecastsJob implements ShouldQueue
 
         if ($balises->isEmpty()) {
             Log::info('FetchBaliseForecastsJob: no active balise');
+            $this->trackSuccess('Aucune balise active');
             return;
         }
 
@@ -73,6 +82,7 @@ class FetchBaliseForecastsJob implements ShouldQueue
 
         if ($omApiIds->isEmpty()) {
             Log::warning('FetchBaliseForecastsJob: aucune WeatherApi Open-Meteo active.');
+            $this->trackSuccess('Aucune API Open-Meteo active');
             return;
         }
 
@@ -170,6 +180,8 @@ class FetchBaliseForecastsJob implements ShouldQueue
             ]);
         }
 
+        $this->trackSuccess("{$balises->count()} balises, {$models->count()} modèles, {$totalUpsert} rows", ['balises' => $balises->count(), 'models' => $models->count(), 'rows_upserted' => $totalUpsert]);
+
         Log::info('FetchBaliseForecastsJob completed', [
             'balises_count' => $balises->count(),
             'models_count'  => $models->count(),
@@ -181,6 +193,11 @@ class FetchBaliseForecastsJob implements ShouldQueue
      * Map heure d'horizon → bucket. Cohérent avec le futur calcul
      * d'accuracy (cf. RELIABILITY_SYSTEM.md à venir).
      */
+    public function failed(\Throwable $e): void
+    {
+        $this->trackFailure($e);
+    }
+
     private function bucketFor(int $horizonH): string
     {
         if ($horizonH <= 6)  return 'nowcast';

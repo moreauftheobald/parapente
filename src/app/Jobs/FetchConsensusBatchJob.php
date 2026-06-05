@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\TracksExecution;
 use App\Models\Forecast;
 use App\Models\Site;
 use App\Models\WeatherModel;
@@ -34,6 +35,7 @@ use Illuminate\Support\Facades\Log;
 class FetchConsensusBatchJob implements ShouldQueue
 {
     use Queueable;
+    use TracksExecution;
 
     public int $timeout = 600;
     public int $tries   = 1;
@@ -44,24 +46,34 @@ class FetchConsensusBatchJob implements ShouldQueue
     /** Circuit breaker : nb d'échecs de chunk consécutifs avant abandon. */
     private const MAX_CONSECUTIVE_FAILURES = 3;
 
+    protected function monitorGroup(): string
+    {
+        return 'sites';
+    }
+
     public function handle(WeatherApiRegistry $registry): void
     {
+        $this->trackStart();
+
         $model = WeatherModel::with('api')
             ->where('active', true)
             ->where('code', ConsensusApi::MODEL_CODE)
             ->first();
 
         if (! $model) {
+            $this->trackSuccess('Modèle consensus inactif/absent');
             Log::info('FetchConsensusBatchJob: modèle consensus inactif/absent — rien à faire.');
             return;
         }
         if (! $model->api || ! $model->api->active) {
+            $this->trackSuccess('API consensus inactive');
             Log::info('FetchConsensusBatchJob: API consensus inactive — rien à faire.');
             return;
         }
 
         $impl = $registry->for($model->api);
         if (! $impl instanceof ConsensusApi) {
+            $this->trackSuccess('Implémentation inattendue pour l\'API consensus');
             Log::warning('FetchConsensusBatchJob: implémentation inattendue pour l\'API consensus.');
             return;
         }
@@ -72,6 +84,7 @@ class FetchConsensusBatchJob implements ShouldQueue
             ->get(['id', 'latitude', 'longitude']);
 
         if ($sites->isEmpty()) {
+            $this->trackSuccess('Aucun site actif');
             Log::info('FetchConsensusBatchJob: aucun site actif.');
             return;
         }
@@ -146,11 +159,18 @@ class FetchConsensusBatchJob implements ShouldQueue
         $model->last_fetch_at = now();
         $model->save();
 
+        $this->trackSuccess("{$sites->count()} sites, {$okChunks} chunks, {$totalRows} rows", ['sites' => $sites->count(), 'chunks_ok' => $okChunks, 'rows' => $totalRows]);
+
         Log::info('FetchConsensusBatchJob terminé', [
             'sites'      => $sites->count(),
             'chunks_ok'  => $okChunks,
             'rows'       => $totalRows,
         ]);
+    }
+
+    public function failed(\Throwable $e): void
+    {
+        $this->trackFailure($e);
     }
 
     /**

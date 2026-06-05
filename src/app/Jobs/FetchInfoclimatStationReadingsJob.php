@@ -38,8 +38,11 @@ class FetchInfoclimatStationReadingsJob extends FetchWeatherStationReadingsJob
 
     public function handle(): void
     {
+        $this->trackStart();
+
         $api = StationApi::where('code', $this->network())->first();
         if (! $api || ! $api->active) {
+            $this->trackSuccess('API inactive ou manquante');
             Log::info(static::class . ': API inactive or missing, skipping');
             return;
         }
@@ -55,6 +58,7 @@ class FetchInfoclimatStationReadingsJob extends FetchWeatherStationReadingsJob
         }
 
         if (empty($latestReadings)) {
+            $this->trackSuccess('Lot vide');
             Log::warning(static::class . ': empty readings batch');
             return;
         }
@@ -114,6 +118,8 @@ class FetchInfoclimatStationReadingsJob extends FetchWeatherStationReadingsJob
                   ->orWhere('last_obs_at', '<', $deadCutoff);
             })
             ->update(['active' => false]);
+
+        $this->trackSuccess("{$inserted} obs insérées, {$deactivated} désactivées", ['inserted' => $inserted, 'deactivated' => $deactivated, 'polled' => $stations->count()]);
 
         Log::info(static::class . ' completed', [
             'observations_inserted'  => $inserted,

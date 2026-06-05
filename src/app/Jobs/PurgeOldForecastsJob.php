@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Models\Forecast;
+use App\Models\JobMonitor;
 use App\Models\SiteScore;
 use Carbon\Carbon;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -68,6 +69,8 @@ class PurgeOldForecastsJob implements ShouldQueue
      */
     private const FETCH_LOG_RETENTION_DAYS = 30;
 
+    private const JOB_MONITOR_RETENTION_DAYS = 7;
+
     public function handle(): void
     {
         $forecastCutoff = Carbon::now()->subDays(self::FORECASTS_RETENTION_DAYS)->startOfDay();
@@ -109,6 +112,8 @@ class PurgeOldForecastsJob implements ShouldQueue
                 ->delete();
         }
 
+        $deletedMonitors = JobMonitor::purgeOlderThan(self::JOB_MONITOR_RETENTION_DAYS);
+
         Log::info('PurgeOldForecastsJob completed', [
             'forecasts_deleted'         => $deletedForecasts,
             'site_scores_deleted'       => $deletedScores,
@@ -116,6 +121,7 @@ class PurgeOldForecastsJob implements ShouldQueue
             'archive_stations_deleted'  => $deletedArchiveStations,
             'balise_hourly_deleted'     => $deletedHourly,
             'fetch_log_deleted'         => $deletedFetchLog,
+            'job_monitors_deleted'      => $deletedMonitors,
             'forecast_cutoff'           => $forecastCutoff->toDateTimeString(),
             'archive_cutoff'            => $archiveCutoff->toDateTimeString(),
             'hourly_cutoff'             => $hourlyCutoff->toDateTimeString(),

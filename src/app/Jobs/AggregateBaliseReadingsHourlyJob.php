@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\TracksExecution;
 use App\Models\Balise;
 use Carbon\Carbon;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -30,6 +31,7 @@ use Illuminate\Support\Facades\Log;
 class AggregateBaliseReadingsHourlyJob implements ShouldQueue
 {
     use Queueable;
+    use TracksExecution;
 
     public int $timeout = 120;
     public int $tries   = 2;
@@ -37,8 +39,14 @@ class AggregateBaliseReadingsHourlyJob implements ShouldQueue
     /** Nombre d'heures pleines en arrière à re-agréger à chaque run. */
     private const WINDOW_HOURS = 3;
 
+    protected function monitorGroup(): string
+    {
+        return 'balises';
+    }
+
     public function handle(): void
     {
+        $this->trackStart();
         $now      = Carbon::now();
         $endHour  = (clone $now)->startOfHour();                       // heure courante exclue (incomplète)
         $startHour = (clone $endHour)->subHours(self::WINDOW_HOURS);
@@ -46,6 +54,7 @@ class AggregateBaliseReadingsHourlyJob implements ShouldQueue
         $baliseIds = Balise::active()->pluck('id');
         if ($baliseIds->isEmpty()) {
             Log::info('AggregateBaliseReadingsHourlyJob: no active balise');
+            $this->trackSuccess('Aucune balise active');
             return;
         }
 
@@ -97,6 +106,7 @@ class AggregateBaliseReadingsHourlyJob implements ShouldQueue
                 'window_start' => $startHour->toDateTimeString(),
                 'window_end'   => $endHour->toDateTimeString(),
             ]);
+            $this->trackSuccess('Aucune lecture dans la fenêtre');
             return;
         }
 
@@ -110,12 +120,19 @@ class AggregateBaliseReadingsHourlyJob implements ShouldQueue
             $upserted += count($chunk);
         }
 
+        $this->trackSuccess("{$upserted} lignes agrégées sur {$baliseIds->count()} balises", ['rows_upserted' => $upserted, 'balises' => $baliseIds->count()]);
+
         Log::info('AggregateBaliseReadingsHourlyJob completed', [
             'window_start'   => $startHour->toDateTimeString(),
             'window_end'     => $endHour->toDateTimeString(),
             'balises_count'  => $baliseIds->count(),
             'rows_upserted'  => $upserted,
         ]);
+    }
+
+    public function failed(\Throwable $e): void
+    {
+        $this->trackFailure($e);
     }
 
     /**

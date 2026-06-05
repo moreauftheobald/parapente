@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\TracksExecution;
 use App\Models\WeatherApi;
 use App\Models\WeatherFetchLog;
 use App\Models\WeatherModel;
@@ -25,6 +26,7 @@ use Illuminate\Support\Facades\Log;
 class FetchStationForecastsJob implements ShouldQueue
 {
     use Queueable;
+    use TracksExecution;
 
     public int $timeout = 900;
     public int $tries   = 2;
@@ -32,8 +34,14 @@ class FetchStationForecastsJob implements ShouldQueue
     private const MAX_HORIZON_HOURS = 72;
     private const CHUNK_SIZE        = 20;
 
+    protected function monitorGroup(): string
+    {
+        return 'stations';
+    }
+
     public function handle(OpenMeteoApi $openMeteo): void
     {
+        $this->trackStart();
         ini_set('memory_limit', '1G');
         $points = DB::table('weather_stations')
             ->where('active', true)
@@ -50,6 +58,7 @@ class FetchStationForecastsJob implements ShouldQueue
             ->all();
 
         if (empty($points)) {
+            $this->trackSuccess('Aucune station avec capteur vent');
             Log::info('FetchStationForecastsJob: no active wind-sensor station');
             return;
         }
@@ -59,6 +68,7 @@ class FetchStationForecastsJob implements ShouldQueue
             ->pluck('id', 'id');
 
         if ($omApiIds->isEmpty()) {
+            $this->trackSuccess('Aucune API Open-Meteo active');
             Log::warning('FetchStationForecastsJob: no active Open-Meteo API');
             return;
         }
@@ -158,11 +168,18 @@ class FetchStationForecastsJob implements ShouldQueue
             $totalUpsert += $modelRows;
         }
 
+        $this->trackSuccess("{$totalUpsert} rows, " . count($points) . " stations, {$models->count()} modèles", ['rows_upserted' => $totalUpsert, 'stations' => count($points), 'models' => $models->count()]);
+
         Log::info('FetchStationForecastsJob completed', [
             'stations'      => count($points),
             'models'        => $models->count(),
             'rows_upserted' => $totalUpsert,
         ]);
+    }
+
+    public function failed(\Throwable $e): void
+    {
+        $this->trackFailure($e);
     }
 
     private function bucketFor(int $horizonH): string
