@@ -120,7 +120,7 @@
         @include('admin._coverage-legend')
 
     @elseif ($tab === 'logs')
-        <x-admin.empty-state icon="fa-solid fa-scroll" message="Logs et monitoring des sites — à venir." />
+        @include('admin._monitor-tab')
     @endif
 </div>
 @endsection

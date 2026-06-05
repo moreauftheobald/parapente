@@ -6,7 +6,6 @@ use App\Http\Controllers\Admin\BaliseController as AdminBaliseController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DataQualityController as AdminDataQualityController;
 use App\Http\Controllers\Admin\DataSyncController as AdminSyncController;
-use App\Http\Controllers\Admin\AdminJobMonitorController;
 use App\Http\Controllers\Admin\LogController as AdminLogController;
 use App\Http\Controllers\Admin\ModuleController as AdminModuleController;
 use App\Http\Controllers\Admin\ReliabilityCompareController as AdminReliabilityCompareController;
@@ -230,11 +229,6 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
         // ── Logs / monitoring ─────────────────────────────────────
         Route::get('/logs', [AdminLogController::class, 'index'])->name('logs.index');
-
-        // ── Monitoring jobs par section ──────────────────────────
-        Route::get('/monitor/sites',    [AdminJobMonitorController::class, 'sites'])->name('monitor.sites');
-        Route::get('/monitor/stations', [AdminJobMonitorController::class, 'stations'])->name('monitor.stations');
-        Route::get('/monitor/balises',  [AdminJobMonitorController::class, 'balises'])->name('monitor.balises');
 
         // ── Paramètres généraux (seuils de scoring) ───────────────
         Route::get('/settings',       [AdminSettingsController::class, 'index'])->name('settings.index');

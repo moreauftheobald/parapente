@@ -212,7 +212,7 @@
         @endpush
 
     @elseif ($tab === 'logs')
-        <x-admin.empty-state icon="fa-solid fa-scroll" message="Logs et monitoring des balises — à venir." />
+        @include('admin._monitor-tab')
     @endif
 </div>
 @endsection

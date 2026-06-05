@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Balise;
+use App\Models\JobMonitor;
 use App\Models\ModelVariableOverride;
 use App\Models\Site;
 use App\Services\DataCoverage;
@@ -18,6 +19,29 @@ use Illuminate\View\View;
 
 class SectionSettingsController extends Controller
 {
+    private const MONITOR_PER_PAGE = 50;
+
+    private const MONITOR_JOBS = [
+        'sites' => [
+            'App\Jobs\FetchForecastsJob'      => ['label' => 'Orchestrateur horaire',  'schedule' => 'Toutes les heures'],
+            'App\Jobs\FetchConsensusBatchJob'  => ['label' => 'Consensus batch',        'schedule' => 'Toutes les heures'],
+            'App\Jobs\RebuildMapBundleJob'     => ['label' => 'Rebuild map bundle',     'schedule' => 'Post-scoring'],
+        ],
+        'stations' => [
+            'App\Jobs\FetchMfStationReadingsJob'         => ['label' => 'Météo-France (6min)',  'schedule' => 'xx:09/21/33/45/57'],
+            'App\Jobs\FetchMetarStationReadingsJob'      => ['label' => 'METAR (NOAA)',         'schedule' => 'Toutes les 30 min'],
+            'App\Jobs\FetchInfoclimatStationReadingsJob' => ['label' => 'Infoclimat (StatIC)',  'schedule' => 'Toutes les heures'],
+            'App\Jobs\FetchStationForecastsJob'          => ['label' => 'Archive prévisions',   'schedule' => 'Toutes les heures (:15)'],
+        ],
+        'balises' => [
+            'App\Jobs\FetchPiouPiouReadingsJob'         => ['label' => 'PiouPiou',              'schedule' => 'Toutes les 10 min'],
+            'App\Jobs\FetchMetarReadingsJob'            => ['label' => 'METAR (balises)',        'schedule' => 'Toutes les 30 min'],
+            'App\Jobs\FetchWindyReadingsJob'            => ['label' => 'Windy Open Data',       'schedule' => 'Toutes les 30 min'],
+            'App\Jobs\FetchBaliseForecastsJob'          => ['label' => 'Archive prévisions',    'schedule' => 'Toutes les heures'],
+            'App\Jobs\AggregateBaliseReadingsHourlyJob' => ['label' => 'Agrégation horaire',    'schedule' => 'Toutes les heures (:05)'],
+        ],
+    ];
+
     private const METEO_TABS = [
         'general'       => ['label' => 'Général',           'icon' => 'fa-solid fa-sliders'],
         'data'          => ['label' => 'Data',              'icon' => 'fa-solid fa-cloud-arrow-down'],
@@ -291,6 +315,10 @@ class SectionSettingsController extends Controller
             $data['today']         = CarbonImmutable::now()->startOfDay();
         }
 
+        if ($tab === 'logs') {
+            $data += $this->buildMonitorData('sites', $request);
+        }
+
         return view('admin.sites.settings', $data);
     }
 
@@ -334,6 +362,10 @@ class SectionSettingsController extends Controller
             $data['today']            = CarbonImmutable::now()->startOfDay();
         }
 
+        if ($tab === 'logs') {
+            $data += $this->buildMonitorData('stations', $request);
+        }
+
         return view('admin.weather-stations.settings', $data);
     }
 
@@ -368,6 +400,10 @@ class SectionSettingsController extends Controller
             $data['baliseForecasts'] = $coverage->baliseForecastCoverage();
             $data['baliseReadings']  = $coverage->baliseReadingsCoverage();
             $data['today']           = CarbonImmutable::now()->startOfDay();
+        }
+
+        if ($tab === 'logs') {
+            $data += $this->buildMonitorData('balises', $request);
         }
 
         return view('admin.balises.settings', $data);
@@ -479,6 +515,91 @@ class SectionSettingsController extends Controller
         }
 
         $settings->setMany($values);
+    }
+
+    // ── Monitor helpers ────────────────────────────────────────
+
+    private const MONITOR_BASE_ROUTES = [
+        'sites'    => 'admin.sites.settings',
+        'stations' => 'admin.weather-stations.settings',
+        'balises'  => 'admin.balises.settings',
+    ];
+
+    private function buildMonitorData(string $group, Request $request): array
+    {
+        $jobFilter = $request->input('job');
+        $status    = $request->input('status');
+
+        $query = JobMonitor::where('job_group', $group)
+            ->orderByDesc('started_at');
+
+        if ($jobFilter) {
+            $query->where('job_class', $jobFilter);
+        }
+        if ($status) {
+            $query->where('status', $status);
+        }
+
+        $entries = $query->paginate(self::MONITOR_PER_PAGE)->withQueryString();
+        $summary = $this->buildMonitorSummary($group);
+
+        return [
+            'monitorSummary' => $summary,
+            'monitorEntries' => $entries,
+            'monitorGroup'   => $group,
+            'monitorJob'     => $jobFilter,
+            'monitorStatus'  => $status,
+            'baseRoute'      => self::MONITOR_BASE_ROUTES[$group],
+        ];
+    }
+
+    private function buildMonitorSummary(string $group): array
+    {
+        $jobsConfig = self::MONITOR_JOBS[$group] ?? [];
+        $summary = [];
+
+        foreach ($jobsConfig as $class => $meta) {
+            $last = JobMonitor::where('job_group', $group)
+                ->where('job_class', $class)
+                ->orderByDesc('started_at')
+                ->first();
+
+            $last24h = JobMonitor::where('job_group', $group)
+                ->where('job_class', $class)
+                ->where('started_at', '>=', now()->subHours(24))
+                ->selectRaw('COUNT(*) as total')
+                ->selectRaw("SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count")
+                ->selectRaw("SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_count")
+                ->selectRaw('AVG(duration_ms) as avg_duration_ms')
+                ->first();
+
+            $avgMs = (int) ($last24h->avg_duration_ms ?? 0);
+
+            $summary[$class] = [
+                'label'        => $meta['label'],
+                'schedule'     => $meta['schedule'],
+                'last'         => $last,
+                'total_24h'    => (int) ($last24h->total ?? 0),
+                'success_24h'  => (int) ($last24h->success_count ?? 0),
+                'failed_24h'   => (int) ($last24h->failed_count ?? 0),
+                'avg_duration' => $avgMs ? $this->formatMonitorDuration($avgMs) : '—',
+            ];
+        }
+
+        return $summary;
+    }
+
+    private function formatMonitorDuration(int $ms): string
+    {
+        if ($ms < 1000) {
+            return $ms . ' ms';
+        }
+        $s = $ms / 1000;
+        if ($s < 60) {
+            return number_format($s, 1) . ' s';
+        }
+
+        return (int) floor($s / 60) . 'm ' . (int) ($s % 60) . 's';
     }
 
     // ── Tab resolution ──────────────────────────────────────────

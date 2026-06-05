@@ -63,9 +63,6 @@
                 <a href="{{ route('admin.data-quality.index') }}" class="{{ $adminLink($adminSegment === 'data-quality') }}">
                     <i class="fa-solid fa-code-merge w-4 text-center"></i> Fusion / dédoublonnage
                 </a>
-                <a href="{{ route('admin.monitor.sites') }}" class="{{ $adminSubLink(request()->is('admin/monitor/sites*')) }}">
-                    <i class="fa-solid fa-heartbeat w-4 text-center"></i> Monitoring
-                </a>
                 <a href="{{ route('admin.sites.settings') }}" class="{{ $adminSubLink($adminSegment === 'sites' && request()->segment(3) === 'settings') }}">
                     <i class="fa-solid fa-gear w-4 text-center"></i> Paramètres
                 </a>
@@ -74,9 +71,6 @@
                 <div class="{{ $sectionLabel }}">Balises</div>
                 <a href="{{ route('admin.balises.index') }}" class="{{ $adminLink($adminSegment === 'balises' && request()->segment(3) !== 'settings') }}">
                     <i class="fa-solid fa-tower-broadcast w-4 text-center"></i> Balises
-                </a>
-                <a href="{{ route('admin.monitor.balises') }}" class="{{ $adminSubLink(request()->is('admin/monitor/balises*')) }}">
-                    <i class="fa-solid fa-heartbeat w-4 text-center"></i> Monitoring
                 </a>
                 <a href="{{ route('admin.balises.settings') }}" class="{{ $adminSubLink($adminSegment === 'balises' && request()->segment(3) === 'settings') }}">
                     <i class="fa-solid fa-gear w-4 text-center"></i> Paramètres
@@ -89,9 +83,6 @@
                 </a>
                 <a href="{{ route('admin.station-apis.index') }}" class="{{ $adminLink($adminSegment === 'station-apis') }}">
                     <i class="fa-solid fa-plug w-4 text-center" style="color:#3b82f6"></i> APIs stations
-                </a>
-                <a href="{{ route('admin.monitor.stations') }}" class="{{ $adminSubLink(request()->is('admin/monitor/stations*')) }}">
-                    <i class="fa-solid fa-heartbeat w-4 text-center"></i> Monitoring
                 </a>
                 <a href="{{ route('admin.weather-stations.settings') }}" class="{{ $adminSubLink($adminSegment === 'weather-stations' && request()->segment(3) === 'settings') }}">
                     <i class="fa-solid fa-gear w-4 text-center"></i> Paramètres
