@@ -30,10 +30,11 @@ class FetchStationForecastsJob implements ShouldQueue
     public int $tries   = 2;
 
     private const MAX_HORIZON_HOURS = 72;
-    private const CHUNK_SIZE        = 40;
+    private const CHUNK_SIZE        = 20;
 
     public function handle(OpenMeteoApi $openMeteo): void
     {
+        ini_set('memory_limit', '1G');
         $points = DB::table('weather_stations')
             ->where('active', true)
             ->where('has_wind_sensor', true)
