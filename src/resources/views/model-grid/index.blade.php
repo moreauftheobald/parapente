@@ -186,6 +186,11 @@
                 <span><i class="fa-solid fa-moon"></i> Fond sombre</span>
             </label>
 
+            <label class="field chk">
+                <input type="checkbox" id="f-stations">
+                <span><i class="fa-solid fa-tower-broadcast"></i> Stations météo</span>
+            </label>
+
             <div id="mg-status">
                 <span class="pill" id="s-cells">— cellules</span>
                 <span class="pill" id="s-occupied">— occupées</span>
@@ -510,6 +515,82 @@
             // c'est juste le tile layer qui change).
             document.getElementById('f-dark-mode').addEventListener('change', (e) => {
                 setBaseLayer(e.target.checked ? 'dark' : 'light');
+            });
+
+            // ── Overlay stations météo ───────────────────────────
+            const STATION_COLORS = {
+                mf:         '#3b82f6',
+                metar:      '#f59e0b',
+                infoclimat: '#10b981',
+            };
+            const STATION_LABELS = {
+                mf:         'Météo-France',
+                metar:      'METAR',
+                infoclimat: 'Infoclimat',
+            };
+            let stationLayer = L.layerGroup();
+            let stationsLoaded = false;
+
+            async function loadStations() {
+                if (stationsLoaded) { stationLayer.addTo(map); return; }
+                try {
+                    const resp = await fetch('/api/weather-stations', {
+                        headers: { 'Accept': 'application/json' },
+                        credentials: 'same-origin',
+                    });
+                    if (!resp.ok) return;
+                    const stations = await resp.json();
+                    stations.forEach(s => {
+                        const color = STATION_COLORS[s.network] || '#6b7280';
+                        L.circleMarker([s.lat, s.lng], {
+                            radius: 5,
+                            color: color,
+                            fillColor: color,
+                            fillOpacity: 0.7,
+                            weight: 1,
+                            opacity: 0.9,
+                        }).bindTooltip(
+                            `<b>${s.name}</b><br>${STATION_LABELS[s.network] || s.network}` +
+                            (s.altitude_m ? ` · ${s.altitude_m}m` : ''),
+                            { direction: 'top', offset: [0, -6] }
+                        ).addTo(stationLayer);
+                    });
+                    stationsLoaded = true;
+                    stationLayer.addTo(map);
+
+                    // Légende stations
+                    updateStationLegend(true);
+                } catch(e) { console.warn('stations fetch failed', e); }
+            }
+
+            function updateStationLegend(show) {
+                const el = document.getElementById('station-legend');
+                if (el) el.style.display = show ? '' : 'none';
+            }
+
+            const StationLegendControl = L.Control.extend({
+                options: { position: 'bottomright' },
+                onAdd: function () {
+                    const div = L.DomUtil.create('div', 'mg-legend');
+                    div.id = 'station-legend';
+                    div.style.display = 'none';
+                    div.innerHTML = '<h4>Stations météo</h4>' +
+                        Object.entries(STATION_COLORS).map(([k, c]) =>
+                            `<div class="row"><span class="sw" style="background:${c}; border-radius:50%"></span>${STATION_LABELS[k]}</div>`
+                        ).join('');
+                    L.DomEvent.disableClickPropagation(div);
+                    return div;
+                },
+            });
+            new StationLegendControl().addTo(map);
+
+            document.getElementById('f-stations').addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    loadStations();
+                } else {
+                    map.removeLayer(stationLayer);
+                    updateStationLegend(false);
+                }
             });
 
             // Premier rendu
