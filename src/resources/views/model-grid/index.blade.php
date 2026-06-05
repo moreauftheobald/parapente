@@ -543,7 +543,7 @@
                     stations.forEach(s => {
                         const color = STATION_COLORS[s.network] || '#6b7280';
                         L.circle([s.lat, s.lng], {
-                            radius: 12500,
+                            radius: 20000,
                             color: color,
                             fillColor: color,
                             fillOpacity: 0.08,
