@@ -542,13 +542,20 @@
                     const stations = await resp.json();
                     stations.forEach(s => {
                         const color = STATION_COLORS[s.network] || '#6b7280';
-                        L.circleMarker([s.lat, s.lng], {
-                            radius: 5,
+                        L.circle([s.lat, s.lng], {
+                            radius: 12500,
                             color: color,
                             fillColor: color,
-                            fillOpacity: 0.7,
+                            fillOpacity: 0.08,
                             weight: 1,
-                            opacity: 0.9,
+                            opacity: 0.4,
+                        }).addTo(stationLayer);
+                        L.circleMarker([s.lat, s.lng], {
+                            radius: 3,
+                            color: color,
+                            fillColor: color,
+                            fillOpacity: 0.9,
+                            weight: 0,
                         }).bindTooltip(
                             `<b>${s.name}</b><br>${STATION_LABELS[s.network] || s.network}` +
                             (s.altitude_m ? ` · ${s.altitude_m}m` : ''),
