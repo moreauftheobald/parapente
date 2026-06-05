@@ -8,7 +8,7 @@ use Illuminate\Contracts\Cache\Repository as CacheRepository;
 
 final class WeatherStationsBundleCache
 {
-    public const CACHE_VERSION = 1;
+    public const CACHE_VERSION = 2;
 
     public const BUNDLE_TTL_SECONDS = 300;
 

@@ -95,6 +95,8 @@ abstract class FetchWeatherStationReadingsJob implements ShouldQueue
         $inserted = 0;
         $skippedNoReading = 0;
         $skippedDedup = 0;
+        $withWind    = [];
+        $withoutWind = [];
         foreach ($stations as $extId => $station) {
             $r = $readings[$extId] ?? null;
             if (! $r || ! ($r['observed_at'] ?? null)) {
@@ -134,10 +136,33 @@ abstract class FetchWeatherStationReadingsJob implements ShouldQueue
             $inserted++;
             $latestPerStation[$station->id] = $r['observed_at']->toDateTimeString();
 
+            if ($r['wind_speed_avg'] !== null) {
+                $withWind[] = $station->id;
+            } else {
+                $withoutWind[] = $station->id;
+            }
+
             $station->update(['last_obs_at' => $r['observed_at']]);
         }
 
         Cache::put($cacheKey, $latestPerStation, self::LAST_OBS_CACHE_TTL);
+
+        // Auto-classify has_wind_sensor based on this batch's readings.
+        // Promote to true any station that reported wind data (idempotent).
+        if ($withWind !== []) {
+            WeatherStation::whereIn('id', $withWind)
+                ->where(fn ($q) => $q->whereNull('has_wind_sensor')->orWhere('has_wind_sensor', false))
+                ->update(['has_wind_sensor' => true]);
+        }
+
+        // For stations with no wind in this reading AND never classified
+        // (has_wind_sensor IS NULL), set to false. Never downgrade true→false
+        // on a single reading — the classify command handles that over multiple days.
+        if ($withoutWind !== []) {
+            WeatherStation::whereIn('id', $withoutWind)
+                ->whereNull('has_wind_sensor')
+                ->update(['has_wind_sensor' => false]);
+        }
 
         $deadCutoff  = Carbon::now()->subDays(self::DEAD_AFTER_DAYS);
         $deactivated = WeatherStation::query()

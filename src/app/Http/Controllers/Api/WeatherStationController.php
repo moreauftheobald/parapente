@@ -135,6 +135,7 @@ class WeatherStationController extends Controller
     private function buildForBbox(float $latMin, float $latMax, float $lngMin, float $lngMax): array
     {
         $stations = WeatherStation::active()
+            ->withWindSensor()
             ->whereBetween('latitude', [$latMin, $latMax])
             ->whereBetween('longitude', [$lngMin, $lngMax])
             ->with(['latestObservation'])
@@ -149,6 +150,7 @@ class WeatherStationController extends Controller
     private function buildBundle(): array
     {
         $stations = WeatherStation::active()
+            ->withWindSensor()
             ->with(['latestObservation'])
             ->get();
 

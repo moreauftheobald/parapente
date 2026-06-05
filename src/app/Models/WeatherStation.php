@@ -33,6 +33,7 @@ class WeatherStation extends Model
         'department',
         'active',
         'in_reliability_panel',
+        'has_wind_sensor',
         'metadata',
         'last_obs_at',
     ];
@@ -45,6 +46,7 @@ class WeatherStation extends Model
             'altitude_m'            => 'integer',
             'active'                => 'boolean',
             'in_reliability_panel'  => 'boolean',
+            'has_wind_sensor'       => 'boolean',
             'metadata'              => 'array',
             'last_obs_at'           => 'datetime',
         ];
@@ -58,6 +60,11 @@ class WeatherStation extends Model
     public function scopeNetwork($query, string $network)
     {
         return $query->where('network', $network);
+    }
+
+    public function scopeWithWindSensor($query)
+    {
+        return $query->where('has_wind_sensor', true);
     }
 
     public function observations(): HasMany
