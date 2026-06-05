@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\BaliseController as AdminBaliseController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DataQualityController as AdminDataQualityController;
 use App\Http\Controllers\Admin\DataSyncController as AdminSyncController;
+use App\Http\Controllers\Admin\AdminJobMonitorController;
 use App\Http\Controllers\Admin\LogController as AdminLogController;
 use App\Http\Controllers\Admin\ModuleController as AdminModuleController;
 use App\Http\Controllers\Admin\ReliabilityCompareController as AdminReliabilityCompareController;
