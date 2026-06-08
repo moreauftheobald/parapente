@@ -11,7 +11,16 @@
         <x-slot:subtitle>Configuration, import et monitoring des sites de vol.</x-slot:subtitle>
     </x-admin.page-title>
 
-    @include('admin._settings-tabs', ['tab' => $tab, 'baseRoute' => 'admin.sites.settings'])
+    @include('admin._settings-tabs', [
+        'tab'       => $tab,
+        'baseRoute' => 'admin.sites.settings',
+        'tabs'      => [
+            'general' => ['label' => 'Général',          'icon' => 'fa-solid fa-sliders'],
+            'data'    => ['label' => 'Data',              'icon' => 'fa-solid fa-cloud-arrow-down'],
+            'scoring' => ['label' => 'Scoring (sidecar)', 'icon' => 'fa-solid fa-bullseye'],
+            'logs'    => ['label' => 'Log / Monitoring',  'icon' => 'fa-solid fa-scroll'],
+        ],
+    ])
 
     @if ($tab === 'general')
         @include('admin.settings._groups-form', [
@@ -118,6 +127,9 @@
         </div>
 
         @include('admin._coverage-legend')
+
+    @elseif ($tab === 'scoring')
+        @include('admin.sites._tab-scoring')
 
     @elseif ($tab === 'logs')
         @include('admin._monitor-tab')

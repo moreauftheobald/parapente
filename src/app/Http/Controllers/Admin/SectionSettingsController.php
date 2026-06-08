@@ -295,7 +295,7 @@ class SectionSettingsController extends Controller
 
     public function sites(Request $request, Settings $settings, DataCoverage $coverage): View
     {
-        $tab  = $this->resolveTab($request);
+        $tab  = $this->resolveTab($request, ['scoring']);
         $data = [
             'tab'        => $tab,
             'countries'  => DataSyncController::ISO_COUNTRIES,
@@ -313,6 +313,13 @@ class SectionSettingsController extends Controller
         if ($tab === 'data') {
             $data['siteForecasts'] = $coverage->siteForecastCoverage();
             $data['today']         = CarbonImmutable::now()->startOfDay();
+        }
+
+        if ($tab === 'scoring') {
+            $data['qualityProfiles'] = \App\Models\QualityProfile::orderBy('sort_order')
+                ->with('axes')
+                ->get();
+            $data['availableAxes'] = \App\Models\QualityAxis::AVAILABLE_AXES;
         }
 
         if ($tab === 'logs') {
@@ -604,9 +611,9 @@ class SectionSettingsController extends Controller
 
     // ── Tab resolution ──────────────────────────────────────────
 
-    private function resolveTab(Request $request): string
+    private function resolveTab(Request $request, array $extra = []): string
     {
-        $allowed = ['general', 'data', 'logs'];
+        $allowed = array_merge(['general', 'data', 'logs'], $extra);
 
         return in_array($request->query('tab'), $allowed, true)
             ? $request->query('tab')

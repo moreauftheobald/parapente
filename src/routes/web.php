@@ -24,6 +24,7 @@ use App\Http\Controllers\Admin\WeatherModelController as AdminModelController;
 use App\Http\Controllers\Admin\StationApiController as AdminStationApiController;
 use App\Http\Controllers\Admin\WeatherStationController as AdminWeatherStationController;
 use App\Http\Controllers\Admin\WikiPageController as AdminWikiPageController;
+use App\Http\Controllers\Admin\QualityProfileController as AdminQualityProfileController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\HomeController;
@@ -138,6 +139,14 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/weather-stations/settings',          [AdminSectionSettingsController::class, 'weatherStations'])->name('weather-stations.settings');
         Route::patch('/weather-stations/settings/general', [AdminSectionSettingsController::class, 'updateWeatherStationSettings'])->name('weather-stations.settings.general');
         Route::patch('/meteo/settings/general',   [AdminSectionSettingsController::class, 'updateMeteoGeneralSettings'])->name('meteo.settings.general');
+
+        // ── Profils qualité (scoring sidecar) ───────────────────
+        Route::get('/quality-profiles',                         [AdminQualityProfileController::class, 'index'])->name('quality-profiles.index');
+        Route::get('/quality-profiles/create',                  [AdminQualityProfileController::class, 'create'])->name('quality-profiles.create');
+        Route::post('/quality-profiles',                        [AdminQualityProfileController::class, 'store'])->name('quality-profiles.store');
+        Route::get('/quality-profiles/{qualityProfile}/edit',   [AdminQualityProfileController::class, 'edit'])->name('quality-profiles.edit');
+        Route::patch('/quality-profiles/{qualityProfile}',      [AdminQualityProfileController::class, 'update'])->name('quality-profiles.update');
+        Route::delete('/quality-profiles/{qualityProfile}',     [AdminQualityProfileController::class, 'destroy'])->name('quality-profiles.destroy');
 
         // ── Sites ────────────────────────────────────────────────
         Route::get('/sites',                   [AdminSiteController::class, 'index'])->name('sites.index');
