@@ -870,6 +870,9 @@
                         opt.textContent = variableLabel(v.name);
                         sel.appendChild(opt);
                     });
+                if (sel.querySelector('option[value="wind_speed_10m"]')) {
+                    sel.value = 'wind_speed_10m';
+                }
 
 
                 // Steps → table indexée par (dateKey, hourStr)

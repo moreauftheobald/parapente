@@ -9,6 +9,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use App\Services\Settings;
 
 /**
  * Carte météo — vue Leaflet avec overlays issus du sidecar `consensus-grid`.
@@ -47,9 +48,9 @@ class WeatherMapController extends Controller
      * erreur ne doit jamais être cachée : sinon une hoquette ponctuelle
      * du sidecar bloque la carte pendant 10 min même quand il va déjà mieux.
      */
-    public function manifestIndex(): JsonResponse
+    public function manifestIndex(Settings $settings): JsonResponse
     {
-        $cacheKey = 'weather-map.index.v1';
+        $cacheKey = 'weather-map.index.v2';
         $payload  = Cache::get($cacheKey);
 
         if ($payload === null) {
@@ -72,10 +73,35 @@ class WeatherMapController extends Controller
                 return response()->json(['error' => 'sidecar_invalid_json'], 502);
             }
 
+            $allowed = $this->tileEnabledVariables($settings);
+            if (! empty($allowed) && isset($payload['variables'])) {
+                $payload['variables'] = array_values(array_filter(
+                    $payload['variables'],
+                    fn (array $v) => in_array($v['name'] ?? '', $allowed, true),
+                ));
+            }
+
             Cache::put($cacheKey, $payload, now()->addMinutes(10));
         }
 
         return response()->json($payload);
+    }
+
+    private function tileEnabledVariables(Settings $settings): array
+    {
+        $all     = $settings->all();
+        $allowed = [];
+
+        foreach ($all as $key => $value) {
+            if (! str_starts_with($key, 'consensus.config.')) {
+                continue;
+            }
+            if (is_array($value) && ! empty($value['render_tiles'])) {
+                $allowed[] = str_replace('consensus.config.', '', $key);
+            }
+        }
+
+        return $allowed;
     }
 
     /**
