@@ -56,18 +56,15 @@ class FetchForecastsJob implements ShouldQueue
     {
         $this->trackStart();
 
-        $sites = Site::active()->with('conditions')->get();
-        if ($sites->isEmpty()) {
-            $this->trackSuccess('Aucun site actif');
-            Log::info('FetchForecastsJob: aucun site actif.');
+        $siteCount = Site::active()->whereHas('conditions')->count();
+        if ($siteCount === 0) {
+            $this->trackSuccess('Aucun site actif avec conditions');
+            Log::info('FetchForecastsJob: aucun site actif avec conditions.');
             return;
         }
 
         $activeModels = WeatherModel::with('api')->where('active', true)->get();
 
-        // Le consensus est fetché à part, en BATCH multi-coordonnées
-        // (1 appel/40 sites) — sorti de la chaîne par site pour ne pas
-        // refaire 1 appel HTTP par site (cf. FetchConsensusBatchJob).
         $consensus        = $activeModels->firstWhere('code', ConsensusApi::MODEL_CODE);
         $dispatchConsensus = $consensus
             && $consensus->isDueForRefresh()
@@ -86,20 +83,12 @@ class FetchForecastsJob implements ShouldQueue
             })
             ->values();
 
-        // Rien à faire que si aucun modèle NWP n'est dû ET que le consensus
-        // n'est pas dû non plus. Si SEUL le consensus est dû, on lance quand
-        // même une passe de scoring (chaînes = [ScoreSiteJob]) pour répercuter
-        // le consensus horaire frais sur les scores.
         if ($dueModels->isEmpty() && ! $dispatchConsensus) {
             $this->trackSuccess('Aucun modèle dû pour refresh');
             Log::info('FetchForecastsJob: aucun modèle dû pour refresh.');
             return;
         }
 
-        // Consensus en batch, dispatché en premier sur la file `meteo` :
-        // il alimente `forecasts` avant les ScoreSiteJob (le scoring tolère
-        // de toute façon un consensus du cycle précédent grâce à la fenêtre
-        // de fraîcheur de 120 min — cf. ScoringService).
         if ($dispatchConsensus) {
             FetchConsensusBatchJob::dispatch()->onQueue('meteo');
             $consensus->last_fetch_at = now();
@@ -107,32 +96,56 @@ class FetchForecastsJob implements ShouldQueue
             Log::info('FetchForecastsJob: FetchConsensusBatchJob dispatché (batch consensus).');
         }
 
-        // Une chaîne par site : modèles à fetcher puis ScoreSiteJob en fin.
-        $chains = [];
-        foreach ($sites as $site) {
-            if (! $site->conditions) {
-                continue;
-            }
+        $dueModelIds = $dueModels->pluck('id')->all();
+        $chainCount  = 0;
+        $chains      = [];
 
-            $jobs   = $dueModels
-                ->map(fn (WeatherModel $m) => new FetchSiteModelJob($site->id, $m->id, false))
-                ->all();
-            $jobs[] = new ScoreSiteJob($site->id);
+        Site::active()
+            ->whereHas('conditions')
+            ->select(['id'])
+            ->chunkById(200, function ($sites) use ($dueModelIds, &$chains, &$chainCount) {
+                foreach ($sites as $site) {
+                    $jobs = array_map(
+                        fn (int $modelId) => new FetchSiteModelJob($site->id, $modelId, false),
+                        $dueModelIds
+                    );
+                    $jobs[] = new ScoreSiteJob($site->id);
 
-            $chains[] = $jobs;
+                    $chains[] = $jobs;
+                    $chainCount++;
+                }
+
+                if (count($chains) >= 500) {
+                    $this->dispatchBatch($chains);
+                    $chains = [];
+                }
+            });
+
+        if (! empty($chains)) {
+            $this->dispatchBatch($chains);
         }
 
-        if (empty($chains)) {
+        if ($chainCount === 0) {
             $this->trackSuccess('Aucun site éligible (pas de conditions)');
             Log::info('FetchForecastsJob: aucun site éligible (pas de conditions).');
             return;
         }
 
-        // Batch global : permet de détecter la fin du cycle (toutes les
-        // chaînes terminées) pour régénérer le map bundle. allowFailures
-        // = un site qui plante son fetch n'empêche pas les autres, et le
-        // bundle final aura les sites qui ont réussi + les anciens
-        // scores des sites en échec (qui seront rescorés au prochain cycle).
+        foreach ($dueModels as $model) {
+            $model->last_fetch_at = now();
+            $model->save();
+        }
+
+        $this->trackSuccess("{$chainCount} chaîne(s), {$dueModels->count()} modèle(s)", ['chains' => $chainCount, 'models' => $dueModels->count(), 'sites' => $siteCount]);
+
+        Log::info(
+            'FetchForecastsJob: batch(s) dispatché(s) ('
+            . "{$chainCount} chaîne(s), {$dueModels->count()} modèle(s) × {$siteCount} site(s))."
+        );
+    }
+
+    private function dispatchBatch(array $chains): void
+    {
         Bus::batch($chains)
             ->name('hourly-scoring')
             ->onQueue('meteo')
@@ -146,18 +159,6 @@ class FetchForecastsJob implements ShouldQueue
                 RebuildMapBundleJob::dispatch();
             })
             ->dispatch();
-
-        foreach ($dueModels as $model) {
-            $model->last_fetch_at = now();
-            $model->save();
-        }
-
-        $this->trackSuccess(count($chains) . " chaîne(s), {$dueModels->count()} modèle(s) × {$sites->count()} site(s)", ['chains' => count($chains), 'models' => $dueModels->count(), 'sites' => $sites->count()]);
-
-        Log::info(
-            'FetchForecastsJob: batch dispatché ('
-            . count($chains) . " chaîne(s), {$dueModels->count()} modèle(s) × {$sites->count()} site(s))."
-        );
     }
 
     public function failed(\Throwable $e): void
