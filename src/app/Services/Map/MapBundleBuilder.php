@@ -77,20 +77,25 @@ final class MapBundleBuilder
         // Fallback lazy : utilise un lock Redis pour éviter le thundering
         // herd (100 users qui rechargent en même temps → 100 régénérations).
         // Le 1er obtient le lock et calcule ; les autres attendent puis lisent
-        // la valeur fraîchement écrite. TTL du lock court (15 s) : si le
-        // builder plante, les suivants pourront retenter.
-        return $this->cache->lock(self::cacheKey() . '.lock', 15)->block(10, function () {
-            // Re-check après lock : peut-être qu'un autre processus a déjà
-            // construit pendant qu'on attendait.
-            $cached = $this->cache->get(self::cacheKey());
-            if (is_array($cached)) {
-                return $cached;
-            }
+        // la valeur fraîchement écrite. TTL du lock 120 s pour absorber les
+        // builds lourds (3000+ sites) ; block 30 s max avant abandon.
+        $lock = $this->cache->lock(self::cacheKey() . '.lock', 120);
 
-            $bundle = $this->build();
-            $this->cache->put(self::cacheKey(), $bundle, self::CACHE_TTL_SECONDS);
-            return $bundle;
-        });
+        try {
+            return $lock->block(30, function () {
+                $cached = $this->cache->get(self::cacheKey());
+                if (is_array($cached)) {
+                    return $cached;
+                }
+
+                $bundle = $this->build();
+                $this->cache->put(self::cacheKey(), $bundle, self::CACHE_TTL_SECONDS);
+                return $bundle;
+            });
+        } catch (\Illuminate\Contracts\Cache\LockTimeoutException $e) {
+            Log::warning('MapBundleBuilder: lock timeout, renvoi d\'un bundle vide temporaire.');
+            return ['sites' => [], 'days_summary' => [], '_stale' => true];
+        }
     }
 
     /**
