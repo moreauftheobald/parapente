@@ -108,28 +108,28 @@ final class MapBundleBuilder
     {
         $startedAt = microtime(true);
 
-        $sites = Site::active()->with('conditions')->orderBy('id')->get();
-
-        // Précharge TOUS les SiteScore upcoming en 1 seule query, puis
-        // groupe par site_id en PHP — évite le N+1 (1 query/site → 1 query
-        // pour tous les sites). À 14 sites c'est anecdotique, à 100+ c'est
-        // décisif.
-        $scoresBySite = $sites->isEmpty()
-            ? collect()
-            : SiteScore::whereIn('site_id', $sites->pluck('id'))
-                ->upcoming()
-                ->orderBy('forecast_at')
-                ->get()
-                ->groupBy('site_id');
-
-        // 1ère passe : construire le payload de chaque site.
         $sitesPayload = [];
-        foreach ($sites as $site) {
-            $sitesPayload[] = $this->buildSitePayload($site, $scoresBySite->get($site->id, collect()));
-        }
 
-        // 2e passe : agrégat global jour-par-jour (alimente le sélecteur
-        // de jour côté client). Le client doit éviter de recalculer.
+        Site::active()
+            ->with('conditions')
+            ->orderBy('id')
+            ->chunkById(200, function ($chunk) use (&$sitesPayload) {
+                $siteIds = $chunk->pluck('id');
+
+                $scoresBySite = SiteScore::whereIn('site_id', $siteIds)
+                    ->upcoming()
+                    ->orderBy('forecast_at')
+                    ->get()
+                    ->groupBy('site_id');
+
+                foreach ($chunk as $site) {
+                    $sitesPayload[] = $this->buildSitePayload(
+                        $site,
+                        $scoresBySite->get($site->id, collect()),
+                    );
+                }
+            });
+
         $daysSummary = self::summarizeDays($sitesPayload);
 
         $generatedAt = CarbonImmutable::now();
