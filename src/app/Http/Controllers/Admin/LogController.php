@@ -55,7 +55,7 @@ class LogController extends Controller
                 'balises_active'           => Balise::where('active', true)->count(),
                 'balise_readings'          => BaliseReading::count(),
                 'forecasts'                => Forecast::count(),
-                'site_scores'              => SiteScore::count(),
+                'site_scores'              => SiteScore::onActiveBuffer()->count(),
                 'weather_models'           => WeatherModel::count(),
                 'weather_models_active'    => WeatherModel::where('active', true)->count(),
                 'forecast_archive_balises' => DB::getSchemaBuilder()->hasTable('forecast_archive_balises')

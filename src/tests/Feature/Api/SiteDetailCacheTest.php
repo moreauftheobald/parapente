@@ -58,7 +58,7 @@ class SiteDetailCacheTest extends TestCase
 
     private function makeScore(Site $site, \Carbon\Carbon $at, string $status = 'green'): SiteScore
     {
-        return SiteScore::create([
+        return SiteScore::onActiveBuffer()->create([
             'site_id'              => $site->id,
             'forecast_at'          => $at,
             'computed_at'          => now(),

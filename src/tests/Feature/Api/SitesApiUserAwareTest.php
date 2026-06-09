@@ -45,7 +45,7 @@ class SitesApiUserAwareTest extends TestCase
             'wind_speed_min' => 5, 'wind_speed_max' => 25, 'wind_speed_ideal' => 15,
             'cloud_base_min_m' => 800,
         ]);
-        SiteScore::create([
+        SiteScore::onActiveBuffer()->create([
             'site_id'              => $site->id,
             'forecast_at'          => now()->addHour()->startOfHour(),
             'computed_at'          => now(),

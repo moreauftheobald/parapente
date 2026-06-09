@@ -40,8 +40,12 @@ final class MapBundleBuilder
      *      (MeHiddenSitesController). Cette clé est retirée du payload
      *      envoyé au client par MapBundleController::show (pas de bloat
      *      côté front). Cf. FF_site_blacklist.md.
+     * v3 : les scores proviennent désormais du double-buffer
+     *      `site_scores_{1,2}` écrit par le sidecar consensus-grid-v2
+     *      (scoring déporté). Bump pour orpheliner les entrées issues de
+     *      l'ancien path de scoring PHP.
      */
-    public const CACHE_VERSION = 2;
+    public const CACHE_VERSION = 3;
 
     /**
      * TTL backup au cas où l'invalidation push (FetchForecastsJob)
@@ -116,7 +120,8 @@ final class MapBundleBuilder
             ->chunkById(200, function ($chunk) use (&$sitesPayload) {
                 $siteIds = $chunk->pluck('id');
 
-                $scoresBySite = SiteScore::whereIn('site_id', $siteIds)
+                $scoresBySite = SiteScore::onActiveBuffer()
+                    ->whereIn('site_id', $siteIds)
                     ->upcoming()
                     ->orderBy('forecast_at')
                     ->get()

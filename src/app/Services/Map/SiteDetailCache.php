@@ -33,7 +33,10 @@ final class SiteDetailCache
     // v2 : bascule du consensus vers le sidecar — la liste `models` du
     // payload multimodel exclut `qui_vole_consensus`, et le `detail` des
     // scores issus du consensus API porte un champ `source`.
-    public const CACHE_VERSION = 2;
+    // v3 : scoring déporté — scores lus dans le double-buffer
+    // `site_scores_{1,2}` (sidecar consensus-grid-v2). Bump pour
+    // orpheliner les entrées issues de l'ancien path de scoring PHP.
+    public const CACHE_VERSION = 3;
 
     /**
      * TTL backup au cas où l'invalidation push (ScoreSiteJob) échoue

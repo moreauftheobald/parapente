@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\DB;
 
 class SiteScore extends Model
 {
@@ -23,6 +25,7 @@ class SiteScore extends Model
         'models_count',
         'models_converging',
         'detail',
+        'quality_detail',
     ];
 
     protected $casts = [
@@ -37,7 +40,39 @@ class SiteScore extends Model
         'models_count'         => 'integer',
         'models_converging'    => 'integer',
         'detail'               => 'array',   // JSON auto-décodé
+        'quality_detail'       => 'array',   // scores qualité par profil (sidecar) — lecture brute
     ];
+
+    // ── Double-buffer (sidecar consensus-grid-v2) ───────────────
+    //
+    // Les scores sont écrits par le sidecar dans `site_scores_1` /
+    // `site_scores_2` ; le setting `scoring_table` désigne le buffer
+    // actif. Laravel lit TOUJOURS via le buffer actif — la table par
+    // défaut `site_scores` n'est plus qu'un template DDL vide.
+
+    /**
+     * Nom de la table de scoring active, lue en SQL direct depuis le
+     * setting `scoring_table` (on bypasse volontairement le service
+     * Settings et son cache Redis 1 h : le sidecar flippe le pointeur en
+     * SQL direct, le cache ne verrait pas le changement à temps).
+     */
+    public static function activeTableName(): string
+    {
+        $raw = DB::table('settings')->where('key', 'scoring_table')->value('value');
+        $n   = (int) trim((string) $raw, "\" \t\n\r");
+
+        return 'site_scores_' . ($n === 2 ? 2 : 1);
+    }
+
+    /**
+     * Démarre une requête Eloquent SiteScore ciblant le buffer actif.
+     * Tous les lecteurs de scores doivent passer par ici plutôt que par
+     * `SiteScore::query()` (qui taperait la table template vide).
+     */
+    public static function onActiveBuffer(): Builder
+    {
+        return (new static())->setTable(static::activeTableName())->newQuery();
+    }
 
     // ── Relations ───────────────────────────────────────────────
     public function site(): BelongsTo

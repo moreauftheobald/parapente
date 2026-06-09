@@ -33,7 +33,8 @@ final class SiteChartPayloadBuilder
         $to   = now()->addDays(5);
 
         // Scores (pour direction consensus + statut)
-        $scores = SiteScore::where('site_id', $id)
+        $scores = SiteScore::onActiveBuffer()
+            ->where('site_id', $id)
             ->whereBetween('forecast_at', [$from, $to])
             ->orderBy('forecast_at')
             ->get()
