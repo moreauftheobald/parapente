@@ -11,6 +11,66 @@ Conventions :
 
 ---
 
+## 2026-06-09 — Scoring entièrement déporté au sidecar (V2 du sidecar)
+
+Le sidecar `consensus-grid-v2` calcule désormais **non seulement le
+consensus multi-modèles mais aussi le scoring de volabilité** de chaque
+site, et écrit les résultats **directement en base** dans des tables
+double-buffer `site_scores_1` / `site_scores_2`. Laravel passe de
+**producteur** à **simple lecteur** des scores. La voting logic PHP et le
+fetch du consensus côté app sont supprimés.
+
+### Base de données
+
+- **`site_scores_1` / `site_scores_2`** : tables double-buffer écrites par
+  le sidecar (DROP + `CREATE … LIKE` + INSERT à chaque run, flip atomique).
+  Miroir du schéma de `site_scores`, sans FK. `site_scores` est conservée
+  **vide** comme template DDL de bootstrap.
+- **Setting `scoring_table`** (`settings`, valeur `"1"`/`"2"`) : pointeur du
+  buffer actif, écrit par le sidecar, lu par Laravel.
+- **`site_scores.quality_detail`** (JSON, déjà ajoutée) : scores qualité par
+  profil, lus bruts (affichage à venir).
+
+### Ajouté
+
+- **`SiteScore::activeTableName()` / `onActiveBuffer()`** : résolution du
+  buffer actif (lecture SQL directe du pointeur, hors cache Settings). Tous
+  les lecteurs de scores y passent.
+- **`WatchScoringTableJob`** (planifié chaque minute) : détecte le flip de
+  `scoring_table` et invalide `SiteDetailCache` + map bundle + user-scoring,
+  puis régénère le bundle. Remplace l'invalidation push de `ScoreSiteJob`.
+- **`ScoringRules`** : moteur de règles (statut éliminatoire + couleurs)
+  extrait de `ScoringService`, conservé pour le **scoring perso**
+  (`UserScoringService` rejoue les règles sur les valeurs consensus).
+
+### Supprimé
+
+- `ScoringService` (voting logic PHP), `ScoreSiteJob`,
+  `FetchConsensusBatchJob`, `ConsensusApi`, commande
+  `scores:recompute-detail-colors` et leurs tests.
+- Entrée `consensus` du `WeatherApiRegistry`. Modèle `qui_vole_consensus`
+  et API `consensus` **désactivés** (relique inactive).
+
+### Modifié
+
+- `FetchForecastsJob` ne fetche plus que les **modèles** (`forecasts` pour
+  le panel multimodèles / carte des modèles / fiabilité), plus de consensus
+  ni de scoring. `FetchSiteModelJob` perd le paramètre `rescore`.
+- `FetchSiteForecastsJob` / `SiteActivationObserver` : refresh `forecasts`
+  seul. Un site nouvellement activé n'a ses **statuts** qu'au prochain run
+  du sidecar.
+- `PurgeOldForecastsJob` ne purge plus `site_scores` (géré par le sidecar).
+
+### Déploiement
+
+- Alias DNS du sidecar : **`consensus-grid-v2-api:8082`** (services.php,
+  `.env.example`, `nginx.prod.conf`). `CONSENSUS_API_URL` supprimé.
+- Le sidecar doit avoir les droits MariaDB SELECT (`sites`,
+  `site_conditions`, `settings`, `quality_profiles`, `quality_axes`) +
+  DROP/CREATE/INSERT (`site_scores_1/2`) + UPDATE (`settings.scoring_table`).
+
+---
+
 ## 2026-05-29 — Consensus délégué au sidecar météo (V3)
 
 Le **calcul du consensus multi-modèles** est désormais récupéré **en
