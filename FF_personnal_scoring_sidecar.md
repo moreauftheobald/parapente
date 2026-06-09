@@ -1,8 +1,10 @@
 # FF — Scoring perso déporté au sidecar (`POST /v1/scoring/custom`)
 
-> **Statut : contrat final validé des deux côtés (Laravel + sidecar), pas
-> encore implémenté.** À coder une fois l'endpoint `POST /v1/scoring/custom`
-> livré côté sidecar `consensus-grid-v2`.
+> **Statut : IMPLÉMENTÉ (2026-06-09).** Endpoint sidecar
+> `POST /v1/scoring/custom` en service ; côté Laravel : `CustomScoringClient`
+> + `UserScoringService` (batch par user, cache, fallback global),
+> `ScoringRules` supprimé. Document conservé pour l'historique de cadrage et
+> les points de vérification (§7) à valider en intégration.
 >
 > Ce document est la version Laravel, alignée sur le document de travail
 > sidecar (« FF — Scoring personnalisé via le sidecar », 2026-06-09). Il

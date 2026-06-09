@@ -688,11 +688,10 @@ class Settings
     {
         Cache::forget(self::CACHE_KEY);
 
-        // Les seuils globaux (precip / gust / viability) entrent dans le
-        // calcul du scoring perso. À chaque écriture, on purge donc tous
-        // les caches user-scoring. Résolution paresseuse pour éviter la
-        // dépendance circulaire à la construction (UserScoringService →
-        // ScoringRules → Settings).
+        // Les seuils globaux (precip / gust) sont envoyés au sidecar dans le
+        // payload de scoring perso. À chaque écriture, on purge donc tous les
+        // caches user-scoring. Résolution paresseuse pour éviter la dépendance
+        // circulaire à la construction (UserScoringService → Settings).
         try {
             app(UserScoringService::class)->invalidateAll();
         } catch (\Throwable) {

@@ -113,7 +113,7 @@ src/                        ← Racine Laravel
 │   ├── Services/
 │   │   ├── Weather/
 │   │   │   ├── Apis/OpenMeteoApi.php         (fetch sites + batch balises — alimente `forecasts` pour multimodèles/grid/fiabilité)
-│   │   │   ├── ScoringRules.php              (règles éliminatoires + couleurs ; sert le scoring perso — le scoring prod est déporté au sidecar)
+│   │   │   ├── CustomScoringClient.php       (client HTTP `POST /v1/scoring/custom` — scoring perso déporté au sidecar)
 │   │   │   ├── SiteScoresPayloadBuilder.php  (build `/api/sites/{id}/scores`)
 │   │   │   ├── SiteChartPayloadBuilder.php   (build `/api/sites/{id}/chart`)
 │   │   │   ├── SiteMultimodelPayloadBuilder.php (build `/api/sites/{id}/multimodel`)
@@ -435,10 +435,11 @@ Couleur = statut du jour sélectionné dans le toolbar.
 > base** dans le double-buffer `site_scores_1` / `site_scores_2` (pointeur
 > `settings.scoring_table`). Laravel n'est plus que **lecteur**
 > (`SiteScore::onActiveBuffer()`). La voting logic PHP, le fetch du
-> consensus (`ConsensusApi`/`FetchConsensusBatchJob`) et `ScoringService`
-> ont été **supprimés**. Seul subsiste `ScoringRules` (règles
-> éliminatoires + couleurs) pour le **scoring perso**. Cf. la sous-section
-> *Scoring déporté* plus bas.
+> consensus (`ConsensusApi`/`FetchConsensusBatchJob`), `ScoringService`
+> et `ScoringRules` (le moteur de règles PHP) ont été **supprimés**.
+> Le scoring perso est lui aussi déporté au sidecar
+> (`POST /v1/scoring/custom` via `CustomScoringClient`). Cf. la sous-section
+> *Scoring déporté* plus bas et `FF_personnal_scoring_sidecar.md`.
 >
 > Les ~20 modèles NWP restent fetchés par `OpenMeteoApi` dans `forecasts`,
 > mais **uniquement** pour le panel multimodèles, `/carte-modeles` et la
@@ -488,25 +489,33 @@ inactifs car peu pertinents pour des sites France/Bénélux.
   dans `site_scores_*.cloud_base_consensus`.)
 - Format datetime `Y-m-d H:i:s` pour MariaDB (pas ISO avec `T`)
 
-**`ScoringRules`** (dépend de `App\Services\Settings` pour lire les seuils —
-4 seuils globaux préchargés au constructor) — **ne calcule plus le scoring
-de prod** (déporté au sidecar) ; sert uniquement au **scoring perso** :
-- `rescore(FlyingConditions, SiteScore)` rejoue les règles éliminatoires
-  sur les valeurs consensus **déjà stockées** dans le buffer actif, avec
-  les conditions d'un utilisateur (cf. `UserScoringService`).
-- `applyEliminatoryRules()` — statut horaire :
-  - rouge : précip > `scoring.precip_red_mmh` ; rafale > `scoring.gust_red_kmh`
-    (override site `site_conditions.wind_gust_red_kmh`) ; direction ou vitesse
-    moyenne hors plage du site
-  - orange : précip > `scoring.precip_orange_mmh` ; rafale > `scoring.gust_orange_kmh`
-    (override site `site_conditions.wind_gust_orange_kmh`)
-  - Tous les seuils sont éditables depuis `/admin/settings`.
-- `computeParamColors()` — couleur green/orange/red par paramètre (direction,
-  vitesse, rafales, précip, plafond informatif). Sert l'onglet « Détail
-  scoring » du volet droit, recalculé côté user.
-> ⚠️ Ces règles doivent rester **cohérentes** avec celles du sidecar
-> (`scoring.py`), qui produit le statut « global ». Toute évolution des
-> seuils ou de la logique éliminatoire doit être répercutée des deux côtés.
+#### Scoring perso déporté au sidecar — `UserScoringService` + `CustomScoringClient`
+
+Le scoring **personnalisé** (un utilisateur applique ses propres fenêtres
+vent/plafond à un site) n'est plus calculé en PHP : il est lui aussi délégué
+au sidecar, qui rejoue **la même logique** (`scoring.py`) que le scoring de
+prod. Plus aucune règle éliminatoire en PHP (`ScoringRules` supprimé). Cf.
+`FF_personnal_scoring_sidecar.md`.
+
+- **`CustomScoringClient`** : client HTTP de `POST /v1/scoring/custom`.
+  Tolérant aux pannes → renvoie `null` sur toute erreur (réseau, 4xx/5xx).
+- **`UserScoringService`** : pour un utilisateur, envoie en **un seul appel
+  batch** ses sites perso actifs (coords + conditions custom) + les seuils
+  globaux (`Settings`) ; le sidecar lit son propre forecast et renvoie
+  statut + couleurs par créneau. Résultat **caché en Redis par user**
+  (clé `scoring_custom:user:{id}`, TTL 1 h). Sur panne sidecar : pas de
+  cache, overlay vide → l'appelant sert le **scoring global** (fallback).
+- **3 déclencheurs d'invalidation** : flip du buffer (`WatchScoringTableJob`
+  → `invalidateAll()`), édition/activation/désactivation d'un scoring
+  (`invalidateUser()`), changement d'un seuil global (`Settings::flush()`
+  → `invalidateAll()`).
+- Consommé par `SiteController::scores` (overlay du volet détail) et
+  `MeScoringController` (overlay carte, recalcul `day_quality` perso via
+  `DayQualityCalculator` — l'agrégation de viabilité reste en PHP).
+
+> ⚠️ Le `forecast_at` renvoyé (ISO UTC) est aligné sur
+> `site_scores.forecast_at` (clé `Y-m-d H:i:s`) pour que l'overlay retombe
+> sur les bons créneaux du payload global.
 
 #### Scoring déporté — double-buffer `site_scores_{1,2}`
 

@@ -11,6 +11,31 @@ Conventions :
 
 ---
 
+## 2026-06-09 — Scoring perso déporté au sidecar (`POST /v1/scoring/custom`)
+
+Le scoring **personnalisé** d'un utilisateur (fenêtres vent/plafond propres
+sur un site) n'est plus calculé en PHP : il est délégué au sidecar
+`consensus-grid-v2`, qui rejoue la même logique (`scoring.py`) que le
+scoring de prod. Plus aucune règle de scoring dupliquée à maintenir côté
+Laravel. Cf. `FF_personnal_scoring_sidecar.md`.
+
+### Ajouté
+- **`CustomScoringClient`** : client HTTP de `POST /v1/scoring/custom`
+  (tolérant aux pannes → `null` sur erreur).
+
+### Modifié
+- **`UserScoringService`** : envoie en **un seul appel batch** les sites
+  perso actifs d'un utilisateur (coords + conditions custom + seuils
+  globaux), cache le résultat par user (`scoring_custom:user:{id}`, TTL 1 h),
+  fallback sur le scoring global si le sidecar est injoignable. Invalidation
+  sur 3 déclencheurs (flip du buffer, édition d'un scoring, seuil global).
+
+### Supprimé
+- **`App\Services\Weather\ScoringRules`** (moteur de règles éliminatoires
+  PHP) — devenu inutile, le sidecar est désormais l'unique source.
+
+---
+
 ## 2026-06-09 — Scoring entièrement déporté au sidecar (V2 du sidecar)
 
 Le sidecar `consensus-grid-v2` calcule désormais **non seulement le
