@@ -33,7 +33,7 @@ class ModelGridController extends Controller
         // par balise — on l'exclut du sélecteur de la carte des modèles.
         $models = WeatherModel::query()
             ->where('active', true)
-            ->where('code', '!=', \App\Services\Weather\Apis\ConsensusApi::MODEL_CODE)
+            ->where('code', '!=', WeatherModel::CONSENSUS_CODE)
             ->orderBy('name')
             ->get(['id', 'code', 'name', 'resolution_km']);
 

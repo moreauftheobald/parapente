@@ -16,11 +16,13 @@ use Illuminate\Support\Facades\DB;
  *
  * On ne persiste **pas** les scores par user-site (cf.
  * FF_personnal_scoring.md, comparatif persistant vs cache) : ils sont
- * calculés à la volée à partir des consensus déjà stockés en
- * `site_scores`, puis cachés en Redis ~1 h.
+ * calculés à la volée à partir des consensus déjà stockés dans le buffer
+ * de scoring actif (`site_scores_{1,2}`, écrit par le sidecar), en
+ * rejouant les règles éliminatoires via `ScoringRules`, puis cachés en
+ * Redis ~1 h.
  *
  * Invalidations :
- *  - fin de FetchSiteForecastsJob pour le site → `invalidateSite()`
+ *  - flip du buffer de scoring (sidecar) → `invalidateAll()` (WatchScoringTableJob)
  *  - activation / désactivation / édition d'un scoring → `invalidate()`
  *  - admin change un seuil global de scoring → `invalidateAll()`
  */
@@ -29,7 +31,7 @@ class UserScoringService
     public const CACHE_TTL_SECONDS = 3600;
 
     public function __construct(
-        private ScoringService $scoring,
+        private ScoringRules $rules,
         private CacheRepository $cache,
     ) {
     }
@@ -64,7 +66,7 @@ class UserScoringService
 
                 foreach ($scores as $score) {
                     $out[$score->forecast_at->format('Y-m-d H:i:s')] =
-                        $this->scoring->rescore($usc, $score);
+                        $this->rules->rescore($usc, $score);
                 }
 
                 return $out;

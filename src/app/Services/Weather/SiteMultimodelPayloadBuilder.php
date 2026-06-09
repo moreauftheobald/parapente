@@ -9,7 +9,6 @@ use App\Models\Site;
 use App\Models\SiteScore;
 use App\Models\WeatherModel;
 use App\Services\Map\SunWindowCalculator;
-use App\Services\Weather\Apis\ConsensusApi;
 
 /**
  * Construit le payload `/api/sites/{id}/multimodel?day=YYYY-MM-DD&period=…`
@@ -50,7 +49,7 @@ final class SiteMultimodelPayloadBuilder
         $modelColors   = config('weather.model_colors', []);
         $fallbackColor = $modelColors['fallback'] ?? '#9ca3af';
         $models        = WeatherModel::where('active', true)
-            ->where('code', '!=', ConsensusApi::MODEL_CODE)
+            ->where('code', '!=', WeatherModel::CONSENSUS_CODE)
             ->orderBy('id')
             ->get()
             ->map(fn (WeatherModel $m) => [

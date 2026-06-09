@@ -18,9 +18,10 @@ use Illuminate\Contracts\Cache\Repository as CacheRepository;
  *  - `chart` et `multimodel` : pas de logique user-spécifique, cache
  *    complet et servi à tout le monde.
  *
- * Invalidation : à la fin de chaque ScoreSiteJob (et de
- * FetchSiteForecastsJob pour les opérations manuelles), on appelle
- * `forgetSite($siteId)` qui vide toutes les clés du site.
+ * Invalidation : au flip du buffer de scoring (WatchScoringTableJob)
+ * pour tous les sites, et à la fin de FetchSiteForecastsJob (refresh
+ * forecasts manuel) pour un site — via `forgetSite($siteId)` qui vide
+ * toutes les clés du site.
  *
  * Cf. FF_map_bundle_cache.md (phase 2).
  *
@@ -39,9 +40,9 @@ final class SiteDetailCache
     public const CACHE_VERSION = 3;
 
     /**
-     * TTL backup au cas où l'invalidation push (ScoreSiteJob) échoue
-     * ou n'est pas branchée. Légèrement plus long que l'intervalle de
-     * scoring horaire.
+     * TTL backup au cas où l'invalidation push (WatchScoringTableJob)
+     * échoue ou n'est pas branchée. Légèrement plus long que l'intervalle
+     * de scoring horaire.
      */
     public const CACHE_TTL_SECONDS = 5400; // 90 min
 

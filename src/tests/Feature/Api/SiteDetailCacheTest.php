@@ -112,7 +112,7 @@ class SiteDetailCacheTest extends TestCase
         $this->assertNull(Cache::get(SiteDetailCache::multimodelKey($site->id, $day, '24h')));
     }
 
-    public function test_score_site_job_invalidates_cache(): void
+    public function test_forget_site_invalidates_cache(): void
     {
         $site = $this->makeSite();
         $this->makeScore($site, now()->addDay()->setTime(13, 0));
@@ -127,8 +127,9 @@ class SiteDetailCacheTest extends TestCase
         $this->assertNotNull(Cache::get(SiteDetailCache::chartKey($site->id)));
         $this->assertNotNull(Cache::get(SiteDetailCache::multimodelKey($site->id, $day, 'daylight')));
 
-        // Le ScoreSiteJob doit invalider toutes ces clés
-        \App\Jobs\ScoreSiteJob::dispatchSync($site->id);
+        // forgetSite() (appelé au flip du buffer / refresh forecasts) doit
+        // invalider toutes ces clés.
+        app(SiteDetailCache::class)->forgetSite($site->id);
 
         $this->assertNull(Cache::get(SiteDetailCache::scoresKey($site->id)));
         $this->assertNull(Cache::get(SiteDetailCache::chartKey($site->id)));

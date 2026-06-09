@@ -692,7 +692,7 @@ class Settings
         // calcul du scoring perso. À chaque écriture, on purge donc tous
         // les caches user-scoring. Résolution paresseuse pour éviter la
         // dépendance circulaire à la construction (UserScoringService →
-        // ScoringService → Settings).
+        // ScoringRules → Settings).
         try {
             app(UserScoringService::class)->invalidateAll();
         } catch (\Throwable) {
