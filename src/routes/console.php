@@ -7,6 +7,7 @@ use App\Jobs\ComputeBaliseConsensusCompareJob;
 use App\Jobs\ComputeModelReliabilityJob;
 use App\Jobs\FetchBaliseForecastsJob;
 use App\Jobs\FetchForecastsJob;
+use App\Jobs\WatchScoringTableJob;
 use App\Jobs\FetchInfoclimatStationReadingsJob;
 use App\Jobs\FetchMetarStationReadingsJob;
 use App\Jobs\FetchMfStationReadingsJob;
@@ -20,14 +21,24 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// Fetch des prévisions Open-Meteo : toutes les heures
+// Fetch des prévisions Open-Meteo par modèle : toutes les heures
+// (alimente forecasts → panel multimodèles / carte des modèles / fiabilité ;
+//  le scoring est déporté au sidecar consensus-grid-v2)
 Schedule::job(FetchForecastsJob::class)
     ->hourly()
     ->name('fetch-forecasts')
     ->withoutOverlapping();
 
+// Surveillance du buffer de scoring écrit par le sidecar : au flip de
+// `scoring_table`, invalide les caches map et régénère le bundle.
+Schedule::job(WatchScoringTableJob::class)
+    ->everyMinute()
+    ->name('watch-scoring-table')
+    ->withoutOverlapping();
+
 // Purge des données obsolètes : tous les jours à 03h00
-//   - forecasts/site_scores : slots passés (J-1)
+//   - forecasts : slots passés (J-1) — les site_scores_{1,2} sont gérées
+//     par le sidecar (DROP/recréation à chaque run)
 //   - forecast_archive_balises : > 30 jours
 Schedule::job(PurgeOldForecastsJob::class)
     ->dailyAt('03:00')

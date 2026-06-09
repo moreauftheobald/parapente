@@ -9,14 +9,17 @@ use App\Models\Site;
 use App\Models\WeatherFetchLog;
 use App\Models\WeatherModel;
 use App\Services\Weather\ForecastFetcher;
-use App\Services\Weather\ScoringService;
 use Illuminate\Bus\Batchable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Fetch d'UN modèle météo pour UN site, via l'API associée.
+ * Fetch d'UN modèle météo pour UN site, via l'API associée, et upsert
+ * dans `forecasts`. Ces prévisions par modèle alimentent le panel de
+ * comparaison multimodèles, la carte des modèles et la fiabilité — le
+ * SCORING lui-même est déporté au sidecar (tables `site_scores_{1,2}`),
+ * ce job ne calcule donc plus aucun score.
  *
  * Politique single-shot : si l'API échoue, on log et on s'arrête —
  * pas de fallback, pas de retry. Le prochain cycle de refresh
@@ -31,11 +34,10 @@ class FetchSiteModelJob implements ShouldQueue
 
     public function __construct(
         private readonly int $siteId,
-        private readonly int $weatherModelId,
-        private readonly bool $rescore = true
+        private readonly int $weatherModelId
     ) {}
 
-    public function handle(ForecastFetcher $fetcher, ScoringService $scoring): void
+    public function handle(ForecastFetcher $fetcher): void
     {
         $site  = Site::with('conditions')->find($this->siteId);
         $model = WeatherModel::with('api')->find($this->weatherModelId);
@@ -72,10 +74,6 @@ class FetchSiteModelJob implements ShouldQueue
             'rows_upserted'    => count($hourlyData),
             'provider_run_at'  => null,
         ]);
-
-        if ($this->rescore) {
-            $scoring->computeScoresForSite($site);
-        }
 
         Log::info("FetchSiteModelJob: terminé [{$site->slug}] / [{$model->code}] — " . count($hourlyData) . ' créneaux.');
     }

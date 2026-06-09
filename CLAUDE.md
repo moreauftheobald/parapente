@@ -112,9 +112,8 @@ src/                        ← Racine Laravel
 │   │   └── Navigation.php                ← Liste des modules visibles (navbar)
 │   ├── Services/
 │   │   ├── Weather/
-│   │   │   ├── Apis/OpenMeteoApi.php         (fetch sites + batch balises)
-│   │   │   ├── Apis/ConsensusApi.php         (client sidecar consensus, modèle qui_vole_consensus — V3)
-│   │   │   ├── ScoringService.php            (consensus sidecar prioritaire + fallback voting interne — V3)
+│   │   │   ├── Apis/OpenMeteoApi.php         (fetch sites + batch balises — alimente `forecasts` pour multimodèles/grid/fiabilité)
+│   │   │   ├── ScoringRules.php              (règles éliminatoires + couleurs ; sert le scoring perso — le scoring prod est déporté au sidecar)
 │   │   │   ├── SiteScoresPayloadBuilder.php  (build `/api/sites/{id}/scores`)
 │   │   │   ├── SiteChartPayloadBuilder.php   (build `/api/sites/{id}/chart`)
 │   │   │   ├── SiteMultimodelPayloadBuilder.php (build `/api/sites/{id}/multimodel`)
@@ -193,10 +192,11 @@ src/                        ← Racine Laravel
 | `users`           | Utilisateurs + rôle admin/user                          |
 | `sites`           | Sites de vol (nom, coords, altitude, niveau, région)    |
 | `site_conditions` | Conditions idéales par site (vent dir/vitesse, nuages)  |
-| `weather_models`  | Catalogue des modèles NWP (~20 connus + `qui_vole_consensus`, palette dans `config/weather.php`) |
-| `weather_apis`    | Sources API météo (Open-Meteo self-hosted/public, `consensus` = sidecar) |
-| `forecasts`       | Prévisions brutes par modèle (nullable). `models_count` / `models_converging` alimentés uniquement par `qui_vole_consensus` (consensus sidecar) |
-| `site_scores`     | Scores calculés par site/heure (green/orange/red)       |
+| `weather_models`  | Catalogue des modèles NWP (~20 connus + `qui_vole_consensus` **inactif**, palette dans `config/weather.php`) |
+| `weather_apis`    | Sources API météo (Open-Meteo self-hosted/public ; `consensus` **inactif** depuis le scoring déporté) |
+| `forecasts`       | Prévisions brutes par modèle (nullable). Alimente le panel multimodèles, `/carte-modeles` et la fiabilité (plus le scoring) |
+| `site_scores`     | **Template DDL vide** (plus écrit par Laravel). Les scores vivent dans `site_scores_1` / `site_scores_2` (double-buffer écrit par le sidecar) ; le buffer actif est désigné par `settings.scoring_table`. Lecture via `SiteScore::onActiveBuffer()` |
+| `site_scores_1` / `site_scores_2` | Double-buffer de scoring écrit par le sidecar `consensus-grid-v2` (DROP/CREATE LIKE/INSERT + flip atomique de `scoring_table`). Colonnes = `site_scores` + `quality_detail` (JSON scores qualité) |
 | `balises`         | Balises PiouPiou/FFVL/METAR/Windy (+ flag `in_consensus_compare_panel` pour la phase 2.5) |
 | `balise_readings` | Lectures temps réel balises                             |
 | `balise_readings_hourly` | Agrégat horaire des lectures balises (dir/vit/rafale/temp) — alimenté par `AggregateBaliseReadingsHourlyJob` |
@@ -429,14 +429,20 @@ Couleur = statut du jour sélectionné dans le toolbar.
 
 ### Services météo
 
-> **Consensus délégué au sidecar (V3, depuis 2026-05-29)** — le calcul du
-> consensus multi-modèles n'est plus fait par défaut dans l'app : il est
-> récupéré **en priorité** depuis le sidecar `parapente-consensus-grid`
-> (API compatible Open-Meteo `/v1/forecast`), via le modèle
-> `qui_vole_consensus` / l'API `consensus`. La voting logic PHP du
-> `ScoringService` ne sert plus que de **fallback** (consensus
-> indisponible/périmé). Cf. la sous-section *Consensus via le sidecar*
-> plus bas et `FF_grid_consensus.md`.
+> **Consensus ET scoring déportés au sidecar (depuis 2026-06-09)** — le
+> sidecar `consensus-grid-v2` calcule le consensus multi-modèles **et le
+> scoring de volabilité** de chaque site, qu'il écrit **directement en
+> base** dans le double-buffer `site_scores_1` / `site_scores_2` (pointeur
+> `settings.scoring_table`). Laravel n'est plus que **lecteur**
+> (`SiteScore::onActiveBuffer()`). La voting logic PHP, le fetch du
+> consensus (`ConsensusApi`/`FetchConsensusBatchJob`) et `ScoringService`
+> ont été **supprimés**. Seul subsiste `ScoringRules` (règles
+> éliminatoires + couleurs) pour le **scoring perso**. Cf. la sous-section
+> *Scoring déporté* plus bas.
+>
+> Les ~20 modèles NWP restent fetchés par `OpenMeteoApi` dans `forecasts`,
+> mais **uniquement** pour le panel multimodèles, `/carte-modeles` et la
+> fiabilité — ils ne pilotent plus aucun statut.
 
 **Architecture self-hosted (depuis PR5)** :
 Le projet utilise un **serveur Open-Meteo dédié** (image `open-meteo/open-meteo`)
@@ -478,103 +484,60 @@ inactifs car peu pertinents pour des sites France/Bénélux.
   en **altitude absolue (ASL)** : `cloud_base_m = elevation_modèle + 125 × (T₂ₘ_max_jour − Td₂ₘ)`
   (`temperature_2m_max` journalière, `dew_point_2m` ; `elevation` = point de grille
   du modèle, renvoyé par Open-Meteo ; fallbacks : T horaire / Td approx. depuis l'humidité).
-  Le consensus multi-modèles est stocké dans `site_scores.cloud_base_consensus`
-  (même voting logic que le reste).
+  (Le plafond consensus est désormais calculé et stocké par le sidecar
+  dans `site_scores_*.cloud_base_consensus`.)
 - Format datetime `Y-m-d H:i:s` pour MariaDB (pas ISO avec `T`)
 
-**`ScoringService`** (dépend de `App\Services\Settings` pour lire les
-seuils — injection automatique par DI Laravel ; les 4 seuils globaux
-sont préchargés au constructor une fois pour la durée du scoring,
-évite ~6 lookups par créneau × 120 créneaux/site) :
-- **Source du consensus (V3)** — pour chaque créneau,
-  `computeScoreForSlot()` cherche d'abord une prévision
-  `qui_vole_consensus` **fraîche** (`fetched_at` < 120 min,
-  `CONSENSUS_MAX_AGE_MINUTES`). Si présente :
-  `buildScoreFromConsensus()` reprend ses valeurs **telles quelles**
-  comme consensus et dérive `confidence_pct` de
-  `models_converging / models_count` (compteurs fournis par l'API).
-  Sinon, **fallback** : `computeScoreByVoting()` rejoue la voting logic
-  interne **en excluant** le modèle consensus (cf. `ConsensusApi::MODEL_CODE`).
-  Les règles métier ci-dessous (éliminatoires + couleurs) s'appliquent
-  identiquement dans les deux branches.
-- Voting logic complète
-- Moyenne circulaire pour direction vent (évite le problème 359°/1°)
-- Moyenne inverse carré pour isoler les outliers
-- Statut horaire (`site_scores.status`) — règles éliminatoires :
-  - rouge : précip consensus > `scoring.precip_red_mmh` ;
-    rafale consensus > `scoring.gust_red_kmh` (override par site possible
-    via `site_conditions.wind_gust_red_kmh`) ;
-    direction ou vitesse moyenne hors plage du site
-  - orange : précip consensus > `scoring.precip_orange_mmh` ;
-    rafale consensus > `scoring.gust_orange_kmh` (override par site possible
-    via `site_conditions.wind_gust_orange_kmh`)
-  - (la rafale = consensus de `wind_speed_max`, idem voting logic que le reste)
+**`ScoringRules`** (dépend de `App\Services\Settings` pour lire les seuils —
+4 seuils globaux préchargés au constructor) — **ne calcule plus le scoring
+de prod** (déporté au sidecar) ; sert uniquement au **scoring perso** :
+- `rescore(FlyingConditions, SiteScore)` rejoue les règles éliminatoires
+  sur les valeurs consensus **déjà stockées** dans le buffer actif, avec
+  les conditions d'un utilisateur (cf. `UserScoringService`).
+- `applyEliminatoryRules()` — statut horaire :
+  - rouge : précip > `scoring.precip_red_mmh` ; rafale > `scoring.gust_red_kmh`
+    (override site `site_conditions.wind_gust_red_kmh`) ; direction ou vitesse
+    moyenne hors plage du site
+  - orange : précip > `scoring.precip_orange_mmh` ; rafale > `scoring.gust_orange_kmh`
+    (override site `site_conditions.wind_gust_orange_kmh`)
   - Tous les seuils sont éditables depuis `/admin/settings`.
-- **Coloration par paramètre** (`computeParamColors()`, méthode publique) :
-  isole la couleur green/orange/red de chacun des 5 paramètres (direction,
-  vitesse moy., rafales, précip, plafond) — alignée sur les règles
-  éliminatoires. Stockée dans `site_scores.detail.<param>.color` à chaque
-  scoring. Sert à l'onglet « Détail scoring · 5 jours » du volet droit.
-  Plafond : informatif à partir de `site_conditions.cloud_base_min_m` (rouge
-  en-dessous, orange dans une marge de 100 m, vert au-dessus, sinon `unknown`).
-- `upsert()` en masse
-- **Backfill** : `php artisan scores:recompute-detail-colors [--site=<id>]
-  [--chunk=500]` recalcule `detail.*.color` sur les scores existants sans
-  refetch météo. Idempotent. Lance-la après un déploiement qui change la
-  logique de couleurs (sinon les couleurs s'actualiseront au prochain fetch
-  horaire).
+- `computeParamColors()` — couleur green/orange/red par paramètre (direction,
+  vitesse, rafales, précip, plafond informatif). Sert l'onglet « Détail
+  scoring » du volet droit, recalculé côté user.
+> ⚠️ Ces règles doivent rester **cohérentes** avec celles du sidecar
+> (`scoring.py`), qui produit le statut « global ». Toute évolution des
+> seuils ou de la logique éliminatoire doit être répercutée des deux côtés.
 
-#### Consensus via le sidecar — `ConsensusApi` (V3)
+#### Scoring déporté — double-buffer `site_scores_{1,2}`
 
-Le consensus multi-modèles est calculé par le sidecar
-`parapente-consensus-grid` sur toute la France et exposé via une API
-**compatible Open-Meteo** (`GET /v1/forecast?latitude=&longitude=
-&hourly=…&models=qui_vole_consensus`). Côté Laravel, ce consensus est
-traité comme **un modèle météo ordinaire** :
+Le sidecar `consensus-grid-v2` calcule le consensus **et** le scoring sur
+toute la France, et écrit les résultats directement en base :
 
-- **`App\Services\Weather\Apis\ConsensusApi`** (code `consensus`,
-  enregistré dans `WeatherApiRegistry`) — sert l'unique modèle
-  `qui_vole_consensus`, stocké dans `forecasts`.
-  - **Fetch en BATCH multi-coordonnées** (le sidecar accepte des listes
-    CSV `latitude`/`longitude` et renvoie un tableau racine, ordre
-    préservé) : `fetchBatchForSites()` envoie **40 sites par appel** →
-    `FetchConsensusBatchJob` couvre ~3000 sites en ~75 appels/heure.
-    ⚠️ **Ne jamais revenir à un fetch mono par site dans le cron** : à
-    3000 sites ça saturait le sidecar (incident 2026-05-29 — timeouts en
-    cascade, run consensus étouffé, carte météo HS). Le fetch mono
-    (`fetchForSiteAndModel`) reste utilisé uniquement pour le single-site
-    (`FetchSiteForecastsJob`, activation d'un site).
-  - ⚠️ Le sidecar renvoie le vent en **m/s** (pas de `wind_speed_unit`) →
-    `ConsensusApi` convertit en **km/h** (×3,6), unité de toute l'app.
-  - `qui_vole_cloud_base` (m AMSL, Espy côté sidecar) → `cloud_base_m`
-    directement (pas de recalcul).
-  - `qui_vole_models_count` / `qui_vole_models_converging` (horaires) →
-    stockés dans `forecasts.models_count` / `models_converging` (colonnes
-    nullables, alimentées **uniquement** par le modèle consensus).
-  - Toutes les constantes sensibles (code modèle, variables `qui_vole_*`)
-    sont en tête de `ConsensusApi` — à ajuster si le sidecar évolue.
-- **Endpoint/port éditables** depuis `/admin/apis` (champ `base_url` de la
-  ligne `weather_apis` `consensus`), comme l'Open-Meteo interne. Variable
-  d'env `CONSENSUS_API_URL` (défaut
-  `http://parapente-consensus-grid:8082/v1`), distincte de
-  `CONSENSUS_GRID_BASE_URL` (overlays raster de la carte météo).
-- **Modèle `qui_vole_consensus`** : visible dans `/admin/models`, mais
-  **exclu** de la liste des modèles comparés du panel multimodèles
-  (`SiteMultimodelPayloadBuilder`) et du sélecteur `/carte-modeles`
-  (`ModelGridController`) — il EST le consensus, déjà servi à part.
-- **Orchestration horaire** : `FetchForecastsJob` **sort
-  `qui_vole_consensus` de la chaîne par site** et dispatch à la place
-  `FetchConsensusBatchJob` (batch). Si SEUL le consensus est dû (cas
-  horaire courant), une passe de scoring (`ScoreSiteJob` par site) tourne
-  quand même pour répercuter le consensus frais. `FetchConsensusBatchJob`
-  a un **circuit breaker** (N échecs de chunk consécutifs → arrêt du
-  cycle) pour ne pas matraquer un sidecar à terre.
-- **Réversibilité** (pas de flag dédié) : désactiver `qui_vole_consensus`
-  dans `/admin/models` ⇒ plus de fetch consensus ⇒ le `ScoringService`
-  retombe sur la voting logic interne pour tous les créneaux. **C'est le
-  geste d'urgence** si le sidecar décroche.
+- **Double-buffer** : le sidecar écrit le buffer **inactif**
+  (`DROP TABLE` + `CREATE TABLE … LIKE` + INSERT par lots), puis flippe
+  atomiquement `settings.scoring_table` (`"1"`↔`"2"`). Zéro downtime côté
+  lecture. `site_scores` (sans suffixe) reste **vide**, comme template DDL
+  du bootstrap (premier run : `CREATE … LIKE site_scores`).
+- **Lecture côté Laravel** : `SiteScore::activeTableName()` lit le pointeur
+  **en SQL direct** (hors cache Redis du service Settings, sinon un flip
+  passerait inaperçu jusqu'à 1 h) ; `SiteScore::onActiveBuffer()` cible la
+  table active. Tous les lecteurs (payload builders, `MapBundleBuilder`,
+  `UserScoringService`, `Site::nextScore/upcomingScores`) y passent.
+- **Colonnes** : identiques à l'ancienne `site_scores` + `quality_detail`
+  (JSON, scores qualité par profil — `quality_profiles`/`quality_axes` lus
+  par le sidecar ; lecture brute côté app, affichage à venir).
+- **Invalidation des caches** : `WatchScoringTableJob` (planifié chaque
+  minute) compare le buffer actif à la dernière valeur vue ; au flip, il
+  purge `SiteDetailCache` (tous sites) + map bundle + user-scoring, et
+  dispatch `RebuildMapBundleJob`. Remplace l'ancien push de `ScoreSiteJob`.
+- **Modèle `qui_vole_consensus` / API `consensus`** : **désactivés**
+  (reliques). Exclus des comparaisons via `WeatherModel::CONSENSUS_CODE`
+  (`SiteMultimodelPayloadBuilder`, `ModelGridController`).
+- **Réversibilité** : aucune. Le scoring PHP a été supprimé (choix assumé).
+  Si le sidecar décroche, les scores se figent (tables stales) jusqu'à son
+  retour ; pas de fallback.
 - Toute modif des payloads concernés ⇒ bump `SiteDetailCache::CACHE_VERSION`
-  (actuellement **v2**) — cf. point 14.
+  (actuellement **v3**) — cf. point 14.
 
 > **Qualité d'une journée** — calculée à la lecture par
 > `App\Services\Map\DayQualityCalculator::compute()` (pas en base) :
@@ -614,11 +577,11 @@ Cf. `FF_site_blacklist.md`.
 Tous les endpoints alimentant la vue carte sont **pré-calculés** en cache
 Redis pour soulager la DB et accélérer le boot mobile :
 
-- **`MapBundleBuilder`** (`map.bundle.v2`, TTL 90 min)
+- **`MapBundleBuilder`** (`map.bundle.v3`, TTL 90 min)
   - Construit le bundle global servi à `/api/map-bundle` : tous les sites
-    actifs avec leurs statuts journaliers (issus de `site_scores`), les
-    fenêtres solaires, et l'agrégat global par jour (best_status,
-    green_slots cumulés).
+    actifs avec leurs statuts journaliers (issus du buffer de scoring actif
+    `site_scores_{1,2}` via `SiteScore::onActiveBuffer()`), les fenêtres
+    solaires, et l'agrégat global par jour (best_status, green_slots cumulés).
   - L'agrégat journalier est calculé par la méthode **statique pure
     `summarizeDays($sitesPayload, $excludedSiteIds = [])`**, réutilisée
     par l'overlay « sites masqués » (`MeHiddenSitesController`) pour
@@ -626,15 +589,14 @@ Redis pour soulager la DB et accélérer le boot mobile :
   - Le bundle **caché** porte `green_hours_set` par site (heures green
     par jour), nécessaire à ce recalcul ; **`MapBundleController::show`
     le retire du payload client** (pas de bloat front). Toute modif de
-    cette structure ⇒ bump `CACHE_VERSION` (actuellement **2**).
-  - Régénéré par `RebuildMapBundleJob`, dispatché à la fin du `Bus::batch`
-    orchestré par `FetchForecastsJob` (toutes les chaînes de scoring ont
-    fini) — et aussi à la fin de `FetchSiteForecastsJob` (manuel).
+    cette structure ⇒ bump `CACHE_VERSION` (actuellement **3**).
+  - Régénéré par `RebuildMapBundleJob`, dispatché par `WatchScoringTableJob`
+    au flip du buffer de scoring (sidecar) — et par les observers Site/Balise.
   - Fallback lazy : si la clé est absente (TTL expiré, flush), reconstruction
     à la volée avec lock Redis anti-thundering-herd.
   - Commande : `php artisan map:rebuild-bundle` (force la régénération).
 
-- **`SiteDetailCache`** (`map.site_{scores|chart|multimodel}.{id}.{...}.v1`, TTL 90 min)
+- **`SiteDetailCache`** (`map.site_{scores|chart|multimodel}.{id}.{...}.v3`, TTL 90 min)
   - Cache transparent des endpoints `/api/sites/{id}/{scores,chart,multimodel}`.
   - `scores` : version "global" cachée ; si l'utilisateur a un scoring perso
     ACTIF sur ce site, le contrôleur applique le rescore par-dessus
@@ -642,8 +604,8 @@ Redis pour soulager la DB et accélérer le boot mobile :
     quel (cas dominant).
   - `chart` et `multimodel` : cache complet (pas de logique user-spec).
     `multimodel` est caché par couple `(day, period)`.
-  - Invalidation : `ScoreSiteJob::handle` et `FetchSiteForecastsJob::handle`
-    appellent `forgetSite($siteId)` à la fin du scoring.
+  - Invalidation : `WatchScoringTableJob` (flip du buffer → `forgetSite` sur
+    tous les sites) + `FetchSiteForecastsJob` (refresh forecasts d'un site).
 
 - **`BalisesBundleCache`** (`map.balises.bundle.v1` + `map.balises.history.{id}.v1`)
   - `/api/balises` : TTL 5 min (les readings bougent vite). Invalidé par
@@ -743,11 +705,11 @@ du cache map sans intervention manuelle :
 
 - **`SiteActivationObserver`** (Site uniquement) — dispatch
   `FetchSiteForecastsJob` sur création d'un site déjà actif OU
-  transition inactif → actif. Sans ça, l'activation d'un site n'a
-  aucun effet visible avant le prochain cycle cron horaire et il faut
-  jusqu'à 12 h pour qu'un nouveau site voie ses ~13 modèles tous
-  récupérés. Le job fetch (sync, ~30-60 s) → score → invalide caches
-  site → dispatch `RebuildMapBundleJob`.
+  transition inactif → actif, pour alimenter immédiatement les
+  prévisions par modèle (`forecasts`, panel multimodèles). ⚠️ **Plus de
+  scoring immédiat** : les statuts viennent du sidecar ; un site
+  fraîchement activé reste « inconnu » jusqu'au prochain run de celui-ci
+  (le marqueur, lui, apparaît via `MapBundleInvalidationObserver`).
 
 - **`GeocodableObserver`** (Site + Balise) — cf. section géocodage
   ci-dessus.
@@ -775,16 +737,19 @@ Seeder : `php artisan db:seed --class=SettingsSeeder --force` (idempotent).
 - Dans `buildChartSVG` : flèche = `rotate(wind_dir + 180)` pour montrer où le vent VA
 
 ### Jobs
-- `FetchForecastsJob` : cron horaire. Construit une chaîne par site
-  (`FetchSiteModelJob×N → ScoreSiteJob`) et les enveloppe dans un
-  `Bus::batch()` (`allowFailures`). Le callback `finally` du batch
-  dispatch `RebuildMapBundleJob` pour reconstruire le cache map quand
-  tous les sites ont fini de scorer.
-- `FetchSiteForecastsJob` : fetch tous modèles d'un site (sync) →
-  upsert par lots 500 → calcul scores → invalide `SiteDetailCache` du
-  site → dispatch `RebuildMapBundleJob`. Timeout 300s.
-- `ScoreSiteJob` : recalcule les scores d'un site, puis invalide
-  `SiteDetailCache::forgetSite($id)` et `UserScoringService::invalidateSite($id)`.
+- `FetchForecastsJob` : cron horaire. Construit une chaîne `FetchSiteModelJob×N`
+  par site (modèles dûs pour refresh) dans un `Bus::batch()` (`allowFailures`).
+  **Ne calcule plus aucun score** (déporté au sidecar) : alimente seulement
+  `forecasts` pour le panel multimodèles / `/carte-modeles` / fiabilité.
+- `FetchSiteModelJob` : fetch + upsert `forecasts` d'un (site, modèle). Plus
+  de scoring.
+- `WatchScoringTableJob` : cron **chaque minute**. Détecte le flip de
+  `settings.scoring_table` (sidecar) → invalide `SiteDetailCache` (tous sites)
+  + map bundle + user-scoring, et dispatch `RebuildMapBundleJob`. C'est le
+  point d'invalidation du scoring déporté.
+- `FetchSiteForecastsJob` : refresh `forecasts` d'un site (sync, activation /
+  tinker) → invalide `SiteDetailCache` du site. **Pas de scoring** (au prochain
+  run sidecar). Timeout 300s.
 - `RebuildMapBundleJob` : régénère le map bundle global et l'écrit en
   cache Redis. Idempotent.
 - **`FetchBaliseReadingsJob`** (abstrait) : base mutualisée des 3 jobs
@@ -951,7 +916,7 @@ Quatre routes, toutes sous middleware `['auth', 'admin']` :
 | `GET /carte-meteo/progress` | Proxy `/progress`, polled toutes les 30 s pour le badge « run en cours ». |
 
 **Config** : `services.consensus_grid.base_url` (variable d'env
-`CONSENSUS_GRID_BASE_URL`, défaut `http://consensus-grid:8082`) et
+`CONSENSUS_GRID_BASE_URL`, défaut `http://consensus-grid-v2-api:8082`) et
 `CONSENSUS_GRID_TIMEOUT`. Routes déclarées sous le groupe
 `middleware(['auth', 'admin'])` de `routes/web.php` à côté de
 `carte-modeles`.
@@ -960,7 +925,7 @@ Quatre routes, toutes sous middleware `['auth', 'admin']` :
 
 ```nginx
 location ~ ^/carte-meteo/overlay/(.+)$ {
-    set $consensus_grid_upstream "consensus-grid:8082";
+    set $consensus_grid_upstream "consensus-grid-v2-api:8082";
     proxy_pass http://$consensus_grid_upstream/v1/overlay/$1$is_args$args;
     proxy_http_version 1.1;
     proxy_set_header Connection "";
@@ -973,14 +938,14 @@ location ~ ^/carte-meteo/overlay/(.+)$ {
 Trois subtilités structurantes :
 
 1. **Forme regex + URI explicite** : la combinaison `rewrite + proxy_pass http://$variable;` est buggée dans certaines versions de nginx (renvoie 500 silencieusement). On utilise donc une `location ~ ^…(.+)$` avec capture, et on injecte explicitement `$1$is_args$args` dans l'URL en aval pour préserver la query string (notamment `?run=…`).
-2. **DNS dynamique** : `resolver 127.0.0.11 valid=10s;` au scope serveur. Couplé à `proxy_pass http://$variable;`, nginx re-résout le DNS Docker à chaque cycle au lieu de geler l'IP au démarrage. Sans ça, tout `docker compose recreate consensus-grid` cassait les overlays jusqu'au prochain restart nginx.
+2. **DNS dynamique** : `resolver 127.0.0.11 valid=10s;` au scope serveur. Couplé à `proxy_pass http://$variable;`, nginx re-résout le DNS Docker à chaque cycle au lieu de geler l'IP au démarrage. Sans ça, tout `docker compose recreate consensus-grid-v2-api` cassait les overlays jusqu'au prochain restart nginx.
 3. **Pas de cache nginx** : le sidecar pré-rend les PNG sur disque et les sert en ~5 ms via `FileResponse`. Le HTTP cache navigateur (`Cache-Control: public, max-age=3600`) + le cache-buster `?run=<run_init_unix>` côté front suffisent. Pas de `proxy_cache_path`, pas de volume dédié.
 
 Conteneur `parapente_nginx` attaché à `meteo-net` dans
-`docker-compose.prod.yml` pour pouvoir résoudre `consensus-grid:8082`.
+`docker-compose.prod.yml` pour pouvoir résoudre `consensus-grid-v2-api:8082`.
 Le sidecar doit lui-même déclarer `meteo-net` comme `external: true`
-dans son propre `docker-compose.prod.yml` pour que l'alias court
-`consensus-grid` soit enregistré au démarrage.
+dans son propre `docker-compose.prod.yml` pour que l'alias DNS (nom de
+service `consensus-grid-v2-api`) soit enregistré au démarrage.
 
 ### Front (`weather-map/index.blade.php`)
 
@@ -1062,33 +1027,36 @@ sidecar, affiche `run en cours : variable (xx %, N min)`. Caché en
 `idle` / `completed` / `failed` (sauf en cas d'erreur, où il bascule
 en rouge avec le détail).
 
-### Variables exposées (~22 layers)
+### Variables exposées (~30 layers — sidecar v6)
 
-Le sélecteur de variable filtre `wind_direction_10m` (consommé en
-interne pour les flèches, pas montré comme couche d'info indépendante).
+Le sélecteur de variable filtre les `wind_direction_*` (consommés en
+interne pour les flèches, pas montrés comme couches indépendantes).
 Les autres sont organisés par catégories dans `VAR_LABELS` :
 
 - **Surface 10 m / 2 m** : `wind_speed_10m`, `wind_gusts_10m`,
   `precipitation`, `relative_humidity_2m`, `temperature_2m`,
-  `dew_point_2m`, `cloud_cover_{low,mid,high}`
+  `dew_point_2m`, `cloud_cover_{low,mid,high}`, `visibility`,
+  `weather_code`, `shortwave_radiation`
+- **Vent altitude AGL** : `wind_{speed,direction}_{80m,120m,180m}`
 - **Altitude ~1500 m / 850 hPa** : `temperature_850hPa`,
-  `wind_speed_850hPa`, `wind_direction_850hPa`
+  `wind_speed_850hPa`, `wind_direction_850hPa`, `cloud_cover_850hPa`,
+  `relative_humidity_850hPa`
 - **Indicateurs convectifs / orageux** : `cape`, `convective_inhibition`,
-  `lifted_index`, `convective_precipitation`, `boundary_layer_height`
+  `convective_precipitation`, `freezing_level_height`
 - **Variables propriétaires Qui-Vole** : `qui_vole_cloud_base` (plafond
-  de vol estimé via Espy côté sidecar), `qui_vole_storm_risk` (0..3),
-  `qui_vole_models_count`, `qui_vole_models_converging`
+  de vol estimé via Espy côté sidecar), `qui_vole_storm_risk` (0..3)
 
 Tous les labels sont en français parapente : « Vent au sol — moyen
-(km/h) », « Plafond thermique — couche limite (m) », « Base des nuages —
-plafond de vol (m) », « Indice de stabilité — LI (K) », etc. La conversion
-m/s → km/h pour les vents se fait à l'affichage uniquement.
+(km/h) », « Isotherme 0 °C — altitude (m) », « Base des nuages — plafond
+de vol (m) », etc., avec **lookup tolérant** (le sélecteur est peuplé
+dynamiquement depuis le manifest, un nom inconnu retombe sur lui-même).
+La conversion m/s → km/h pour les vents se fait à l'affichage uniquement.
 
 ### Points d'attention
 
 - **Le sidecar doit être sur `meteo-net`** (et déclarer cet alias DNS
   via `networks.meteo-net.external: true` dans son propre compose).
-  Sinon, `consensus-grid` n'est pas résolvable depuis nginx.
+  Sinon, `consensus-grid-v2-api` n'est pas résolvable depuis nginx.
 - **`wind_direction_10m` reste avec cmap HSV** côté sidecar — c'est la
   source de données pour la couche flèches client-side. Si la cmap
   change, le décodeur RGB → angle casse silencieusement.
@@ -1232,8 +1200,9 @@ docker exec -it parapente_php php artisan reliability:compute-compare --balise=1
 docker exec -it parapente_php php artisan reliability:compute-factors              # MAE / weight_factor
 docker exec -it parapente_php php artisan reliability:compute-factors --days=14    # fenêtre étendue
 
-# Vérifier les données en base
-# >>> \App\Models\SiteScore::where('site_id',1)->where('forecast_at','like','2026-05-08%')->get(['forecast_at','wind_dir_consensus','status']);
+# Vérifier les données en base (lire TOUJOURS via le buffer actif)
+# >>> \App\Models\SiteScore::onActiveBuffer()->where('site_id',1)->where('forecast_at','like','2026-05-08%')->get(['forecast_at','wind_dir_consensus','status']);
+# >>> \App\Models\SiteScore::activeTableName();  // site_scores_1 | site_scores_2
 # >>> \App\Models\SiteCondition::where('site_id',1)->first(['wind_dir_min','wind_dir_max','wind_speed_min','wind_speed_max']);
 ```
 
@@ -1305,9 +1274,10 @@ docker exec -it parapente_php php artisan reliability:compute-factors --days=14 
     `/api/sites/{id}/{scores,chart,multimodel}`, `/api/balises` ou
     `/api/balises/{id}/history` doit s'accompagner d'un bump de la
     `CACHE_VERSION` du service correspondant (sinon les vieilles entrées
-    Redis casseront la vue). L'invalidation est **push** (jobs de
-    scoring / fetch readings + observers Site/Balise) + **lazy fallback**
-    (TTL backup). En dev, vider le cache : `php artisan cache:clear` ou
+    Redis casseront la vue). L'invalidation est **push**
+    (`WatchScoringTableJob` au flip du buffer de scoring, jobs fetch
+    readings, observers Site/Balise) + **lazy fallback** (TTL backup). En
+    dev, vider le cache : `php artisan cache:clear` ou
     `php artisan map:rebuild-bundle --clear`.
 15. **Observers Eloquent et opérations en masse** — les trois
     observers (`GeocodableObserver`, `MapBundleInvalidationObserver`,

@@ -23,9 +23,9 @@ class SectionSettingsController extends Controller
 
     private const MONITOR_JOBS = [
         'sites' => [
-            'App\Jobs\FetchForecastsJob'      => ['label' => 'Orchestrateur horaire',  'schedule' => 'Toutes les heures'],
-            'App\Jobs\FetchConsensusBatchJob'  => ['label' => 'Consensus batch',        'schedule' => 'Toutes les heures'],
-            'App\Jobs\RebuildMapBundleJob'     => ['label' => 'Rebuild map bundle',     'schedule' => 'Post-scoring'],
+            'App\Jobs\FetchForecastsJob'    => ['label' => 'Fetch prévisions (modèles)', 'schedule' => 'Toutes les heures'],
+            'App\Jobs\WatchScoringTableJob' => ['label' => 'Surveillance scoring sidecar', 'schedule' => 'Toutes les minutes'],
+            'App\Jobs\RebuildMapBundleJob'  => ['label' => 'Rebuild map bundle',         'schedule' => 'Au flip du buffer'],
         ],
         'stations' => [
             'App\Jobs\FetchMfStationReadingsJob'         => ['label' => 'Météo-France (6min)',  'schedule' => 'xx:09/21/33/45/57'],

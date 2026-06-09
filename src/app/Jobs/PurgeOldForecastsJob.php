@@ -6,7 +6,6 @@ namespace App\Jobs;
 
 use App\Models\Forecast;
 use App\Models\JobMonitor;
-use App\Models\SiteScore;
 use Carbon\Carbon;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -79,7 +78,8 @@ class PurgeOldForecastsJob implements ShouldQueue
         $fetchLogCutoff = Carbon::now()->subDays(self::FETCH_LOG_RETENTION_DAYS)->startOfDay();
 
         $deletedForecasts = Forecast::where('forecast_at', '<', $forecastCutoff)->delete();
-        $deletedScores    = SiteScore::where('forecast_at', '<', $forecastCutoff)->delete();
+        // Les `site_scores_{1,2}` sont DROP/recréées à chaque run par le
+        // sidecar (consensus-grid-v2) — pas de purge Laravel à faire.
 
         // L'archive balises peut ne pas exister si la migration n'a pas
         // encore tourné — on tolère le cas pour pouvoir scheduler ce job
@@ -116,7 +116,6 @@ class PurgeOldForecastsJob implements ShouldQueue
 
         Log::info('PurgeOldForecastsJob completed', [
             'forecasts_deleted'         => $deletedForecasts,
-            'site_scores_deleted'       => $deletedScores,
             'archive_balises_deleted'   => $deletedArchive,
             'archive_stations_deleted'  => $deletedArchiveStations,
             'balise_hourly_deleted'     => $deletedHourly,

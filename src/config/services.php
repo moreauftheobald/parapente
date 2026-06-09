@@ -37,13 +37,15 @@ return [
 
     'consensus_grid' => [
         // Sidecar consensus-grid V2 — source unique pour :
-        //   - le consensus multi-modèles (/v1/forecast)
         //   - les overlays carte météo (/v1/overlay)
         //   - l'introspection admin (/v1/consensus/active_config,
         //     /v1/consensus/dependency_graph, /v1/models/variables)
+        // Le consensus ET le scoring sont écrits directement en base par le
+        // sidecar (tables site_scores_{1,2}) — plus de fetch /v1/forecast.
+        // Alias DNS = nom de service docker-compose `consensus-grid-v2-api`.
         // - dev local : http://localhost:8083 (mapping hôte → port interne 8082)
-        // - prod docker-compose : http://parapente-consensus-grid-v2-api:8082
-        'base_url' => env('CONSENSUS_GRID_BASE_URL', 'http://parapente-consensus-grid-v2-api:8082'),
+        // - prod docker-compose : http://consensus-grid-v2-api:8082
+        'base_url' => env('CONSENSUS_GRID_BASE_URL', 'http://consensus-grid-v2-api:8082'),
         'timeout'  => (int) env('CONSENSUS_GRID_TIMEOUT', 10),
     ],
 

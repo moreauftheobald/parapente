@@ -16,8 +16,8 @@ use Illuminate\Support\Facades\Log;
  * Régénère le map bundle et le stocke en cache Redis.
  *
  * Dispatché :
- *  - à la fin du cycle horaire de scoring (FetchForecastsJob,
- *    ScoreSiteJob) → bundle reflète les derniers scores
+ *  - au flip du buffer de scoring écrit par le sidecar
+ *    (WatchScoringTableJob) → bundle reflète les derniers scores
  *  - lors d'un changement de Site/Balise (activation, suppression,
  *    déplacement…) via MapBundleInvalidationObserver
  *

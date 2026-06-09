@@ -7,7 +7,6 @@ namespace App\Jobs;
 use App\Jobs\Concerns\TracksExecution;
 use App\Models\Site;
 use App\Models\WeatherModel;
-use App\Services\Weather\Apis\ConsensusApi;
 use Illuminate\Bus\Batch;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -15,28 +14,26 @@ use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Orchestrateur planifié (cron horaire).
+ * Orchestrateur planifié (cron horaire) du fetch des prévisions PAR
+ * MODÈLE (table `forecasts`).
  *
  * Pour chaque site actif, on prépare une CHAÎNE de jobs reprenant les
  * modèles dûs pour un refresh (selon `refresh_frequency_minutes` +
  * `last_fetch_at`) :
  *
- *   FetchSiteModelJob (modèle 1, sans rescore)
- *   → FetchSiteModelJob (modèle 2, sans rescore)
+ *   FetchSiteModelJob (modèle 1)
+ *   → FetchSiteModelJob (modèle 2)
  *   → …
- *   → ScoreSiteJob  (un seul recalcul des scores, en fin de salve)
  *
- * Toutes les chaînes (1 par site) sont enveloppées dans un `Bus::batch()`.
- * Quand toutes les chaînes ont fini (succès OU échec, allowFailures()
- * est actif), le callback `finally` dispatch RebuildMapBundleJob qui
- * régénère le cache `/api/map-bundle` à partir des scores frais.
- * Cf. FF_map_bundle_cache.md.
+ * Ces prévisions par modèle alimentent le panel multimodèles, la carte
+ * des modèles et la fiabilité. Le CONSENSUS et le SCORING sont désormais
+ * entièrement déportés au sidecar `consensus-grid-v2` (tables
+ * `site_scores_{1,2}`) : ce job ne fetche plus `qui_vole_consensus` et ne
+ * déclenche plus aucun calcul de score ni de rebuild du map bundle (ce
+ * dernier est piloté par WatchScoringTableJob, au flip du buffer).
  *
- * Le rescoring n'est donc fait qu'une fois par site et par cycle, après
- * ingestion de tous les modèles ; et le map bundle qu'une fois TOUTES
- * les sites ont fini de scorer.
- *
- * Une fois les chaînes dispatchées, on met à jour
+ * Toutes les chaînes (1 par site) sont enveloppées dans un `Bus::batch()`
+ * (`allowFailures()`). Une fois les chaînes dispatchées, on met à jour
  * `weather_models.last_fetch_at` pour fermer la fenêtre de refresh.
  */
 class FetchForecastsJob implements ShouldQueue
@@ -65,14 +62,10 @@ class FetchForecastsJob implements ShouldQueue
 
         $activeModels = WeatherModel::with('api')->where('active', true)->get();
 
-        $consensus        = $activeModels->firstWhere('code', ConsensusApi::MODEL_CODE);
-        $dispatchConsensus = $consensus
-            && $consensus->isDueForRefresh()
-            && $consensus->api
-            && $consensus->api->active;
-
+        // Le modèle consensus est déporté au sidecar — exclu par sécurité
+        // (il est de toute façon inactif depuis la bascule scoring V2).
         $dueModels = $activeModels
-            ->reject(fn (WeatherModel $m) => $m->code === ConsensusApi::MODEL_CODE)
+            ->reject(fn (WeatherModel $m) => $m->code === WeatherModel::CONSENSUS_CODE)
             ->filter(fn (WeatherModel $m) => $m->isDueForRefresh())
             ->filter(function (WeatherModel $m) {
                 if (! $m->api || ! $m->api->active) {
@@ -83,17 +76,10 @@ class FetchForecastsJob implements ShouldQueue
             })
             ->values();
 
-        if ($dueModels->isEmpty() && ! $dispatchConsensus) {
+        if ($dueModels->isEmpty()) {
             $this->trackSuccess('Aucun modèle dû pour refresh');
             Log::info('FetchForecastsJob: aucun modèle dû pour refresh.');
             return;
-        }
-
-        if ($dispatchConsensus) {
-            FetchConsensusBatchJob::dispatch()->onQueue('meteo');
-            $consensus->last_fetch_at = now();
-            $consensus->save();
-            Log::info('FetchForecastsJob: FetchConsensusBatchJob dispatché (batch consensus).');
         }
 
         $dueModelIds = $dueModels->pluck('id')->all();
@@ -106,10 +92,9 @@ class FetchForecastsJob implements ShouldQueue
             ->chunkById(200, function ($sites) use ($dueModelIds, &$chains, &$chainCount) {
                 foreach ($sites as $site) {
                     $jobs = array_map(
-                        fn (int $modelId) => new FetchSiteModelJob($site->id, $modelId, false),
+                        fn (int $modelId) => new FetchSiteModelJob($site->id, $modelId),
                         $dueModelIds
                     );
-                    $jobs[] = new ScoreSiteJob($site->id);
 
                     $chains[] = $jobs;
                     $chainCount++;
@@ -147,16 +132,15 @@ class FetchForecastsJob implements ShouldQueue
     private function dispatchBatch(array $chains): void
     {
         Bus::batch($chains)
-            ->name('hourly-scoring')
+            ->name('hourly-forecasts')
             ->onQueue('meteo')
             ->allowFailures()
             ->finally(function (Batch $batch) {
                 Log::info(
                     "FetchForecastsJob: batch {$batch->id} terminé "
                     . "({$batch->processedJobs()} / {$batch->totalJobs} jobs, "
-                    . "{$batch->failedJobs} échecs). Dispatch RebuildMapBundleJob."
+                    . "{$batch->failedJobs} échecs)."
                 );
-                RebuildMapBundleJob::dispatch();
             })
             ->dispatch();
     }

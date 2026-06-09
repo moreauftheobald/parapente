@@ -10,6 +10,15 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class WeatherModel extends Model
 {
+    /**
+     * Code du modèle « consensus » historiquement calculé/fetché par le
+     * sidecar. Le scoring et le consensus sont désormais entièrement
+     * déportés (tables `site_scores_{1,2}`), ce modèle est conservé
+     * inactif et reste exclu des comparaisons multimodèles / carte des
+     * modèles (il EST le consensus, déjà servi à part).
+     */
+    public const CONSENSUS_CODE = 'qui_vole_consensus';
+
     protected $fillable = [
         'code',
         'name',

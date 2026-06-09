@@ -70,7 +70,8 @@ class SiteController extends Controller
      * Scores horaires + sun windows + day quality d'un site.
      *
      * Le payload "global" (sans rescore perso) est mis en cache Redis
-     * via SiteDetailCache (TTL 90 min, invalidé par ScoreSiteJob). Si
+     * via SiteDetailCache (TTL 90 min, invalidé au flip du buffer de
+     * scoring par WatchScoringTableJob). Si
      * l'utilisateur a un scoring perso ACTIF sur ce site, on lit le
      * cache puis on applique le rescore par-dessus (status, couleurs,
      * day_quality). Sinon on renvoie le cache tel quel — cas dominant.
@@ -100,7 +101,8 @@ class SiteController extends Controller
      * Données horaires agrégées pour le popup graphique :
      * vent min/moy/max, couverture nuageuse haute/moy/basse, direction.
      *
-     * Mis en cache transparent (TTL 90 min, invalidé par ScoreSiteJob).
+     * Mis en cache transparent (TTL 90 min, invalidé au flip du buffer
+     * de scoring par WatchScoringTableJob).
      */
     public function chart(int $id): JsonResponse
     {

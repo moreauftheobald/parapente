@@ -8,21 +8,16 @@ use App\Jobs\FetchSiteForecastsJob;
 use App\Models\Site;
 
 /**
- * Déclenche un fetch météo + scoring immédiat quand un site devient
- * actif (création active OU passage inactif → actif).
+ * Déclenche un fetch des prévisions PAR MODÈLE quand un site devient
+ * actif (création active OU passage inactif → actif), pour alimenter
+ * immédiatement le panel multimodèles sans attendre le cron horaire.
  *
- * Sans ça, l'activation d'un site n'a aucun effet visible avant le
- * prochain cycle cron horaire — et il peut s'écouler jusqu'à 12h
- * pour qu'un site nouvellement activé voie ses ~13 modèles météo
- * tous récupérés.
- *
- * Le job `FetchSiteForecastsJob` :
- *  - fetch les 13 modèles du site en synchrone (~30-60s)
- *  - lance le scoring
- *  - invalide les caches du site
- *  - dispatch `RebuildMapBundleJob`
- *
- * Donc une seule chose à dispatcher pour rattraper toute la chaîne.
+ * ⚠️ Le SCORING (statut vert/orange/rouge) est déporté au sidecar
+ * `consensus-grid-v2` : un site nouvellement activé apparaît sur la carte
+ * (le marqueur est ajouté par `MapBundleInvalidationObserver`) mais reste
+ * en statut « inconnu » jusqu'au prochain run du sidecar, qui peuplera
+ * `site_scores_{1,2}` pour lui. `FetchSiteForecastsJob` ne rafraîchit donc
+ * ici que les `forecasts` (comparaison multimodèles), pas les scores.
  */
 class SiteActivationObserver
 {

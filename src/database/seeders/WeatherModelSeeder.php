@@ -286,10 +286,11 @@ class WeatherModelSeeder extends Seeder
             );
         }
 
-        // Consensus Qui-Vole — modèle servi par le sidecar
-        // parapente-consensus-grid (API `consensus`), pas par l'instance
-        // Open-Meteo. Le ScoringService l'utilise en priorité comme valeur
-        // de consensus (cf. ConsensusApi / ScoringService).
+        // Consensus Qui-Vole — relique INACTIVE. Le consensus ET le scoring
+        // sont désormais calculés et écrits par le sidecar consensus-grid-v2
+        // directement dans `site_scores_{1,2}` ; Laravel ne fetche plus ce
+        // modèle. On conserve la ligne (inactive) pour l'historique et les
+        // exclusions par code (WeatherModel::CONSENSUS_CODE).
         $consensusApiId = DB::table('weather_apis')->where('code', 'consensus')->value('id');
         if ($consensusApiId !== null) {
             DB::table('weather_models')->updateOrInsert(
@@ -303,7 +304,7 @@ class WeatherModelSeeder extends Seeder
                     'weight_short'              => 1.00,
                     'weight_medium'             => 1.00,
                     'refresh_frequency_minutes' => 60,
-                    'active'                    => true,
+                    'active'                    => false,
                     'updated_at'                => now(),
                     'created_at'                => now(),
                 ]
