@@ -7,6 +7,9 @@ function mapApp(){return{
     // Scoring perso : 'user' | 'global' par site_id (renvoyé par /api/sites/{id}/scores).
     // Vide pour les invités, ou pour les sites sans scoring perso actif.
     scoringSource:{},
+    // Fraîcheur du scoring (watchdog sidecar) : {stale, age_minutes, ...} ou null.
+    // Alimente le bandeau « prévisions non rafraîchies » (cf. ScoringFreshness).
+    scoringStale:null,
     days:[],selectedDayIdx:0,
     site:{},
     currentBasemap:'topo',basemapList:BASEMAP_LIST,
@@ -238,6 +241,9 @@ function mapApp(){return{
             const r = await fetch('/api/map-bundle', {credentials:'same-origin'});
             if (!r.ok) throw new Error('map-bundle HTTP ' + r.status);
             const bundle = await r.json();
+
+            // Watchdog de fraîcheur : bandeau si le scoring est périmé.
+            this.scoringStale = bundle.scoring_status || null;
 
             this.sites = (bundle.sites || []).map(s => ({
                 id: s.id, name: s.name, lat: s.lat, lng: s.lng,

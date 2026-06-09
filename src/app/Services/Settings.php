@@ -65,6 +65,15 @@ class Settings
             'type'        => 'float',
         ],
 
+        // ── Fraîcheur du scoring (watchdog sidecar) ──────────────
+        'scoring.stale_after_minutes' => [
+            'default'     => 75,
+            'label'       => 'Scoring · péremption (minutes)',
+            'description' => "Âge du dernier run sidecar au-delà duquel le scoring est considéré périmé : alerte (log) + bandeau « prévisions non rafraîchies » sur la carte. Runs horaires ~8 min → 75 min laisse passer un run manqué ponctuel.",
+            'group'       => 'scoring',
+            'type'        => 'int',
+        ],
+
         // ── Viabilité d'une journée (cloche horaire + run factor) ─
         'viability.peak_hour' => [
             'default'     => 13.5,
