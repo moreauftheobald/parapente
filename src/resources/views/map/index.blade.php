@@ -19,6 +19,7 @@
             @include('map._partials.styles.panel')
             @include('map._partials.styles.charts')
             @include('map._partials.styles.tooltip')
+            [x-cloak]{ display:none !important; }
         </style>
     @endpush
 
@@ -38,6 +39,22 @@
          vit désormais en tête fixe du volet gauche (cf. left-panel). --}}
     <div id="map-area" @click.window="dayDropOpen=false; bmDropOpen=false;">
         <div id="map"></div>
+
+        {{-- Bandeau « scoring périmé » : visible quand le sidecar a cessé de
+             produire des runs (cf. ScoringFreshness / WatchScoringTableJob). --}}
+        <div x-cloak x-show="scoringStale && scoringStale.stale"
+             style="position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:75;
+                    max-width:92vw;display:flex;gap:8px;align-items:center;
+                    background:#7c2d12;color:#fff;border:1px solid #ea580c;border-radius:8px;
+                    padding:8px 14px;font:500 13px/1.35 var(--font-mono,monospace);
+                    box-shadow:0 6px 18px rgba(0,0,0,.35);">
+            <span style="font-size:15px;line-height:1;">⚠️</span>
+            <span>Prévisions non rafraîchies depuis
+                <strong x-text="scoringStale ? (scoringStale.age_minutes >= 120
+                    ? (Math.round(scoringStale.age_minutes/6)/10 + ' h')
+                    : (scoringStale.age_minutes + ' min')) : ''"></strong>
+                — données potentiellement périmées.</span>
+        </div>
     </div>
 
     {{-- Tooltips & dropdowns flottants (échappent au flux normal via position:fixed) --}}

@@ -263,6 +263,9 @@ GET /api/map-bundle         → Bundle pré-calculé : tous les sites + statuts
                               par jour. Boot de la carte = 1 seul appel
                               (avant : 1 + N appels). Cache Redis partagé,
                               régénéré à la fin de chaque cycle de scoring.
+                              Porte aussi `scoring_status` (ajouté en direct,
+                              hors cache) : flag de péremption du scoring pour
+                              le bandeau carte (cf. ScoringFreshness).
 GET /api/me/scoring-overrides → (auth) Sur-couche utilisateur du bundle :
                               flag user_scoring + statuts journaliers
                               recalculés pour les sites avec scoring perso
@@ -545,6 +548,15 @@ toute la France, et écrit les résultats directement en base :
 - **Réversibilité** : aucune. Le scoring PHP a été supprimé (choix assumé).
   Si le sidecar décroche, les scores se figent (tables stales) jusqu'à son
   retour ; pas de fallback.
+- **Watchdog de fraîcheur** (`App\Services\Map\ScoringFreshness`) : comme un
+  sidecar figé (worker hang) ne ferait plus flipper le buffer, les scores se
+  périmeraient **en silence**. `WatchScoringTableJob` mémorise l'instant de
+  chaque flip et, au-delà de `scoring.stale_after_minutes` (défaut 75, éditable
+  `/admin/settings`), pose un flag + `Log::error` (one-shot). Mesure tz-safe
+  (horloge Laravel des deux côtés, pas de `computed_at` sidecar). Le flag est
+  exposé en direct dans `/api/map-bundle` (`scoring_status`) → bandeau
+  « prévisions non rafraîchies » sur la carte. **Ne répare pas** le sidecar
+  (cf. self-heal côté worker) — c'est un filet d'alerte.
 - Toute modif des payloads concernés ⇒ bump `SiteDetailCache::CACHE_VERSION`
   (actuellement **v3**) — cf. point 14.
 
@@ -752,10 +764,12 @@ Seeder : `php artisan db:seed --class=SettingsSeeder --force` (idempotent).
   `forecasts` pour le panel multimodèles / `/carte-modeles` / fiabilité.
 - `FetchSiteModelJob` : fetch + upsert `forecasts` d'un (site, modèle). Plus
   de scoring.
-- `WatchScoringTableJob` : cron **chaque minute**. Détecte le flip de
+- `WatchScoringTableJob` : cron **chaque minute**. (1) Détecte le flip de
   `settings.scoring_table` (sidecar) → invalide `SiteDetailCache` (tous sites)
-  + map bundle + user-scoring, et dispatch `RebuildMapBundleJob`. C'est le
-  point d'invalidation du scoring déporté.
+  + map bundle + user-scoring, dispatch `RebuildMapBundleJob`, et recale le
+  watchdog de fraîcheur. (2) Évalue **chaque minute** la péremption du scoring
+  via `ScoringFreshness` (cf. ci-dessous) — c'est le point d'invalidation ET
+  de surveillance du scoring déporté.
 - `FetchSiteForecastsJob` : refresh `forecasts` d'un site (sync, activation /
   tinker) → invalide `SiteDetailCache` du site. **Pas de scoring** (au prochain
   run sidecar). Timeout 300s.

@@ -22,6 +22,7 @@ class WatchScoringTableJobTest extends TestCase
         app(WatchScoringTableJob::class)->handle(
             app(\App\Services\Map\SiteDetailCache::class),
             app(\App\Services\Weather\UserScoringService::class),
+            app(\App\Services\Map\ScoringFreshness::class),
             app(\Illuminate\Contracts\Cache\Repository::class),
         );
     }

@@ -11,6 +11,31 @@ Conventions :
 
 ---
 
+## 2026-06-09 — Watchdog de fraîcheur du scoring (parade sidecar figé)
+
+Quand le worker du sidecar `consensus-grid-v2` se fige (hang), il ne fait
+plus flipper le buffer `scoring_table` : les scores se figeaient **en
+silence**. Ajout d'un watchdog qui détecte la péremption et l'alerte.
+
+### Ajouté
+- **`App\Services\Map\ScoringFreshness`** : mémorise l'instant de chaque flip
+  (= chaque run sidecar) et calcule l'âge du dernier run avec l'horloge
+  Laravel (mesure **tz-safe**, pas de `computed_at` sidecar). Au-delà de
+  `scoring.stale_after_minutes` (défaut **75**, éditable `/admin/settings`) :
+  flag de péremption + `Log::error` one-shot.
+- **Bandeau carte** « prévisions non rafraîchies depuis X » : `/api/map-bundle`
+  porte désormais `scoring_status` (ajouté en direct, hors cache), lu par
+  `mapApp()`.
+
+### Modifié
+- **`WatchScoringTableJob`** : évalue la fraîcheur **chaque minute** (en plus
+  de la détection du flip), et recale le watchdog à chaque flip.
+
+> ⚠️ Filet d'alerte uniquement — **ne répare pas** le sidecar. Le correctif de
+> fond (self-heal du worker : exit-on-hang + `unless-stopped`) est côté sidecar.
+
+---
+
 ## 2026-06-09 — Scoring perso déporté au sidecar (`POST /v1/scoring/custom`)
 
 Le scoring **personnalisé** d'un utilisateur (fenêtres vent/plafond propres

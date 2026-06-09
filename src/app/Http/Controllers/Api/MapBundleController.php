@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\Map\MapBundleBuilder;
+use App\Services\Map\ScoringFreshness;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -24,11 +25,17 @@ class MapBundleController extends Controller
 {
     public function __construct(
         private readonly MapBundleBuilder $builder,
+        private readonly ScoringFreshness $freshness,
     ) {}
 
     public function show(): JsonResponse
     {
         $bundle = $this->builder->getOrBuild();
+
+        // Statut de fraîcheur du scoring — ajouté **en direct** (pas mis en
+        // cache dans le bundle, c'est sensible au temps) pour le bandeau
+        // « prévisions non rafraîchies » côté carte.
+        $bundle['scoring_status'] = $this->freshness->status();
 
         // `green_hours_set` n'est utile qu'au recalcul serveur de
         // l'agrégat journalier par utilisateur (MeHiddenSitesController) ;
