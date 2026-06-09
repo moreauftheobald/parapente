@@ -32,7 +32,8 @@ final class SiteScoresPayloadBuilder
      */
     public function buildGlobal(Site $site): array
     {
-        $allScores = SiteScore::where('site_id', $site->id)
+        $allScores = SiteScore::onActiveBuffer()
+            ->where('site_id', $site->id)
             ->upcoming()
             ->orderBy('forecast_at')
             ->get();

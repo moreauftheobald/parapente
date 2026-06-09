@@ -34,7 +34,7 @@ class UserScoringServiceTest extends TestCase
             'active'     => true,
         ]);
 
-        SiteScore::create([
+        SiteScore::onActiveBuffer()->create([
             'site_id'              => $site->id,
             'forecast_at'          => now()->addHour()->startOfHour(),
             'computed_at'          => now(),

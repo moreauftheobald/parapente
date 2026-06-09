@@ -66,6 +66,12 @@ class Site extends Model
         return $this->hasMany(Forecast::class);
     }
 
+    /**
+     * ⚠️ Relation pointant la table template `site_scores` (vide depuis le
+     * scoring déporté sidecar). Ne PAS l'utiliser pour lire des scores :
+     * passer par SiteScore::onActiveBuffer() (cf. nextScore/upcomingScores).
+     * Conservée pour la cohérence du modèle / contraintes éventuelles.
+     */
     public function scores(): HasMany
     {
         return $this->hasMany(SiteScore::class);
@@ -99,19 +105,21 @@ class Site extends Model
 
     // ── Helpers ─────────────────────────────────────────────────
 
-    /** Score du prochain créneau volaable */
+    /** Score du prochain créneau volable (buffer actif du sidecar) */
     public function nextScore(): ?SiteScore
     {
-        return $this->scores()
+        return SiteScore::onActiveBuffer()
+            ->where('site_id', $this->id)
             ->where('forecast_at', '>=', now())
             ->orderBy('forecast_at')
             ->first();
     }
 
-    /** Scores sur les X prochains jours (horizon max : 5 jours) */
+    /** Scores sur les X prochains jours (horizon max : 5 jours), buffer actif */
     public function upcomingScores(int $days = 5)
     {
-        return $this->scores()
+        return SiteScore::onActiveBuffer()
+            ->where('site_id', $this->id)
             ->where('forecast_at', '>=', now()->startOfHour())
             ->where('forecast_at', '<=', now()->addDays($days))
             ->orderBy('forecast_at')

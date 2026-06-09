@@ -92,7 +92,8 @@ final class SiteMultimodelPayloadBuilder
         }
 
         $consensus = [];
-        SiteScore::where('site_id', $id)
+        SiteScore::onActiveBuffer()
+            ->where('site_id', $id)
             ->whereBetween('forecast_at', [$dayStart, $dayEnd])
             ->get()
             ->each(function (SiteScore $s) use (&$consensus, $hours) {

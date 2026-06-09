@@ -59,7 +59,7 @@ class UserScoringService
             $this->cacheKey($userId, $siteId),
             self::CACHE_TTL_SECONDS,
             function () use ($usc, $siteId): array {
-                $scores = SiteScore::where('site_id', $siteId)->get();
+                $scores = SiteScore::onActiveBuffer()->where('site_id', $siteId)->get();
                 $out    = [];
 
                 foreach ($scores as $score) {
