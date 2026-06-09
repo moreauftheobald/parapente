@@ -83,7 +83,7 @@ class UserScoringController extends Controller
 
         // Si le scoring était actif, ses conditions ont changé → cache stale.
         if ($scoring->is_active) {
-            $this->userScoring->invalidate($scoring->user_id, $scoring->site_id);
+            $this->userScoring->invalidateUser($scoring->user_id);
         }
 
         return response()->json([
@@ -96,7 +96,7 @@ class UserScoringController extends Controller
         $this->authorizeOwnership($request, $scoring);
 
         if ($scoring->is_active) {
-            $this->userScoring->invalidate($scoring->user_id, $scoring->site_id);
+            $this->userScoring->invalidateUser($scoring->user_id);
         }
         $scoring->delete();
 
