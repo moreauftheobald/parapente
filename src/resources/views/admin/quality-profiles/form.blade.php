@@ -117,7 +117,7 @@
             <x-admin.button type="submit" variant="primary" icon="fa-solid fa-check">
                 {{ $isEdit ? 'Enregistrer' : 'Créer le profil' }}
             </x-admin.button>
-            <x-admin.button href="{{ route('admin.sites.settings', ['tab' => 'scoring']) }}" variant="secondary">
+            <x-admin.button href="{{ route('admin.quality-profiles.index') }}" variant="secondary">
                 Annuler
             </x-admin.button>
         </div>

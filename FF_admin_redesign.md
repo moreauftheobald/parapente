@@ -106,9 +106,24 @@ santé est portée par le bloc Sidecar.
      par le sidecar mais absentes de `DEFAULTS` (récupérer d'abord leurs
      défauts effectifs côté sidecar) ; supprimer les 7 clés
      `reliability.*` du shadow mode avec sa dépréciation.
-4. **Consolidation des écrans de settings** : fusionner `/admin/settings`
-   dans les pages par section ; rapprocher APIs météo et APIs stations
-   (même pattern d'écran).
+4. **Consolidation des écrans** — **FAIT (2026-06-11)** :
+   - Les 4 pages « Paramètres — Sites/Balises/Stations/Météo » sont
+     dissoutes : onglets « général » → hub `/admin/settings` (qui était
+     déjà leur duplicata), onglets « data » → nouvel écran
+     **`/admin/data`** (4 onglets modèles/sites/balises/stations :
+     couverture + imports + découverte), onglets « log/monitoring »
+     (`_monitor-tab`, duplicata de l'explorateur) → **supprimés** au
+     profit de `/admin/logs/jobs?group=…`.
+   - `/admin/logs` passe à 3 onglets : Jobs / **Runs sidecar** (déplacé
+     depuis la page météo) / Logs Laravel.
+   - La page météo devient **« Consensus & sidecar »** (4 onglets :
+     consensus par variable, variables, dépendances, état sidecar).
+   - Supprimés : page « Paramètres — Contenu » (3 onglets vides), onglet
+     « Scoring (sidecar) » de la page sites (duplicata de
+     `/admin/quality-profiles`, désormais dans la sidebar groupe Météo),
+     partial `_monitor-tab` + helpers monitor du contrôleur.
+   - Reste : rapprocher les écrans APIs météo / APIs stations (même
+     pattern) — non critique.
 5. **Tendances** : sparklines 7-30 j sur la couverture et les erreurs
    (sources : `weather_fetch_log` 30 j, `job_monitors` 7 j — suffisant sans
    nouvelle table) ; à brancher sur le dashboard.

@@ -67,7 +67,7 @@ class DataSyncController extends Controller
         Artisan::call('sites:import', $params);
 
         return redirect()
-            ->route('admin.sites.settings', ['tab' => 'data'])
+            ->route('admin.data.index', ['tab' => 'sites'])
             ->with('status', 'Import des sites (' . self::ISO_COUNTRIES[$data['iso']] . ') terminé.')
             ->with('sync_output', trim(Artisan::output()));
     }
@@ -102,7 +102,7 @@ class DataSyncController extends Controller
         };
 
         return redirect()
-            ->route('admin.balises.settings', ['tab' => 'data'])
+            ->route('admin.data.index', ['tab' => 'balises'])
             ->with('status', 'Découverte des balises ' . $label . ' terminée.')
             ->with('sync_output', trim(Artisan::output()));
     }
@@ -138,7 +138,7 @@ class DataSyncController extends Controller
         };
 
         return redirect()
-            ->route('admin.weather-stations.settings', ['tab' => 'data'])
+            ->route('admin.data.index', ['tab' => 'stations'])
             ->with('status', 'Découverte des stations ' . $label . ' terminée.')
             ->with('sync_output', trim(Artisan::output()));
     }

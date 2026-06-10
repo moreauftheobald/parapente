@@ -4,7 +4,7 @@
     Variables attendues :
       $settingsGroups  array  — même format que $groups dans SettingsController::index()
                                (chaque entrée : title, icon, keys[])
-      $saveAction      string — URL de la route PATCH (ex: route('admin.sites.settings.general'))
+      $saveAction      string — URL de la route PATCH (ex: route('admin.settings.update', ['tab' => 'scoring']))
       $saveMethod      string — méthode HTTP, défaut 'PATCH'
 --}}
 @php

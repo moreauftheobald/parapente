@@ -74,10 +74,10 @@
         {{-- ── Couverture (résumé) ───────────────────────────────────── --}}
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             @foreach ([
-                'sites_scored'      => route('admin.sites.settings'),
-                'models_fetched'    => route('admin.meteo.settings'),
-                'balises_emitting'  => route('admin.balises.settings'),
-                'stations_emitting' => route('admin.weather-stations.settings'),
+                'sites_scored'      => route('admin.data.index', ['tab' => 'sites']),
+                'models_fetched'    => route('admin.data.index', ['tab' => 'models']),
+                'balises_emitting'  => route('admin.data.index', ['tab' => 'balises']),
+                'stations_emitting' => route('admin.data.index', ['tab' => 'stations']),
             ] as $key => $link)
                 @php $c = $coverage[$key]; @endphp
                 <a href="{{ $link }}" class="bg-gray-900 border border-gray-800 rounded-xl p-4 hover:border-gray-600 transition">

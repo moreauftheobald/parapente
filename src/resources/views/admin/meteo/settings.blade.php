@@ -1,21 +1,15 @@
 @extends('layouts.admin')
-@section('title', 'Paramètres — Modèles Météo')
+@section('title', 'Consensus & sidecar')
 
 @section('content')
 <div>
-    <x-admin.page-title title="Paramètres — Modèles Météo">
-        <x-slot:subtitle>Configuration des modèles météo, consensus sidecar et scoring.</x-slot:subtitle>
+    <x-admin.page-title title="Consensus & sidecar">
+        <x-slot:subtitle>Configuration du consensus par variable, overrides de variables, dépendances et état du sidecar.</x-slot:subtitle>
     </x-admin.page-title>
 
     @include('admin._settings-tabs', ['tab' => $tab, 'baseRoute' => 'admin.meteo.settings', 'tabs' => $tabs])
 
-    @if ($tab === 'general')
-        @include('admin.meteo._tab-general')
-
-    @elseif ($tab === 'data')
-        @include('admin.meteo._tab-data')
-
-    @elseif ($tab === 'consensus')
+    @if ($tab === 'consensus')
         @include('admin.meteo._tab-consensus')
 
     @elseif ($tab === 'variables')
@@ -26,9 +20,6 @@
 
     @elseif ($tab === 'sidecar')
         @include('admin.meteo._tab-sidecar')
-
-    @elseif ($tab === 'logs')
-        @include('admin.meteo._tab-logs')
     @endif
 </div>
 @endsection
