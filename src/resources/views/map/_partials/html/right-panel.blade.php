@@ -211,9 +211,50 @@
                             </div>
                         </div>
 
-                        {{-- ══ VUE MODÈLES (Phase 3) ══ --}}
+                        {{-- ══ VUE MODÈLES ══ --}}
+                        {{-- Ribbon Chart.js + divergence + chips construits en JS
+                             (renderModelsTab). Tabs variables / pill : Alpine. --}}
                         <div class="view" :class="rpTab === 'mod' ? 'on' : ''">
-                            <div class="rp-placeholder" style="padding:40px 20px;text-align:center;">Onglet « Modèles » — intégration en cours (Phase 3).</div>
+                            <div class="mod-vtabs" id="rp2-mod-vtabs">
+                                <template x-for="v in MOD_VARS" :key="v.key">
+                                    <div class="vtab" :class="modVar === v.key ? 'on' : ''" @click="setModVar(v.key)"><i class="ti" :class="v.icon" aria-hidden="true"></i><span x-text="v.label"></span></div>
+                                </template>
+                            </div>
+                            <div class="mod-sub">
+                                <div class="tog">
+                                    <div class="togtab" :class="modZoom === '1j' ? 'on' : ''" @click="setModZoom('1j')">1j</div>
+                                    <div class="togtab" :class="modZoom === '5j' ? 'on' : ''" @click="setModZoom('5j')">5j</div>
+                                </div>
+                                <div class="dnav" :style="modZoom === '5j' ? 'opacity:0.32' : ''">
+                                    <div class="dnavb" :class="(modZoom === '5j' || selectedDayIdx === 0) ? 'off' : ''" @click="modelsDayStep(-1)" aria-label="Précédent"><i class="ti ti-chevron-left" aria-hidden="true"></i></div>
+                                    <div class="dlbl" x-text="modZoom === '1j' ? (days[selectedDayIdx]?.label ?? '') : fiveDaysRangeLabel"></div>
+                                    <div class="dnavb" :class="(modZoom === '5j' || selectedDayIdx >= 4) ? 'off' : ''" @click="modelsDayStep(1)" aria-label="Suivant"><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+                                </div>
+                                <div class="conform-pill"><i class="ti ti-check" aria-hidden="true"></i><span x-text="(modelsPayload?.conformity_pct ?? '—') + '%'"></span></div>
+                            </div>
+                            <div x-show="modelsLoading" class="rp-loader"><div class="rp-spinner"></div></div>
+                            <template x-if="!modelsLoading && modelsPayload">
+                                <div>
+                                    <div class="mod-chart-area">
+                                        <div class="mch-hdr">
+                                            <span class="mch-lbl"><i class="ti" :class="modVarObj.icon" aria-hidden="true"></i><span x-text="modVarObj.label"></span></span>
+                                            <span class="mch-unit" x-text="modVarObj.unit"></span>
+                                        </div>
+                                        <div class="ribbon-wrap"><canvas id="rp2-ribbon-cv" role="img" aria-label="Consensus ribbon multi-modèles"></canvas></div>
+                                    </div>
+                                    <div class="div-bar" id="rp2-mod-divbar"></div>
+                                    <div class="mod-tax" id="rp2-mod-tax"></div>
+                                    <div class="mod-leg">
+                                        <div class="mleg"><div class="mleg-line"></div>Modèles</div>
+                                        <div class="mleg"><div class="mleg-dash"></div>Consensus</div>
+                                        <div class="mleg"><div class="mleg-band"></div>Enveloppe</div>
+                                    </div>
+                                    <div class="mod-grid" id="rp2-mod-grid"></div>
+                                </div>
+                            </template>
+                            <template x-if="!modelsLoading && !modelsPayload">
+                                <div class="rp-placeholder" style="padding:32px 16px;text-align:center;">Aucune donnée modèles pour ce jour.</div>
+                            </template>
                         </div>
 
                     </div>
