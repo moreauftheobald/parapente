@@ -44,7 +44,7 @@ function mapApp(){return{
     windRoseOpen:false, wrPlaying:false, wrIdx:0,   // rose des vents animée (modale, panel-windrose)
     // Popup flottante balise/station (refonte v2 — cohabite avec le drawer site).
     featurePopup:{ open:false, type:null, id:null, tab:'rose' },
-    fpData:null, fpLoading:false, fpWindow:24, _fpAnchor:null,
+    fpData:null, fpLoading:false, fpWindow:24, _fpAnchor:null, fpReady:false,
     chartData:null, chartLoading:false, chartSite:null,   // onglet « Synthèse » (= ancienne popup)
     multimodelData:null,  multimodelLoading:false,        // onglet « Modèles du jour »
     multimodel5Data:null, multimodel5Loading:false,       // onglet « Modèles 5 jours »
@@ -639,14 +639,15 @@ function mapApp(){return{
         if(this.featurePopup.open && this.featurePopup.type === type && this.featurePopup.id === id) return;
         this.featurePopup = { open:true, type, id, tab:'rose' };
         this._fpAnchor = latlng;
+        this._fpPositioned = false;   // positionnée une seule fois après le 1er rendu de contenu
+        this.fpReady = false;         // masquée tant que pas positionnée (pas de flash/saut)
         this.fpWindow = 24;
         this.fpData = null;
-        this.$nextTick(()=>this.positionFeaturePopup());
         this.loadFeaturePopup();
     },
     closeFeaturePopup(){
         this.featurePopup = { open:false, type:null, id:null, tab:'rose' };
-        this.fpData = null; this._fpAnchor = null;
+        this.fpData = null; this._fpAnchor = null; this._fpPositioned = false; this.fpReady = false;
     },
     async loadFeaturePopup(){
         const { type, id } = this.featurePopup;
@@ -660,10 +661,16 @@ function mapApp(){return{
             this.fpData = await r.json();
         }catch(e){ console.error('feature popup load failed', e); this.fpData = null; }
         this.fpLoading = false;
-        this.$nextTick(()=>{ this.renderFeaturePopup(); this.positionFeaturePopup(); });
+        // Positionnement UNE seule fois (au 1er rendu de contenu). Les
+        // changements d'onglet/période ne repositionnent jamais → la popup
+        // ne saute plus. Seul le pan/zoom la recale sur le marqueur.
+        this.$nextTick(()=>{
+            this.renderFeaturePopup();
+            if(!this._fpPositioned){ this.positionFeaturePopup(); this._fpPositioned = true; this.fpReady = true; }
+        });
     },
     setFpWindow(w){ if(w === this.fpWindow) return; this.fpWindow = w; this.loadFeaturePopup(); },
-    setFpTab(tab){ this.featurePopup.tab = tab; this.$nextTick(()=>{ this.renderFeaturePopup(); this.positionFeaturePopup(); }); },
+    setFpTab(tab){ this.featurePopup.tab = tab; this.$nextTick(()=>this.renderFeaturePopup()); },
     renderFeaturePopup(){
         if(this.featurePopup.tab === 'rose' && this.fpData){
             const readings = (this.fpData.readings || []).map(r => ({ dir:r.wind_direction, spd:r.wind_speed_avg }));
@@ -680,12 +687,16 @@ function mapApp(){return{
         const rect = mapEl.getBoundingClientRect();
         const ax = rect.left + pt.x, ay = rect.top + pt.y;
         const W = el.offsetWidth || 360, H = el.offsetHeight || 320;
-        const gap = 16, m = 8;
+        const off = 26, gap = 14, m = 8;
         let left = ax - W/2;
         left = Math.max(m, Math.min(left, window.innerWidth - W - m));
-        let top = ay - H - gap;          // au-dessus du marqueur
-        if(top < m) top = ay + 28;       // flip en dessous si débordement haut
-        top = Math.max(m, Math.min(top, window.innerHeight - H - m));
+        // Ancrage SOUS le marqueur par défaut (le haut reste stable quand le
+        // contenu change de hauteur) ; flip AU-DESSUS si débordement bas.
+        let top = ay + off;
+        if(top + H > window.innerHeight - m){
+            const above = ay - H - gap;
+            top = above >= m ? above : Math.max(m, window.innerHeight - H - m);
+        }
         el.style.left = left + 'px';
         el.style.top  = top + 'px';
     },

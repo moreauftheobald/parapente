@@ -6,7 +6,7 @@
    Mobile (<768px) : modale plein écran.
    ════════════════════════════════════════════════════════════════ */
 
-.fpop{position:fixed;z-index:85;width:360px;max-width:360px;background:#111b28;border:0.5px solid rgba(255,255,255,0.1);border-radius:12px;overflow:hidden;font-family:'DM Sans',sans-serif;color:#e8f4fd;box-shadow:0 8px 40px rgba(0,0,0,0.6)}
+.fpop{position:fixed;z-index:85;width:360px;max-width:360px;max-height:calc(100vh - 24px);background:#111b28;border:0.5px solid rgba(255,255,255,0.1);border-radius:12px;overflow:hidden auto;font-family:'DM Sans',sans-serif;color:#e8f4fd;box-shadow:0 8px 40px rgba(0,0,0,0.6)}
 .fpop *{box-sizing:border-box;margin:0;padding:0}
 
 /* HEADER */
