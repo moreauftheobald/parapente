@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use App\Jobs\AggregateBaliseReadingsHourlyJob;
+use App\Jobs\AggregateStationObservationsHourlyJob;
 use App\Jobs\ComputeBaliseConsensusCompareJob;
 use App\Jobs\ComputeModelReliabilityJob;
 use App\Jobs\FetchBaliseForecastsJob;
@@ -40,8 +41,8 @@ Schedule::job(WatchScoringTableJob::class)
 //   - forecasts : slots passés (J-1) — les site_scores_{1,2} sont gérées
 //     par le sidecar (DROP/recréation à chaque run)
 //   - forecast_archive_balises / forecast_archive_stations : > 30 jours
-//   - balise_readings / weather_station_observations (brut) : > 30 jours
-//   - balise_readings_hourly : > 7 jours
+//   - balise_readings_hourly / weather_station_observations_hourly : > 30 jours
+//   - balise_readings / weather_station_observations (brut) : > 7 jours
 Schedule::job(PurgeOldForecastsJob::class)
     ->dailyAt('03:00')
     ->name('purge-old-forecasts')
@@ -118,6 +119,16 @@ Schedule::job(FetchStationForecastsJob::class)
 Schedule::job(AggregateBaliseReadingsHourlyJob::class)
     ->hourlyAt(5)
     ->name('aggregate-balise-readings-hourly')
+    ->withoutOverlapping();
+
+// Agrégation horaire des observations stations météo (vent / temp /
+// humidité / pression / précip / nuages)
+//   - Même logique que les balises (fenêtre glissante 3h, upsert)
+//   - Vérité-terrain du calcul de fiabilité — rétention 30 j
+//   - Décalé à :07, après l'agrégation balises à :05
+Schedule::job(AggregateStationObservationsHourlyJob::class)
+    ->hourlyAt(7)
+    ->name('aggregate-station-observations-hourly')
     ->withoutOverlapping();
 
 // Purge des pages vues au-delà de la rétention configurée

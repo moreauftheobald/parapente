@@ -25,14 +25,17 @@ use Illuminate\Support\Facades\Log;
  * - forecast_archive_balises : conservé 30 jours pour le système de fiabilité
  *                              (fenêtres glissantes 7j primaire + 30j référence).
  *
- * - balise_readings_hourly : agrégat horaire des lectures balises, conservé
- *                            7 jours (fenêtre J-6 → J pour la comparaison
- *                            modèles ↔ balises).
+ * - balise_readings_hourly / weather_station_observations_hourly :
+ *   agrégats horaires (vérité-terrain du calcul de fiabilité), conservés
+ *   30 jours — alignés sur la fenêtre de fiabilité et la rétention des
+ *   archives de prévisions.
  *
- * - balise_readings       : lectures brutes des balises, conservées 30 jours.
+ * - balise_readings       : lectures brutes des balises, conservées 7 jours
+ *                           (ne servent qu'à l'affichage temps réel et à
+ *                           l'agrégation horaire, fenêtre glissante 3 h).
  *
  * - weather_station_observations : observations brutes des stations météo,
- *                                  conservées 30 jours.
+ *                                  conservées 7 jours (même logique).
  *
  * - weather_fetch_log     : journal des fetches météo conservé 30 jours
  *                           (sert à l'écran de couverture admin).
@@ -62,10 +65,11 @@ class PurgeOldForecastsJob implements ShouldQueue
     private const ARCHIVE_RETENTION_DAYS = 30;
 
     /**
-     * Rétention de l'agrégat horaire des lectures balises (utilisé pour
-     * la comparaison modèles ↔ balises sur la fenêtre J-6 → J).
+     * Rétention des agrégats horaires (balise_readings_hourly et
+     * weather_station_observations_hourly) : vérité-terrain du calcul
+     * de fiabilité sur 30 jours, alignée sur ARCHIVE_RETENTION_DAYS.
      */
-    private const HOURLY_RETENTION_DAYS = 7;
+    private const HOURLY_RETENTION_DAYS = 30;
 
     /**
      * Rétention du journal des fetches météo (`weather_fetch_log`).
@@ -75,11 +79,12 @@ class PurgeOldForecastsJob implements ShouldQueue
 
     /**
      * Rétention des lectures brutes (balise_readings et
-     * weather_station_observations). Au-delà de 30 jours, les lectures
-     * n'alimentent plus aucun calcul (la fiabilité travaille sur les
-     * archives 30 j et l'agrégat horaire 7 j) — on les supprime.
+     * weather_station_observations). Elles ne servent qu'à l'affichage
+     * temps réel (dernière lecture, historique du jour, graphes J−2) et
+     * à l'agrégation horaire (fenêtre glissante 3 h) — l'historique
+     * long vit dans les agrégats horaires (30 j).
      */
-    private const READINGS_RETENTION_DAYS = 30;
+    private const READINGS_RETENTION_DAYS = 7;
 
     private const JOB_MONITOR_RETENTION_DAYS = 7;
 
@@ -126,6 +131,13 @@ class PurgeOldForecastsJob implements ShouldQueue
                 ->delete();
         }
 
+        $deletedStationHourly = 0;
+        if (DB::getSchemaBuilder()->hasTable('weather_station_observations_hourly')) {
+            $deletedStationHourly = DB::table('weather_station_observations_hourly')
+                ->where('hour_at', '<', $hourlyCutoff)
+                ->delete();
+        }
+
         $deletedFetchLog = 0;
         if (DB::getSchemaBuilder()->hasTable('weather_fetch_log')) {
             $deletedFetchLog = DB::table('weather_fetch_log')
@@ -146,6 +158,7 @@ class PurgeOldForecastsJob implements ShouldQueue
             'archive_balises_deleted'   => $deletedArchive,
             'archive_stations_deleted'  => $deletedArchiveStations,
             'balise_hourly_deleted'     => $deletedHourly,
+            'station_hourly_deleted'    => $deletedStationHourly,
             'balise_readings_deleted'   => $deletedReadings,
             'station_obs_deleted'       => $deletedObservations,
             'fetch_log_deleted'         => $deletedFetchLog,
