@@ -125,6 +125,9 @@ class FetchStationForecastsJob implements ShouldQueue
                             'precipitation'      => $values['precipitation'],
                             'pressure_hpa'       => $values['pressure_hpa'],
                             'cloud_cover'        => $values['cloud_cover'],
+                            'cloud_cover_low'    => $values['cloud_cover_low'],
+                            'cloud_cover_mid'    => $values['cloud_cover_mid'],
+                            'cloud_cover_high'   => $values['cloud_cover_high'],
                             'created_at'         => $fetchedAtStr,
                             'updated_at'         => $fetchedAtStr,
                         ];
@@ -141,6 +144,7 @@ class FetchStationForecastsJob implements ShouldQueue
                                 'wind_direction', 'wind_speed_avg', 'wind_speed_max',
                                 'temperature', 'dew_point', 'humidity',
                                 'precipitation', 'pressure_hpa', 'cloud_cover',
+                                'cloud_cover_low', 'cloud_cover_mid', 'cloud_cover_high',
                                 'updated_at',
                             ]
                         );
@@ -202,22 +206,20 @@ class FetchStationForecastsJob implements ShouldQueue
 
         $openMeteo->setConfig($consensus->api);
 
-        // Le consensus sidecar ne sert qu'un sous-ensemble de variables (vent
-        // + température). On utilise donc le fetch « balise » (4 variables)
-        // plutôt que le fetch station complet (dew_point/pressure_msl/cloud
-        // non servis par le consensus → 400, futur vide). humidity/pression
-        // consensus restent donc null (colonnes nullable).
-        $points = [];
-        foreach ($pointChunks as $chunk) {
-            foreach ($chunk as $p) {
-                $points[] = $p;
-            }
-        }
-
-        $batch = $openMeteo->fetchBatchForBalises($points, $consensus);
-
+        // Le consensus sidecar sert vent + température + point de rosée +
+        // couverture nuageuse par étage (cf. HOURLY_VARS_STATIONS_CONSENSUS).
+        // Il ne sert PAS humidité / précip / pression / cloud_cover total →
+        // ces colonnes restent null (nullable).
         $upserted = 0;
-        if (! empty($batch)) {
+        $gotData  = false;
+
+        foreach ($pointChunks as $chunk) {
+            $batch = $openMeteo->fetchStationBatchChunk($chunk, $consensus, OpenMeteoApi::HOURLY_VARS_STATIONS_CONSENSUS);
+            if (empty($batch)) {
+                continue;
+            }
+            $gotData = true;
+
             $rows = [];
             foreach ($batch as $stationId => $forecasts) {
                 foreach ($forecasts as $datetime => $values) {
@@ -236,11 +238,14 @@ class FetchStationForecastsJob implements ShouldQueue
                         'wind_speed_avg'     => $values['wind_speed_avg'],
                         'wind_speed_max'     => $values['wind_speed_max'],
                         'temperature'        => $values['temperature'],
-                        'dew_point'          => null,
+                        'dew_point'          => $values['dew_point'],
                         'humidity'           => null,
                         'precipitation'      => null,
                         'pressure_hpa'       => null,
                         'cloud_cover'        => null,
+                        'cloud_cover_low'    => $values['cloud_cover_low'],
+                        'cloud_cover_mid'    => $values['cloud_cover_mid'],
+                        'cloud_cover_high'   => $values['cloud_cover_high'],
                         'created_at'         => $fetchedAtStr,
                         'updated_at'         => $fetchedAtStr,
                     ];
@@ -250,11 +255,19 @@ class FetchStationForecastsJob implements ShouldQueue
                 DB::table('forecast_archive_stations')->upsert(
                     $upsertChunk,
                     ['weather_station_id', 'weather_model_id', 'target_at', 'horizon_bucket'],
-                    ['fetched_at', 'wind_direction', 'wind_speed_avg', 'wind_speed_max', 'temperature', 'dew_point', 'humidity', 'precipitation', 'pressure_hpa', 'cloud_cover', 'updated_at']
+                    [
+                        'fetched_at', 'wind_direction', 'wind_speed_avg', 'wind_speed_max',
+                        'temperature', 'dew_point', 'humidity', 'precipitation', 'pressure_hpa',
+                        'cloud_cover', 'cloud_cover_low', 'cloud_cover_mid', 'cloud_cover_high',
+                        'updated_at',
+                    ]
                 );
                 $upserted += count($upsertChunk);
             }
-        } else {
+            unset($batch, $rows);
+        }
+
+        if (! $gotData) {
             Log::warning('FetchStationForecastsJob: consensus sidecar vide/injoignable');
         }
 

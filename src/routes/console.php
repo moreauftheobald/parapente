@@ -39,7 +39,9 @@ Schedule::job(WatchScoringTableJob::class)
 // Purge des données obsolètes : tous les jours à 03h00
 //   - forecasts : slots passés (J-1) — les site_scores_{1,2} sont gérées
 //     par le sidecar (DROP/recréation à chaque run)
-//   - forecast_archive_balises : > 30 jours
+//   - forecast_archive_balises / forecast_archive_stations : > 30 jours
+//   - balise_readings / weather_station_observations (brut) : > 30 jours
+//   - balise_readings_hourly : > 7 jours
 Schedule::job(PurgeOldForecastsJob::class)
     ->dailyAt('03:00')
     ->name('purge-old-forecasts')
