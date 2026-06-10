@@ -47,13 +47,13 @@
                         <line x1="44" y1="44" x2="186" y2="186" stroke="rgba(255,255,255,0.025)" stroke-width="0.5"/>
                         <line x1="186" y1="44" x2="44" y2="186" stroke="rgba(255,255,255,0.025)" stroke-width="0.5"/>
                         {{-- labels vitesse --}}
-                        <text x="115" y="70" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.18)">35</text>
+                        <text x="115" y="70" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.55)">35</text>
                         <text x="115" y="94" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.14)">22</text>
                         {{-- labels cardinaux --}}
                         <text x="115" y="12" text-anchor="middle" font-size="11" font-weight="500" fill="rgba(255,255,255,0.55)">N</text>
-                        <text x="115" y="228" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.22)">S</text>
-                        <text x="226" y="119" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.22)">E</text>
-                        <text x="4" y="119" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.22)">O</text>
+                        <text x="115" y="228" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.55)">S</text>
+                        <text x="226" y="119" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.55)">E</text>
+                        <text x="4" y="119" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.55)">O</text>
                         <text x="183" y="36" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.14)">NE</text>
                         <text x="198" y="198" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.14)">SE</text>
                         <text x="32" y="198" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.14)">SO</text>
