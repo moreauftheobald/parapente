@@ -44,7 +44,7 @@ function mapApp(){return{
     windRoseOpen:false, wrPlaying:false, wrIdx:0,   // rose des vents animée (modale, panel-windrose)
     // Popup flottante balise/station (refonte v2 — cohabite avec le drawer site).
     featurePopup:{ open:false, type:null, id:null, tab:'rose' },
-    fpData:null, fpLoading:false, fpWindow:24, _fpAnchor:null, fpReady:false,
+    fpData:null, fpLoading:false, fpWindow:24, _fpAnchor:null,
     fpComparData:null, fpComparLoading:false, fpComparVar:'wind_mean', // onglet Évolution
     chartData:null, chartLoading:false, chartSite:null,   // onglet « Synthèse » (= ancienne popup)
     multimodelData:null,  multimodelLoading:false,        // onglet « Modèles du jour »
@@ -640,16 +640,18 @@ function mapApp(){return{
         if(this.featurePopup.open && this.featurePopup.type === type && this.featurePopup.id === id) return;
         this.featurePopup = { open:true, type, id, tab:'rose' };
         this._fpAnchor = latlng;
-        this._fpPositioned = false;   // positionnée une seule fois après le 1er rendu de contenu
-        this.fpReady = false;         // masquée tant que pas positionnée (pas de flash/saut)
         this.fpWindow = 24;
         this.fpData = null;
         this.fpComparData = null; this.fpComparVar = 'wind_mean';
         this.loadFeaturePopup();
+        // Positionne dès que la popup est affichée (x-show → display:block).
+        // Ancrage SOUS le marqueur → le haut reste fixe quand le contenu
+        // grandit, donc pas de saut sur changement d'onglet/période.
+        this.$nextTick(()=>this.positionFeaturePopup());
     },
     closeFeaturePopup(){
         this.featurePopup = { open:false, type:null, id:null, tab:'rose' };
-        this.fpData = null; this._fpAnchor = null; this._fpPositioned = false; this.fpReady = false;
+        this.fpData = null; this._fpAnchor = null;
     },
     async loadFeaturePopup(){
         const { type, id } = this.featurePopup;
@@ -663,13 +665,10 @@ function mapApp(){return{
             this.fpData = await r.json();
         }catch(e){ console.error('feature popup load failed', e); this.fpData = null; }
         this.fpLoading = false;
-        // Positionnement UNE seule fois (au 1er rendu de contenu). Les
-        // changements d'onglet/période ne repositionnent jamais → la popup
-        // ne saute plus. Seul le pan/zoom la recale sur le marqueur.
-        this.$nextTick(()=>{
-            this.renderFeaturePopup();
-            if(!this._fpPositioned){ this.positionFeaturePopup(); this._fpPositioned = true; this.fpReady = true; }
-        });
+        // Le contenu (rose) est rendu ; PAS de repositionnement ici → la
+        // popup ne saute pas (elle a déjà été placée à l'ouverture, ancrée
+        // sous le marqueur, le haut reste fixe quand le contenu grandit).
+        this.$nextTick(()=>this.renderFeaturePopup());
     },
     setFpWindow(w){ if(w === this.fpWindow) return; this.fpWindow = w; this.loadFeaturePopup(); },
     setFpTab(tab){
