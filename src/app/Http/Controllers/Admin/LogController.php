@@ -129,10 +129,10 @@ class LogController extends Controller
     private function extractJobStats(array $entries): array
     {
         $jobs = [
-            'FetchPiouPiouReadingsJob'  => null,
-            'FetchMetarReadingsJob'     => null,
-            'FetchBaliseForecastsJob'   => null,
-            'PurgeOldForecastsJob'      => null,
+            'FetchPiouPiouReadingsJob'     => null,
+            'FetchMetarStationReadingsJob' => null,
+            'FetchBaliseForecastsJob'      => null,
+            'PurgeOldForecastsJob'         => null,
         ];
         foreach ($entries as $e) {
             foreach (array_keys($jobs) as $jobName) {

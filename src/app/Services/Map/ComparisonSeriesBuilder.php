@@ -25,8 +25,7 @@ use Illuminate\Support\Facades\DB;
  *                  source unique = sidecar). Agrégé par pas de 3 h.
  *
  * Le consensus n'est PAS recalculé ici : une seule source de vérité, le
- * sidecar. Le passé manquant est rempli une fois par la commande
- * `forecasts:backfill-consensus`.
+ * sidecar (archivé heure par heure par les jobs Fetch*ForecastsJob).
  */
 final class ComparisonSeriesBuilder
 {

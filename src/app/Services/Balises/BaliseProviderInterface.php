@@ -25,7 +25,7 @@ namespace App\Services\Balises;
 interface BaliseProviderInterface
 {
     /**
-     * Identifiant de la source ('pioupiou', 'holfuy', 'metar'…).
+     * Identifiant de la source ('pioupiou', 'windy'…).
      * Cette valeur est stockée dans balises.source.
      */
     public function source(): string;

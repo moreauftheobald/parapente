@@ -32,7 +32,13 @@ class FetchStationForecastsJob implements ShouldQueue
     public int $tries   = 2;
 
     private const MAX_HORIZON_HOURS = 72;
-    private const CHUNK_SIZE        = 20;
+
+    /**
+     * Aligné sur OpenMeteoApi::BATCH_CHUNK (40 points par appel HTTP) :
+     * l'upsert immédiat + unset par chunk borne déjà la mémoire, autant
+     * diviser par deux le nombre de requêtes vers Open-Meteo.
+     */
+    private const CHUNK_SIZE = 40;
 
     protected function monitorGroup(): string
     {
