@@ -89,9 +89,54 @@
         </template>
     </div>
 
-    {{-- ══ VUE MESURES (station, Phase 3) ══ --}}
+    {{-- ══ VUE MESURES (station) ══ --}}
     <div class="view" :class="featurePopup.tab === 'meas' ? 'on' : ''">
-        <div class="fp-placeholder">Onglet « Mesures » — intégration en cours (Phase 3).</div>
+        <template x-if="fpData && fpData.latest">
+            <div class="meas-view">
+                <div class="sec-lbl"><i class="ti ti-dashboard" aria-hidden="true"></i>Mesures actuelles</div>
+                <div class="params-grid">
+                    <div class="pc">
+                        <div class="pc-lbl"><i class="ti ti-wind" aria-hidden="true"></i>Vent moy.</div>
+                        <div><span class="pc-val" :style="`color:${_spdColor(fpData.latest.wind_speed_avg)}`" x-text="fpData.latest.wind_speed_avg != null ? Math.round(fpData.latest.wind_speed_avg) : '—'"></span><span class="pc-unit">km/h</span></div>
+                        <div class="pc-sub" x-text="fpData.latest.wind_direction != null ? (degToCompass(fpData.latest.wind_direction) + ' — ' + Math.round(fpData.latest.wind_direction) + '°') : '—'"></div>
+                    </div>
+                    <div class="pc">
+                        <div class="pc-lbl"><i class="ti ti-bolt" aria-hidden="true"></i>Rafales</div>
+                        <div><span class="pc-val" style="color:#fbbf24" x-text="fpData.latest.wind_speed_max != null ? Math.round(fpData.latest.wind_speed_max) : '—'"></span><span class="pc-unit">km/h</span></div>
+                    </div>
+                    <div class="pc">
+                        <div class="pc-lbl"><i class="ti ti-temperature" aria-hidden="true"></i>Temp.</div>
+                        <div><span class="pc-val" x-text="fpData.latest.temperature != null ? fpData.latest.temperature.toFixed(1) : '—'"></span><span class="pc-unit">°C</span></div>
+                    </div>
+                    <div class="pc">
+                        <div class="pc-lbl"><i class="ti ti-droplet" aria-hidden="true"></i>Humidité</div>
+                        <div><span class="pc-val" style="color:#4ea8e0" x-text="fpData.latest.humidity != null ? fpData.latest.humidity : '—'"></span><span class="pc-unit">%</span></div>
+                        <div class="pc-sub" x-show="fpData.latest.dew_point != null" x-cloak x-text="fpData.latest.dew_point != null ? ('Pt rosée ' + Math.round(fpData.latest.dew_point) + '°') : ''"></div>
+                    </div>
+                    <div class="pc">
+                        <div class="pc-lbl"><i class="ti ti-gauge" aria-hidden="true"></i>Pression</div>
+                        <div><span class="pc-val" x-text="fpData.latest.pressure_hpa != null ? Math.round(fpData.latest.pressure_hpa) : '—'"></span><span class="pc-unit">hPa</span></div>
+                        <div class="pc-sub" x-show="fpPressureTrend" x-cloak x-text="fpPressureTrend"></div>
+                    </div>
+                    <div class="pc">
+                        <div class="pc-lbl"><i class="ti ti-compass" aria-hidden="true"></i>Direction</div>
+                        <div><span class="pc-val" style="color:#4ea8e0" x-text="fpData.latest.wind_direction != null ? Math.round(fpData.latest.wind_direction) + '°' : '—'"></span></div>
+                        <div class="pc-sub" x-text="fpData.latest.wind_direction != null ? degToCompass(fpData.latest.wind_direction) : ''"></div>
+                    </div>
+                </div>
+
+                <div class="sec-lbl"><i class="ti ti-history" aria-hidden="true"></i>Évolution 12 h</div>
+                <canvas id="fpop-mhist-cv" class="chart-cv" height="70" role="img" aria-label="Mini graphe évolution 12 h du vent"></canvas>
+                <div style="display:flex;justify-content:space-between;margin-top:3px;margin-bottom:10px">
+                    <span style="font-size:9px;color:rgba(255,255,255,0.42)">−12h</span>
+                    <span style="font-size:9px;color:rgba(255,255,255,0.42)">−6h</span>
+                    <span style="font-size:9px;color:rgba(255,255,255,0.42)">Maintenant</span>
+                </div>
+            </div>
+        </template>
+        <template x-if="!fpData || !fpData.latest">
+            <div class="fp-placeholder">Aucune mesure disponible.</div>
+        </template>
     </div>
 
     {{-- ══ VUE ÉVOLUTION (mesures vs consensus J−2 → J+2) ══ --}}

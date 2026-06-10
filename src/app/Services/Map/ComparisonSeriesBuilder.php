@@ -7,6 +7,8 @@ namespace App\Services\Map;
 use App\Models\Balise;
 use App\Models\BaliseReadingHourly;
 use App\Models\WeatherModel;
+use App\Models\WeatherStation;
+use App\Models\WeatherStationObservation;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -126,10 +128,117 @@ final class ComparisonSeriesBuilder
         ];
     }
 
+    /**
+     * Idem forBalise pour une station météo. Mesures depuis
+     * `weather_station_observations` ; consensus depuis
+     * `forecast_archive_stations` (modèle qui_vole_consensus). Variables :
+     * vent moyen / rafales / température / humidité / pression.
+     *
+     * @return array<string,mixed>
+     */
+    public function forStation(WeatherStation $station): array
+    {
+        $tz  = new \DateTimeZone('Europe/Paris');
+        $now = Carbon::now($tz);
+        $axisStart = $now->copy()->startOfDay()->subDays(self::DAYS_BACK);
+        $axisEnd   = $axisStart->copy()->addHours(self::STEPS * self::STEP_HOURS);
+        $nowStep   = max(0, min(self::STEPS - 1, intdiv((int) $axisStart->diffInMinutes($now), self::STEP_HOURS * 60)));
+        $bucketOf  = fn (Carbon $t): int => intdiv((int) $axisStart->diffInMinutes($t), self::STEP_HOURS * 60);
+
+        // ── MESURES (weather_station_observations) ──────────────────────
+        $obs = WeatherStationObservation::where('weather_station_id', $station->id)
+            ->where('observed_at', '>=', $axisStart)
+            ->where('observed_at', '<', $axisEnd)
+            ->orderBy('observed_at')
+            ->get(['observed_at', 'wind_speed_avg', 'wind_speed_max', 'temperature', 'humidity', 'pressure_hpa']);
+
+        $fields = ['wind_speed_avg', 'wind_speed_max', 'temperature', 'humidity', 'pressure_hpa'];
+        $m = [];
+        foreach ($fields as $f) $m[$f] = array_fill(0, self::STEPS, []);
+        foreach ($obs as $o) {
+            $b = $bucketOf($o->observed_at);
+            if ($b < 0 || $b >= self::STEPS) continue;
+            foreach ($fields as $f) if ($o->{$f} !== null) $m[$f][$b][] = (float) $o->{$f};
+        }
+
+        // ── CONSENSUS (forecast_archive_stations, qui_vole_consensus) ────
+        $c = [];
+        foreach ($fields as $f) $c[$f] = array_fill(0, self::STEPS, []);
+        $consensusId = WeatherModel::where('code', WeatherModel::CONSENSUS_CODE)->value('id');
+        if ($consensusId !== null) {
+            $rows = DB::table('forecast_archive_stations')
+                ->where('weather_station_id', $station->id)
+                ->where('weather_model_id', $consensusId)
+                ->where('target_at', '>=', $axisStart)
+                ->where('target_at', '<', $axisEnd)
+                ->orderBy('fetched_at')
+                ->get(['target_at', 'wind_speed_avg', 'wind_speed_max', 'temperature', 'humidity', 'pressure_hpa']);
+            $latest = [];
+            foreach ($rows as $row) $latest[$row->target_at] = $row;
+            foreach ($latest as $row) {
+                $b = $bucketOf(Carbon::parse($row->target_at, $tz));
+                if ($b < 0 || $b >= self::STEPS) continue;
+                foreach ($fields as $f) if ($row->{$f} !== null) $c[$f][$b][] = (float) $row->{$f};
+            }
+        }
+
+        $idx  = range(0, self::STEPS - 1);
+        $mean = fn (array $a): ?float => $a === [] ? null : round(array_sum($a) / count($a), 1);
+        $peak = fn (array $a): ?float => $a === [] ? null : round(max($a), 1);
+
+        // measure : passé seulement ; consensus : tout l'axe
+        $mPast = fn (callable $agg, string $f) => array_map(fn ($i) => $i <= $nowStep ? $agg($m[$f][$i]) : null, $idx);
+        $cAll  = fn (callable $agg, string $f) => array_map(fn ($i) => $agg($c[$f][$i]), $idx);
+
+        $measAvg = $mPast($mean, 'wind_speed_avg'); $consAvg = $cAll($mean, 'wind_speed_avg');
+        $measGus = $mPast($peak, 'wind_speed_max'); $consGus = $cAll($mean, 'wind_speed_max');
+        $measTmp = $mPast($mean, 'temperature');    $consTmp = $cAll($mean, 'temperature');
+        $measHum = $mPast($mean, 'humidity');        $consHum = $cAll($mean, 'humidity');
+        $measPrs = $mPast($mean, 'pressure_hpa');    $consPrs = $cAll($mean, 'pressure_hpa');
+
+        [$tMin, $tMax] = $this->niceRange($measTmp, $consTmp, 2, 2);
+        [$pMin, $pMax] = $this->niceRange($measPrs, $consPrs, 3, 5);
+
+        $days = [];
+        for ($d = 0; $d < 5; $d++) {
+            $dt = $axisStart->copy()->addDays($d);
+            $days[] = [
+                'raw'   => $dt->format('d/m'),
+                'label' => $d === self::DAYS_BACK ? 'Aujourd\'hui'
+                    : ($d < self::DAYS_BACK ? 'J−' . (self::DAYS_BACK - $d) : 'J+' . ($d - self::DAYS_BACK)),
+            ];
+        }
+
+        return [
+            'now_step' => $nowStep,
+            'now_idx'  => self::DAYS_BACK,
+            'days'     => $days,
+            'vars'     => [
+                'wind_mean' => $this->var('km/h', 0, $this->niceMax($measAvg, $consAvg, 15), $measAvg, $consAvg, '#4ade80'),
+                'wind_gust' => $this->var('km/h', 0, $this->niceMax($measGus, $consGus, 20), $measGus, $consGus, '#fbbf24'),
+                'temp'      => $this->var('°C',  $tMin, $tMax, $measTmp, $consTmp, '#f97316'),
+                'humidity'  => $this->var('%',   0, 100, $measHum, $consHum, '#4ea8e0'),
+                'pressure'  => $this->var('hPa', $pMin, $pMax, $measPrs, $consPrs, '#a78bfa'),
+            ],
+        ];
+    }
+
     /** @return array<string,mixed> */
     private function var(string $unit, float $min, float $max, array $measure, array $consensus, string $color): array
     {
         return compact('unit', 'min', 'max', 'measure', 'consensus', 'color');
+    }
+
+    /**
+     * Bornes Y « rondes » couvrant mesures + consensus (température,
+     * pression). @return array{0:float,1:float}
+     */
+    private function niceRange(array $a, array $b, float $pad, float $step): array
+    {
+        $vals = array_filter(array_merge($a, $b), fn ($v) => $v !== null);
+        if ($vals === []) return [0.0, $step * 5];
+        $mn = min($vals); $mx = max($vals);
+        return [floor(($mn - $pad) / $step) * $step, ceil(($mx + $pad) / $step) * $step];
     }
 
     /** Plafond Y « rond » (multiple de 5) couvrant mesures + consensus. */
