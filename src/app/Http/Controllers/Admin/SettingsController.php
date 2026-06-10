@@ -45,6 +45,13 @@ class SettingsController extends Controller
             'icon'   => 'fa-scale-balanced',
             'groups' => ['reliability'],
         ],
+        'sidecar' => [
+            'label'  => 'Sidecar / consensus',
+            'icon'   => 'fa-microchip',
+            'groups' => ['consensus_global'],
+            'note'   => 'Ces clés sont lues par le sidecar consensus-grid-v2 à chaque run — défauts alignés sur sa config interne (src/config.py). '
+                . 'La configuration par variable reste dans Météo → Paramètres, onglet Consensus.',
+        ],
         'quality' => [
             'label'  => 'Qualité données',
             'icon'   => 'fa-clone',
@@ -67,6 +74,7 @@ class SettingsController extends Controller
         'analytics'           => ['title' => 'Trafic / analytics',             'icon' => 'fa-chart-line'],
         'balises'             => ['title' => 'Balises',                        'icon' => 'fa-tower-broadcast'],
         'reliability'         => ['title' => 'Fiabilité des modèles',          'icon' => 'fa-scale-balanced'],
+        'consensus_global'    => ['title' => 'Consensus — réglages globaux',   'icon' => 'fa-microchip'],
     ];
 
     public function __construct(private Settings $settings)

@@ -271,6 +271,75 @@ class Settings
             'type'        => 'int',
         ],
 
+        // ── Consensus sidecar — réglages globaux ─────────────────
+        // Lues par le sidecar à chaque run. DÉFAUTS ALIGNÉS sur ceux du
+        // sidecar (consensus-grid-v2, src/config.py:80-88) : si la clé est
+        // absente en base, le sidecar applique exactement ces valeurs —
+        // les seeder ne change donc rien au comportement.
+        'consensus.legacy_epsilon' => [
+            'default'     => 0.001,
+            'label'       => 'Epsilon méthode A (legacy)',
+            'description' => "Constante de lissage de la pondération inverse-carré de la méthode A. Évite la division par zéro quand l'écart d'un modèle est quasi nul.",
+            'group'       => 'consensus_global',
+            'type'        => 'float',
+        ],
+        'consensus.improved_epsilon' => [
+            'default'     => 1.0,
+            'label'       => 'Epsilon méthode B (améliorée)',
+            'description' => "Constante de lissage de la pondération par MAE de la méthode B.",
+            'group'       => 'consensus_global',
+            'type'        => 'float',
+        ],
+        'consensus.mad_floor' => [
+            'default'     => 0.5,
+            'label'       => 'Plancher MAD global',
+            'description' => "Valeur minimale du MAD utilisée par le filtrage des outliers — évite une division par ~0 quand les modèles sont quasi unanimes. Surchargeable par variable (consensus.config.<variable>).",
+            'group'       => 'consensus_global',
+            'type'        => 'float',
+        ],
+        'consensus.mad_z_threshold' => [
+            'default'     => 2.5,
+            'label'       => 'Seuil z outliers (linéaire)',
+            'description' => "Score z robuste (basé MAD) au-delà duquel la valeur d'un modèle est exclue du consensus — variables linéaires. Surchargeable par variable.",
+            'group'       => 'consensus_global',
+            'type'        => 'float',
+        ],
+        'consensus.mad_z_threshold_circular' => [
+            'default'     => 2.0,
+            'label'       => 'Seuil z outliers (circulaire)',
+            'description' => "Idem pour les variables circulaires (directions du vent) : distance angulaire au consensus rapportée au MAD circulaire.",
+            'group'       => 'consensus_global',
+            'type'        => 'float',
+        ],
+        'consensus.use_weighted_median' => [
+            'default'     => true,
+            'label'       => 'Médiane pondérée',
+            'description' => "Utilise la médiane pondérée par les poids des modèles (sinon médiane simple) dans la méthode B. Surchargeable par variable.",
+            'group'       => 'consensus_global',
+            'type'        => 'bool',
+        ],
+        'consensus.use_mad_filtering' => [
+            'default'     => true,
+            'label'       => 'Filtrage MAD des outliers',
+            'description' => "Active l'exclusion des modèles aberrants avant le calcul du consensus. Surchargeable par variable.",
+            'group'       => 'consensus_global',
+            'type'        => 'bool',
+        ],
+        'consensus.min_samples_for_method_C' => [
+            'default'     => 50,
+            'label'       => 'Méthode C · échantillons min',
+            'description' => "Nombre minimal d'échantillons de fiabilité requis pour activer la pondération par fiabilité (méthode C — pas encore active, cf. FF_grid_reliability.md).",
+            'group'       => 'consensus_global',
+            'type'        => 'int',
+        ],
+        'consensus.grid_resolution_deg' => [
+            'default'     => 0.025,
+            'label'       => 'Résolution de la grille (degrés)',
+            'description' => "Pas de la grille de calcul du consensus (0.025° ≈ 2,77 km). ⚠️ Modifier cette valeur change la volumétrie et la durée de chaque run sidecar.",
+            'group'       => 'consensus_global',
+            'type'        => 'float',
+        ],
+
         // ── Consensus sidecar — config par variable ──────────────
         // Chaque clé `consensus.config.<variable>` est un objet JSON
         // avec la méthode de consensus et ses options.
