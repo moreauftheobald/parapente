@@ -85,7 +85,13 @@ santé est portée par le bloc Sidecar.
 
 ## Étapes suivantes (ordre suggéré)
 
-2. **Réorganisation de la sidebar** en 5 groupes (pur Blade, zéro logique).
+2. **Réorganisation de la sidebar** en 5 groupes — **FAIT (2026-06-11)** :
+   Supervision · Données (sites, balises, stations, dédoublonnage,
+   paramètres par entité) · Météo (modèles, APIs météo + stations,
+   fiabilité, paramètres météo/sidecar) · Contenu & utilisateurs
+   (articles, wiki, modules, users, trafic) · Système (logs/jobs,
+   hub paramètres, historique). Libellés de sous-paramètres explicites
+   (« Paramètres sites » et non trois « Paramètres » identiques).
 3. **Audit des ~90 clés `settings`** : tableau clé → écran propriétaire →
    consommateur réel (Laravel ou sidecar) → action (garder / déplacer /
    reformuler la description / **supprimer**). Candidats morts déjà repérés :

@@ -23,93 +23,85 @@
     <x-slot:detail>
         @auth
             <nav class="flex flex-col gap-0.5 text-sm">
+                {{-- ── 1. Supervision ───────────────────────────── --}}
                 <a href="{{ route('admin.dashboard') }}"
                    class="{{ $adminLink($adminSegment === 'dashboard' || request()->path() === 'admin') }}">
-                    <i class="fa-solid fa-gauge-high w-4 text-center"></i> Dashboard
+                    <i class="fa-solid fa-gauge-high w-4 text-center"></i> Supervision
                 </a>
 
-                {{-- ── Contenu ──────────────────────────────────── --}}
-                <div class="{{ $sectionLabel }}">Contenu</div>
+                {{-- ── 2. Données (référentiel terrain) ─────────── --}}
+                <div class="{{ $sectionLabel }}">Données</div>
+                <a href="{{ route('admin.sites.index') }}" class="{{ $adminLink($adminSegment === 'sites' && request()->segment(3) !== 'settings') }}">
+                    <i class="fa-solid fa-mountain-sun w-4 text-center"></i> Sites
+                </a>
+                <a href="{{ route('admin.balises.index') }}" class="{{ $adminLink($adminSegment === 'balises' && request()->segment(3) !== 'settings') }}">
+                    <i class="fa-solid fa-tower-broadcast w-4 text-center"></i> Balises
+                </a>
+                <a href="{{ route('admin.weather-stations.index') }}" class="{{ $adminLink($adminSegment === 'weather-stations' && request()->segment(3) !== 'settings') }}">
+                    <i class="fa-solid fa-tower-observation w-4 text-center"></i> Stations météo
+                </a>
+                <a href="{{ route('admin.data-quality.index') }}" class="{{ $adminLink($adminSegment === 'data-quality') }}">
+                    <i class="fa-solid fa-code-merge w-4 text-center"></i> Fusion / dédoublonnage
+                </a>
+                <a href="{{ route('admin.sites.settings') }}" class="{{ $adminSubLink($adminSegment === 'sites' && request()->segment(3) === 'settings') }}">
+                    <i class="fa-solid fa-gear w-4 text-center"></i> Paramètres sites
+                </a>
+                <a href="{{ route('admin.balises.settings') }}" class="{{ $adminSubLink($adminSegment === 'balises' && request()->segment(3) === 'settings') }}">
+                    <i class="fa-solid fa-gear w-4 text-center"></i> Paramètres balises
+                </a>
+                <a href="{{ route('admin.weather-stations.settings') }}" class="{{ $adminSubLink($adminSegment === 'weather-stations' && request()->segment(3) === 'settings') }}">
+                    <i class="fa-solid fa-gear w-4 text-center"></i> Paramètres stations
+                </a>
+
+                {{-- ── 3. Météo (modèles, APIs, consensus, fiabilité) ── --}}
+                <div class="{{ $sectionLabel }}">Météo</div>
+                <a href="{{ route('admin.models.index') }}" class="{{ $adminLink($adminSegment === 'models') }}">
+                    <i class="fa-solid fa-cloud w-4 text-center"></i> Modèles météo
+                </a>
+                <a href="{{ route('admin.apis.index') }}" class="{{ $adminLink($adminSegment === 'apis') }}">
+                    <i class="fa-solid fa-plug w-4 text-center"></i> APIs météo
+                </a>
+                <a href="{{ route('admin.station-apis.index') }}" class="{{ $adminLink($adminSegment === 'station-apis') }}">
+                    <i class="fa-solid fa-plug w-4 text-center" style="color:#3b82f6"></i> APIs stations
+                </a>
+                <a href="{{ route('admin.reliability.compare') }}" class="{{ $adminLink($adminSegment === 'reliability') }}">
+                    <i class="fa-solid fa-flask-vial w-4 text-center"></i> Fiabilité des modèles
+                </a>
+                <a href="{{ route('admin.meteo.settings') }}" class="{{ $adminSubLink($adminSegment === 'meteo') }}">
+                    <i class="fa-solid fa-gear w-4 text-center"></i> Paramètres météo / sidecar
+                </a>
+
+                {{-- ── 4. Contenu & utilisateurs ────────────────── --}}
+                <div class="{{ $sectionLabel }}">Contenu & utilisateurs</div>
                 <a href="{{ route('admin.articles.index') }}" class="{{ $adminLink($adminSegment === 'articles') }}">
                     <i class="fa-solid fa-newspaper w-4 text-center"></i> Articles / Changelog
                 </a>
                 <a href="{{ route('admin.wiki.index') }}" class="{{ $adminLink($adminSegment === 'wiki') }}">
                     <i class="fa-solid fa-book-open w-4 text-center"></i> Aide / Wiki
                 </a>
-                <a href="{{ route('admin.contenu.settings') }}" class="{{ $adminSubLink($adminSegment === 'contenu') }}">
-                    <i class="fa-solid fa-gear w-4 text-center"></i> Paramètres
+                <a href="{{ route('admin.modules.index') }}" class="{{ $adminLink($adminSegment === 'modules') }}">
+                    <i class="fa-solid fa-puzzle-piece w-4 text-center"></i> Modules
                 </a>
-
-                {{-- ── Modèles Météo ────────────────────────────── --}}
-                <div class="{{ $sectionLabel }}">Modèles Météo</div>
-                <a href="{{ route('admin.apis.index') }}" class="{{ $adminLink($adminSegment === 'apis') }}">
-                    <i class="fa-solid fa-plug w-4 text-center"></i> APIs météo
-                </a>
-                <a href="{{ route('admin.models.index') }}" class="{{ $adminLink($adminSegment === 'models') }}">
-                    <i class="fa-solid fa-cloud w-4 text-center"></i> Modèles météo
-                </a>
-                <a href="{{ route('admin.reliability.compare') }}" class="{{ $adminLink($adminSegment === 'reliability') }}">
-                    <i class="fa-solid fa-flask-vial w-4 text-center"></i> Fiabilité des modèles
-                </a>
-                <a href="{{ route('admin.meteo.settings') }}" class="{{ $adminSubLink($adminSegment === 'meteo') }}">
-                    <i class="fa-solid fa-gear w-4 text-center"></i> Paramètres
-                </a>
-
-                {{-- ── Sites ────────────────────────────────────── --}}
-                <div class="{{ $sectionLabel }}">Sites</div>
-                <a href="{{ route('admin.sites.index') }}" class="{{ $adminLink($adminSegment === 'sites' && request()->segment(3) !== 'settings') }}">
-                    <i class="fa-solid fa-mountain-sun w-4 text-center"></i> Sites
-                </a>
-                <a href="{{ route('admin.data-quality.index') }}" class="{{ $adminLink($adminSegment === 'data-quality') }}">
-                    <i class="fa-solid fa-code-merge w-4 text-center"></i> Fusion / dédoublonnage
-                </a>
-                <a href="{{ route('admin.sites.settings') }}" class="{{ $adminSubLink($adminSegment === 'sites' && request()->segment(3) === 'settings') }}">
-                    <i class="fa-solid fa-gear w-4 text-center"></i> Paramètres
-                </a>
-
-                {{-- ── Balises ──────────────────────────────────── --}}
-                <div class="{{ $sectionLabel }}">Balises</div>
-                <a href="{{ route('admin.balises.index') }}" class="{{ $adminLink($adminSegment === 'balises' && request()->segment(3) !== 'settings') }}">
-                    <i class="fa-solid fa-tower-broadcast w-4 text-center"></i> Balises
-                </a>
-                <a href="{{ route('admin.balises.settings') }}" class="{{ $adminSubLink($adminSegment === 'balises' && request()->segment(3) === 'settings') }}">
-                    <i class="fa-solid fa-gear w-4 text-center"></i> Paramètres
-                </a>
-
-                {{-- ── Stations météo ─────────────────────────── --}}
-                <div class="{{ $sectionLabel }}">Stations météo</div>
-                <a href="{{ route('admin.weather-stations.index') }}" class="{{ $adminLink($adminSegment === 'weather-stations' && request()->segment(3) !== 'settings') }}">
-                    <i class="fa-solid fa-tower-broadcast w-4 text-center" style="color:#3b82f6"></i> Stations
-                </a>
-                <a href="{{ route('admin.station-apis.index') }}" class="{{ $adminLink($adminSegment === 'station-apis') }}">
-                    <i class="fa-solid fa-plug w-4 text-center" style="color:#3b82f6"></i> APIs stations
-                </a>
-                <a href="{{ route('admin.weather-stations.settings') }}" class="{{ $adminSubLink($adminSegment === 'weather-stations' && request()->segment(3) === 'settings') }}">
-                    <i class="fa-solid fa-gear w-4 text-center"></i> Paramètres
-                </a>
-
-                {{-- ── Système ──────────────────────────────────── --}}
-                <div class="{{ $sectionLabel }}">Système</div>
                 <a href="{{ route('admin.users.index') }}" class="{{ $adminLink($adminSegment === 'users') }}">
                     <i class="fa-solid fa-users w-4 text-center"></i> Utilisateurs
                 </a>
                 <a href="{{ route('admin.traffic.index') }}" class="{{ $adminLink($adminSegment === 'traffic') }}">
                     <i class="fa-solid fa-chart-line w-4 text-center"></i> Trafic
                 </a>
-                <a href="{{ route('admin.logs.index') }}" class="{{ $adminLink($adminSegment === 'logs') }}">
-                    <i class="fa-solid fa-scroll w-4 text-center"></i> Logs / monitoring
-                </a>
-                <a href="{{ route('admin.settings.index') }}" class="{{ $adminSubLink($adminSegment === 'settings' && request()->segment(3) !== 'audit') }}">
-                    <i class="fa-solid fa-gear w-4 text-center"></i> Paramètres
-                </a>
-                <a href="{{ route('admin.settings.audit') }}" class="{{ $adminSubLink($adminSegment === 'settings' && request()->segment(3) === 'audit') }}">
-                    <i class="fa-solid fa-clock-rotate-left w-4 text-center"></i> Historique
+                <a href="{{ route('admin.contenu.settings') }}" class="{{ $adminSubLink($adminSegment === 'contenu') }}">
+                    <i class="fa-solid fa-gear w-4 text-center"></i> Paramètres contenu
                 </a>
 
-                {{-- ── Divers ───────────────────────────────────── --}}
-                <div class="{{ $sectionLabel }}">Divers</div>
-                <a href="{{ route('admin.modules.index') }}" class="{{ $adminLink($adminSegment === 'modules') }}">
-                    <i class="fa-solid fa-puzzle-piece w-4 text-center"></i> Modules
+                {{-- ── 5. Système ───────────────────────────────── --}}
+                <div class="{{ $sectionLabel }}">Système</div>
+                <a href="{{ route('admin.logs.jobs') }}" class="{{ $adminLink($adminSegment === 'logs') }}">
+                    <i class="fa-solid fa-scroll w-4 text-center"></i> Logs / jobs
+                </a>
+                <a href="{{ route('admin.settings.index') }}" class="{{ $adminLink($adminSegment === 'settings' && request()->segment(3) !== 'audit') }}">
+                    <i class="fa-solid fa-sliders w-4 text-center"></i> Paramètres
+                </a>
+                <a href="{{ route('admin.settings.audit') }}" class="{{ $adminSubLink($adminSegment === 'settings' && request()->segment(3) === 'audit') }}">
+                    <i class="fa-solid fa-clock-rotate-left w-4 text-center"></i> Historique des paramètres
                 </a>
             </nav>
         @endauth
