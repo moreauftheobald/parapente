@@ -168,7 +168,11 @@ class FetchStationForecastsJob implements ShouldQueue
             $totalUpsert += $modelRows;
         }
 
-        $this->trackSuccess("{$totalUpsert} rows, " . count($points) . " stations, {$models->count()} modèles", ['rows_upserted' => $totalUpsert, 'stations' => count($points), 'models' => $models->count()]);
+        // Consensus : même source que les sites (sidecar). Archivé aux coords
+        // des stations comme le modèle qui_vole_consensus.
+        $totalUpsert += $this->archiveConsensus($openMeteo, $pointChunks, $fetchedAt, $fetchedAtStr);
+
+        $this->trackSuccess("{$totalUpsert} rows, " . count($points) . " stations, {$models->count()} modèles (+ consensus)", ['rows_upserted' => $totalUpsert, 'stations' => count($points), 'models' => $models->count()]);
 
         Log::info('FetchStationForecastsJob completed', [
             'stations'      => count($points),
@@ -180,6 +184,78 @@ class FetchStationForecastsJob implements ShouldQueue
     public function failed(\Throwable $e): void
     {
         $this->trackFailure($e);
+    }
+
+    /**
+     * Fetch le consensus aux coords des stations (sidecar, modèle
+     * qui_vole_consensus) et l'archive comme un modèle. Résilient.
+     *
+     * @param array<int,array<int,array{id:int,lat:float,lng:float}>> $pointChunks
+     */
+    private function archiveConsensus(OpenMeteoApi $openMeteo, array $pointChunks, Carbon $fetchedAt, string $fetchedAtStr): int
+    {
+        $consensus = WeatherModel::with('api')->where('code', WeatherModel::CONSENSUS_CODE)->first();
+        if (! $consensus || ! $consensus->api) {
+            Log::warning('FetchStationForecastsJob: modèle/API consensus absent — archivage consensus ignoré');
+            return 0;
+        }
+
+        $openMeteo->setConfig($consensus->api);
+        $upserted = 0;
+
+        foreach ($pointChunks as $chunk) {
+            $batch = $openMeteo->fetchStationBatchChunk($chunk, $consensus);
+            if (empty($batch)) {
+                continue;
+            }
+            $rows = [];
+            foreach ($batch as $stationId => $forecasts) {
+                foreach ($forecasts as $datetime => $values) {
+                    $targetAt = Carbon::parse($datetime);
+                    $horizonH = (int) $fetchedAt->diffInHours($targetAt, false);
+                    if ($horizonH < 0 || $horizonH > self::MAX_HORIZON_HOURS) {
+                        continue;
+                    }
+                    $rows[] = [
+                        'weather_station_id' => $stationId,
+                        'weather_model_id'   => $consensus->id,
+                        'target_at'          => $targetAt->format('Y-m-d H:i:s'),
+                        'fetched_at'         => $fetchedAtStr,
+                        'horizon_bucket'     => $this->bucketFor($horizonH),
+                        'wind_direction'     => $values['wind_direction'],
+                        'wind_speed_avg'     => $values['wind_speed_avg'],
+                        'wind_speed_max'     => $values['wind_speed_max'],
+                        'temperature'        => $values['temperature'],
+                        'dew_point'          => $values['dew_point'],
+                        'humidity'           => $values['humidity'],
+                        'precipitation'      => $values['precipitation'],
+                        'pressure_hpa'       => $values['pressure_hpa'],
+                        'cloud_cover'        => $values['cloud_cover'],
+                        'created_at'         => $fetchedAtStr,
+                        'updated_at'         => $fetchedAtStr,
+                    ];
+                }
+            }
+            foreach (array_chunk($rows, 500) as $upsertChunk) {
+                DB::table('forecast_archive_stations')->upsert(
+                    $upsertChunk,
+                    ['weather_station_id', 'weather_model_id', 'target_at', 'horizon_bucket'],
+                    ['fetched_at', 'wind_direction', 'wind_speed_avg', 'wind_speed_max', 'temperature', 'dew_point', 'humidity', 'precipitation', 'pressure_hpa', 'cloud_cover', 'updated_at']
+                );
+                $upserted += count($upsertChunk);
+            }
+            unset($batch, $rows);
+        }
+
+        WeatherFetchLog::create([
+            'weather_model_id' => $consensus->id,
+            'scope'            => 'station',
+            'fetched_at'       => $fetchedAt,
+            'rows_upserted'    => $upserted,
+            'provider_run_at'  => null,
+        ]);
+
+        return $upserted;
     }
 
     private function bucketFor(int $horizonH): string

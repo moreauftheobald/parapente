@@ -715,10 +715,31 @@ function mapApp(){return{
     },
     get fpComparVarLabel(){ return (this.fpComparVars.find(v => v.key === this.fpComparVar) || {}).label || ''; },
     renderFeaturePopup(){
-        if(this.featurePopup.tab === 'rose' && this.fpData){
+        if(!this.fpData) return;
+        if(this.featurePopup.tab === 'rose'){
             const readings = (this.fpData.readings || []).map(r => ({ dir:r.wind_direction, spd:r.wind_speed_avg }));
             drawFreqRose(readings, this.fpCurrent);
+        } else if(this.featurePopup.tab === 'meas'){
+            drawMiniHist(this.fpData.readings || []);
         }
+    },
+    // Tendance de pression sur ~3 h (depuis les relevés station).
+    get fpPressureTrend(){
+        const rs = (this.fpData?.readings || []).filter(r => r.pressure_hpa != null);
+        if(rs.length < 2) return null;
+        const last = rs[rs.length-1];
+        const lastT = new Date(last.observed_at || last.read_at).getTime();
+        let ref = null, best = Infinity;
+        for(const r of rs){
+            const t = new Date(r.observed_at || r.read_at).getTime();
+            if(t >= lastT) continue;
+            const d = Math.abs((lastT - t) - 3*3600*1000);
+            if(d < best){ best = d; ref = r; }
+        }
+        if(!ref) return null;
+        const diff = last.pressure_hpa - ref.pressure_hpa;
+        const arrow = diff > 0.5 ? '↗' : diff < -0.5 ? '↘' : '→';
+        return `${arrow} ${diff>=0?'+':''}${diff.toFixed(1)} / 3h`;
     },
     positionFeaturePopup(){
         if(!this.featurePopup.open || !this._fpAnchor || !this.map) return;
@@ -1316,7 +1337,7 @@ function mapApp(){return{
             const icon   = L.icon({iconUrl:stationIconUrl(netKey, fKey),iconSize:[24,24],iconAnchor:[12,12]});
             const m = L.marker([s.lat,s.lng],{icon})
                 .bindTooltip(stationTooltipHtml(s),{direction:'top',offset:[0,-14],opacity:.95});
-            m.on('click',(e)=>{L.DomEvent.stopPropagation(e);this.clickStation(s.id,m.getElement());});
+            m.on('click',(e)=>{L.DomEvent.stopPropagation(e);this.clickStation(s.id,m.getLatLng());});
             m._netKey = netKey;
             this._stationsMarkers[s.id] = m;
             if(!byNet[netKey]) byNet[netKey] = [];
@@ -1330,18 +1351,11 @@ function mapApp(){return{
         }
     },
     // ── Clic sur une station météo → volet droit (relevés + historique du jour) ──
-    clickStation(id, markerEl){
-        const s=this.weatherStations.find(x=>x.id===id);
-        if(!s) return;
-        this._clearAllMarkerSelection();
-        this.site={};
-        this._stationObj=s;
-        this.selectedFeature={type:'station', ...s};
-        this.chartData=null; this.multimodelData=null; this.multimodel5Data=null;
-        this.baliseData=null; this._baliseObj=null;
-        this.stationData=null; this.stationTableOpen=false;
-        this.openRightPanel();
-        this.loadStationDetail(id);
+    // Refonte v2 : le clic station ouvre la popup flottante (3 onglets),
+    // au lieu du drawer droit. _fpAnchor = position marqueur.
+    clickStation(id, latlng){
+        this._stationObj = this.weatherStations.find(x => x.id === id) || null;
+        this.openFeaturePopup('station', id, latlng);
     },
     async loadStationDetail(id){
         this.stationLoading=true;

@@ -89,6 +89,18 @@
 .fpop .fiab-sub{font-size:10px;color:rgba(255,255,255,0.4)}
 .fpop .fiab-badge{font-size:9px;padding:2px 7px;border-radius:3px;background:rgba(78,168,224,0.1);color:#4ea8e0;border:0.5px solid rgba(78,168,224,0.2);white-space:nowrap}
 
+/* VUE MESURES (station) */
+.fpop .meas-view{padding:12px 16px}
+.fpop .sec-lbl{font-size:9px;font-weight:500;color:rgba(255,255,255,0.42);letter-spacing:.07em;text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:4px}
+.fpop .sec-lbl i{font-size:10px}
+.fpop .params-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:10px}
+.fpop .pc{background:rgba(255,255,255,0.04);border:0.5px solid rgba(255,255,255,0.07);border-radius:7px;padding:7px 9px}
+.fpop .pc-lbl{font-size:9px;color:rgba(255,255,255,0.52);margin-bottom:2px;display:flex;align-items:center;gap:3px}
+.fpop .pc-lbl i{font-size:9px}
+.fpop .pc-val{font-size:15px;font-weight:500;color:#e8f4fd;line-height:1}
+.fpop .pc-unit{font-size:9px;color:rgba(255,255,255,0.38);margin-left:1px}
+.fpop .pc-sub{font-size:9px;color:rgba(255,255,255,0.45);margin-top:2px}
+
 @keyframes fpopPulse{0%,100%{opacity:1}50%{opacity:.35}}
 @keyframes fpopSpin{to{transform:rotate(360deg)}}
 

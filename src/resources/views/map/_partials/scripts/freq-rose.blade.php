@@ -122,4 +122,40 @@
             gctx.fillStyle = gg; gctx.fillRect(0, 0, gW, 6);
         }
     };
+
+    // ── Mini-histogramme 12 h (onglet Mesures, stations) ─────────────────
+    window.drawMiniHist = function(readings){
+        const cv = document.getElementById('fpop-mhist-cv'); if(!cv) return;
+        const dpr = window.devicePixelRatio || 1, H = 70;
+        const W = cv.parentElement.offsetWidth || 320;
+        cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr);
+        cv.style.width = W+'px'; cv.style.height = H+'px';
+        const ctx = cv.getContext('2d'); ctx.scale(dpr, dpr);
+        ctx.clearRect(0, 0, W, H);
+
+        const now = Date.now();
+        const vals = (readings || [])
+            .filter(r => r.wind_speed_avg != null)
+            .filter(r => { const t = new Date(r.observed_at || r.read_at).getTime(); return now - t <= 12.5*3600*1000; })
+            .map(r => +r.wind_speed_avg);
+        if(!vals.length) return;
+
+        const mx = Math.max(...vals, 1), mn = Math.min(...vals, 0), span = (mx - mn) || 1;
+        const PL = 26, PR = 4, PT = 4, PB = 14, CW = W-PL-PR, CH = H-PT-PB;
+        [Math.round(mn), Math.round((mn+mx)/2), Math.round(mx)].forEach(v => {
+            const y = PT + CH - ((v-mn)/span)*CH;
+            ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 0.5;
+            ctx.beginPath(); ctx.moveTo(PL, y); ctx.lineTo(PL+CW, y); ctx.stroke();
+            ctx.fillStyle = 'rgba(255,255,255,0.42)'; ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
+            ctx.fillText(v, PL-3, y+3);
+        });
+        const bw = CW / vals.length;
+        vals.forEach((v, i) => {
+            const bh = ((v-mn)/span)*CH;
+            ctx.fillStyle = i === vals.length-1 ? '#4ea8e0' : spdCol(v);
+            ctx.globalAlpha = i === vals.length-1 ? 1 : 0.7;
+            ctx.fillRect(PL + i*bw + 0.5, PT+CH-bh, Math.max(1, bw-1), bh);
+        });
+        ctx.globalAlpha = 1;
+    };
 })();

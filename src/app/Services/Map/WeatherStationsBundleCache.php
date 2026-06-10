@@ -12,6 +12,9 @@ final class WeatherStationsBundleCache
 
     public const BUNDLE_TTL_SECONDS = 300;
 
+    /** Comparaison mesures vs consensus (onglet Évolution) : 10 min. */
+    public const COMPARISON_TTL_SECONDS = 600;
+
     public function __construct(
         private readonly CacheRepository $cache,
     ) {}
@@ -33,5 +36,19 @@ final class WeatherStationsBundleCache
     public function forgetBundle(): void
     {
         $this->cache->forget(self::bundleKey());
+    }
+
+    public static function comparisonKey(int $stationId): string
+    {
+        return "map.weather_stations.comparison.{$stationId}.v" . self::CACHE_VERSION;
+    }
+
+    /**
+     * @param callable():array $builder
+     * @return array<string,mixed>
+     */
+    public function rememberComparison(int $stationId, callable $builder): array
+    {
+        return $this->cache->remember(self::comparisonKey($stationId), self::COMPARISON_TTL_SECONDS, $builder);
     }
 }

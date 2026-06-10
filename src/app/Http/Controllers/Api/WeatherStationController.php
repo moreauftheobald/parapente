@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\WeatherStation;
 use App\Models\WeatherStationObservation;
+use App\Services\Map\ComparisonSeriesBuilder;
 use App\Services\Map\WeatherStationsBundleCache;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -30,26 +31,38 @@ class WeatherStationController extends Controller
         return response()->json($payload);
     }
 
-    public function detail(int $id): JsonResponse
+    public function detail(Request $request, int $id): JsonResponse
     {
         $station = WeatherStation::find($id);
         if (! $station) {
             return response()->json(['error' => 'Station not found'], 404);
         }
 
-        $startOfDay = Carbon::now()->startOfDay();
-        $observations = WeatherStationObservation::where('weather_station_id', $id)
-            ->where('observed_at', '>=', $startOfDay)
-            ->orderBy('observed_at')
-            ->get();
+        // Fenêtre optionnelle (rose fréquentielle popup) : 3/6/12/24/72 h.
+        $window = (int) $request->query('window', '0');
+        $window = in_array($window, [3, 6, 12, 24, 72], true) ? $window : null;
 
+        $startOfDay = Carbon::now()->startOfDay();
         $fallback = false;
-        if ($observations->isEmpty()) {
+
+        if ($window !== null) {
             $observations = WeatherStationObservation::where('weather_station_id', $id)
-                ->where('observed_at', '>=', Carbon::now()->subHours(24))
+                ->where('observed_at', '>=', Carbon::now()->subHours($window))
                 ->orderBy('observed_at')
                 ->get();
-            $fallback = true;
+        } else {
+            $observations = WeatherStationObservation::where('weather_station_id', $id)
+                ->where('observed_at', '>=', $startOfDay)
+                ->orderBy('observed_at')
+                ->get();
+
+            if ($observations->isEmpty()) {
+                $observations = WeatherStationObservation::where('weather_station_id', $id)
+                    ->where('observed_at', '>=', Carbon::now()->subHours(24))
+                    ->orderBy('observed_at')
+                    ->get();
+                $fallback = true;
+            }
         }
 
         $latest = $observations->last();
@@ -107,6 +120,29 @@ class WeatherStationController extends Controller
             'readings' => $readings,
             'fallback' => $fallback,
         ]);
+    }
+
+    /**
+     * Séries « mesures vs consensus » J−2 → J+2 (onglet Évolution popup).
+     *
+     * GET /api/weather-stations/{id}/comparison
+     *
+     * Consensus lu depuis forecast_archive_stations (modèle qui_vole_consensus
+     * écrit par le job). Caché 10 min.
+     */
+    public function comparison(int $id, ComparisonSeriesBuilder $builder): JsonResponse
+    {
+        $station = WeatherStation::find($id);
+        if (! $station) {
+            return response()->json(['error' => 'Station not found'], 404);
+        }
+
+        $payload = $this->cache->rememberComparison(
+            $station->id,
+            fn () => $builder->forStation($station),
+        );
+
+        return response()->json($payload);
     }
 
     /**
