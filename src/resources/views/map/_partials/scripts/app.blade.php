@@ -39,6 +39,8 @@ function mapApp(){return{
     // ── Volet droit (site) : onglets + données ──
     rpTab:'synth',                                 // synth | score | mod (refonte v2)
     scZoom:'1j', scMode:'global',                  // onglet Scoring : zoom 1j|5j, mode global|perso
+    modVar:'speed', modZoom:'1j', modHidden:{},    // onglet Modèles : variable, zoom 1j|5j, modèles masqués
+    MOD_VARS,                                       // catalogue variables ribbon (panel-ribbon)
     chartData:null, chartLoading:false, chartSite:null,   // onglet « Synthèse » (= ancienne popup)
     multimodelData:null,  multimodelLoading:false,        // onglet « Modèles du jour »
     multimodel5Data:null, multimodel5Loading:false,       // onglet « Modèles 5 jours »
@@ -148,6 +150,7 @@ function mapApp(){return{
                 if (this.selectedFeature?.type === 'site') {
                     if (this.rpTab === 'synth' && this.chartData) this.renderSynthese();
                     if (this.rpTab === 'score') this.renderScoring();
+                    if (this.rpTab === 'mod'   && this.modelsPayload) this.renderModels();
                 } else if (this.selectedFeature?.type === 'balise' && this.baliseData) {
                     this.renderBaliseCharts();
                 }
@@ -221,6 +224,7 @@ function mapApp(){return{
         this._multimodelByDay={};
         this.baliseData=null; this._baliseObj=null;
         this.stationData=null; this._stationObj=null;
+        if(typeof destroyModelsChart==='function') destroyModelsChart();
         this._clearAllMarkerSelection();
     },
 
@@ -404,6 +408,7 @@ function mapApp(){return{
             this.multimodelData=null; // endpoint multimodèle est par jour → invalidé
             if(this.rpTab==='synth' && this.chartData) this.$nextTick(()=>this.renderSynthese());
             if(this.rpTab==='score') this.$nextTick(()=>this.renderScoring());
+            if(this.rpTab==='mod') this.loadModels();
         }
     },
 
@@ -479,6 +484,8 @@ function mapApp(){return{
         this.selectedFeature={type:'site',...site};
         this.rpTab='synth';
         this.scZoom='1j'; this.scMode='global';
+        this.modVar='speed'; this.modZoom='1j'; this.modHidden={};
+        if(typeof destroyModelsChart==='function') destroyModelsChart();
         this.chartData=null; this.chartSite=null;
         this.multimodelData=null; this.multimodel5Data=null;
         this._multimodelByDay={};
@@ -632,8 +639,32 @@ function mapApp(){return{
         }else if(tab==='score'){
             if(this.site?.id!=null && !this.allScores[this.site.id]) await this.loadSiteScores(this.site.id);
             this.$nextTick(()=>this.renderScoring());
+        }else if(tab==='mod'){
+            await this.loadModels();
         }
     },
+
+    // ── Onglet « Modèles » (refonte v2) ──────────────────────────
+    get modelsPayload(){ return this.modZoom==='1j' ? this.multimodelData : this.multimodel5Data; },
+    get modelsLoading(){ return this.modZoom==='1j' ? this.multimodelLoading : this.multimodel5Loading; },
+    get modVarObj(){ return MOD_VARS.find(v=>v.key===this.modVar) || MOD_VARS[0]; },
+    async loadModels(){
+        if(this.modZoom==='1j') await this.loadMultimodel();
+        else await this.loadFiveDays();
+        this.$nextTick(()=>this.renderModels());
+    },
+    renderModels(){
+        if(!this.modelsPayload) return;
+        this.$nextTick(()=>renderModelsTab(this));
+    },
+    setModVar(k){ this.modVar=k; this.renderModels(); },
+    setModZoom(z){ if(z===this.modZoom) return; this.modZoom=z; this.loadModels(); },
+    modelsDayStep(d){
+        if(this.modZoom==='5j') return;
+        const i=Math.max(0,Math.min(4,this.selectedDayIdx+d));
+        if(i!==this.selectedDayIdx) this.selectDay(i);
+    },
+    toggleModel(id){ this.modHidden[id]=!this.modHidden[id]; this.renderModels(); },
 
     // ── Onglet « Scoring » (refonte v2) ──────────────────────────
     renderScoring(){
