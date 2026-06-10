@@ -39,9 +39,9 @@ final class ComparisonSeriesBuilder
         $now = Carbon::now($tz);
         $axisStart = $now->copy()->startOfDay()->subDays(self::DAYS_BACK);
         $axisEnd   = $axisStart->copy()->addHours(self::STEPS * self::STEP_HOURS);
-        $nowStep   = max(0, min(self::STEPS - 1, intdiv($axisStart->diffInMinutes($now), self::STEP_HOURS * 60)));
+        $nowStep   = max(0, min(self::STEPS - 1, intdiv((int) $axisStart->diffInMinutes($now), self::STEP_HOURS * 60)));
 
-        $bucketOf = fn (Carbon $t): int => intdiv($axisStart->diffInMinutes($t), self::STEP_HOURS * 60);
+        $bucketOf = fn (Carbon $t): int => intdiv((int) $axisStart->diffInMinutes($t), self::STEP_HOURS * 60);
 
         // ── MESURES (balise_readings_hourly) ────────────────────────────
         $hourly = BaliseReadingHourly::where('balise_id', $balise->id)
