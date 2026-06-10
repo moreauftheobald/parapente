@@ -12,7 +12,8 @@
    ════════════════════════════════════════════════════════════════ */
 
 .rp2 *{box-sizing:border-box;margin:0;padding:0}
-.rp2{background:#111b28;font-family:'DM Sans',sans-serif;width:100%;color:#e8f4fd}
+/* Remplit le flex column #right-panel (height:100%) et scrolle en interne. */
+.rp2{background:#111b28;font-family:'DM Sans',sans-serif;width:100%;color:#e8f4fd;flex:1;min-width:0;min-height:0;overflow-y:auto;overflow-x:hidden}
 
 /* ─── En-tête site ─── */
 .rp2 .panel{background:#111b28;overflow:hidden;width:100%;max-width:none;margin:0}

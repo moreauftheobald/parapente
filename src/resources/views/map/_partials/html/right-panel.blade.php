@@ -25,40 +25,44 @@
                 </template>
 
                 {{-- ═══════════ SITE ═══════════ --}}
+                {{-- Refonte panneau droit v2 (markup .rp2). Onglets :
+                     Synthèse (implémenté) · Scoring (Phase 2) · Modèles (Phase 3).
+                     Styles : map/_partials/styles/right-panel-v2.
+                     Canvas : map/_partials/scripts/panel-synthese. --}}
                 <template x-if="selectedFeature?.type === 'site'">
-                    <div class="rp-wrap">
+                    <div class="rp2">
 
-                        {{-- Titre sur une seule ligne : Nom · Niveau · ☀ Lever … → Coucher … --}}
-                        <div class="rp-head">
-                            <div class="rp-headline">
-                                <span class="rp-name" x-text="selectedFeature?.name ?? ''"></span>
-                                <template x-if="siteLevelLabel">
-                                    <span class="rp-meta"><span class="rp-dot">·</span><span x-text="siteLevelLabel"></span></span>
-                                </template>
-                                <template x-if="siteOrientationLabel">
-                                    <span class="rp-meta"><span class="rp-dot">·</span><span>Orient. <span x-text="siteOrientationLabel"></span></span></span>
-                                </template>
-                                <template x-if="selectedFeature?.altitude != null">
-                                    <span class="rp-meta"><span class="rp-dot">·</span><span>Alt. <span class="mono" x-text="selectedFeature.altitude + ' m'"></span></span></span>
-                                </template>
-                                <template x-if="panelSunWindow">
-                                    <span class="rp-meta">
-                                        <span class="rp-dot">·</span>
-                                        <span class="rp-sun-ico">☀</span>
-                                        <span>Lever <span class="mono" x-text="panelSunWindow.sunrise_display ?? '—'"></span></span>
-                                        <span class="rp-arrow">→</span>
-                                        <span>Coucher <span class="mono" x-text="panelSunWindow.sunset_display ?? '—'"></span></span>
-                                    </span>
-                                </template>
+                        {{-- En-tête : nom + métadonnées + score du jour --}}
+                        <div class="site-hd">
+                            <div class="site-hd-row">
+                                <div style="min-width:0;">
+                                    <div class="site-name" x-text="selectedFeature?.name ?? ''"></div>
+                                    <div class="site-meta">
+                                        <template x-if="selectedFeature?.altitude != null">
+                                            <span class="smeta"><i class="ti ti-mountain" aria-hidden="true"></i><span x-text="selectedFeature.altitude + ' m'"></span></span>
+                                        </template>
+                                        <template x-if="siteOrientationLabel">
+                                            <span class="smeta"><i class="ti ti-compass" aria-hidden="true"></i><span x-text="siteOrientationLabel"></span></span>
+                                        </template>
+                                        <template x-if="siteLevelLabel">
+                                            <span class="smeta"><i class="ti ti-users" aria-hidden="true"></i><span x-text="siteLevelLabel"></span></span>
+                                        </template>
+                                        <template x-if="panelSunWindow">
+                                            <span class="smeta"><i class="ti ti-sun" aria-hidden="true"></i><span x-text="(panelSunWindow.sunrise_display ?? '—') + '–' + (panelSunWindow.sunset_display ?? '—')"></span></span>
+                                        </template>
+                                    </div>
+                                </div>
+                                <div style="display:flex;align-items:flex-start;gap:10px;flex-shrink:0;">
+                                    <div style="text-align:right;">
+                                        <div class="hero-num" :style="`color:${synthHero.text}`" x-text="synthScore ?? '—'"></div>
+                                        <div class="hero-lbl">score du jour</div>
+                                    </div>
+                                    <button class="rp-close" @click="closeRightPanel()" title="Fermer">✕</button>
+                                </div>
                             </div>
-                            <button class="rp-close" @click="closeRightPanel()" title="Fermer">✕</button>
                         </div>
 
-                        {{-- Bandeau « Scoring perso » : visible quand l'utilisateur a un
-                             scoring perso ACTIF sur ce site. On utilise x-show (et pas
-                             <template x-if>) car les templates Alpine imbriqués dans
-                             un autre <template x-if> peuvent avoir des soucis de
-                             réactivité sur des propriétés ajoutées au runtime. --}}
+                        {{-- Bandeau « Scoring perso » (inchangé) --}}
                         <div class="rp-user-banner" x-show="authUser && selectedFeature?.user_scoring === 'active'" x-cloak
                              title="Le scoring affiché ici utilise tes conditions personnelles. Tu peux le modifier depuis ton profil.">
                             <span class="rp-user-banner-ico">★</span>
@@ -66,202 +70,124 @@
                             <a href="{{ route('user.scorings') }}" class="rp-user-banner-link">Gérer mes scorings ↗</a>
                         </div>
 
-
-                        {{-- Onglets --}}
-                        <div class="rp-tabs">
-                            <button class="rp-tab" :class="rpTab === 'synthese' ? 'active' : ''" @click="setRpTab('synthese')"
-                                    x-text="'Synthèse · ' + (days[selectedDayIdx]?.label ?? '')"></button>
-                            <button class="rp-tab" :class="rpTab === 'voting' ? 'active' : ''" @click="setRpTab('voting')">Détail scoring · 5 jours</button>
-                            <button class="rp-tab" :class="rpTab === 'models' ? 'active' : ''" @click="setRpTab('models')"
-                                    x-text="'Modèles météo · ' + (days[selectedDayIdx]?.label ?? '')"></button>
-                            <button class="rp-tab" :class="rpTab === 'models5' ? 'active' : ''" @click="setRpTab('models5')">Modèles · 5 jours</button>
+                        {{-- Onglets principaux --}}
+                        <div class="main-tabs">
+                            <div class="mtab" :class="rpTab === 'synth' ? 'on' : ''" @click="setRpTab('synth')"><i class="ti ti-layout-dashboard" aria-hidden="true"></i>Synthèse</div>
+                            <div class="mtab" :class="rpTab === 'score' ? 'on' : ''" @click="setRpTab('score')"><i class="ti ti-calendar-week" aria-hidden="true"></i>Scoring</div>
+                            <div class="mtab" :class="rpTab === 'mod' ? 'on' : ''" @click="setRpTab('mod')"><i class="ti ti-chart-sankey" aria-hidden="true"></i>Modèles</div>
                         </div>
 
-                        {{-- ── Onglet « Synthèse pour la journée » (ancienne popup site) ── --}}
-                        <div class="rp-pane" x-show="rpTab === 'synthese'">
+                        {{-- ══ VUE SYNTHÈSE ══ --}}
+                        <div class="view" :class="rpTab === 'synth' ? 'on' : ''">
                             <div x-show="chartLoading" class="rp-loader"><div class="rp-spinner"></div></div>
-                            <div x-show="!chartLoading">
-                                <template x-if="chartHasData">
-                                    <div>
-                                        <div class="rp-confidence" x-show="chartConfidence !== null">
-                                            <div class="panel-conformity">
-                                                <span>Certitude de la prévision</span>
-                                                <div class="bar"><div class="fill" :style="`width:${chartConfidence ?? 0}%;background:${chartConfidenceColor}`"></div></div>
-                                                <span class="val" x-text="(chartConfidence ?? '—') + '%'"></span>
-                                            </div>
-                                        </div>
-                                        <div class="rp-chart-box">
-                                            <svg id="chart-svg" width="558" height="261" viewBox="0 0 428 200"
-                                                 style="display:block;width:100%;height:auto;overflow:visible;"></svg>
-                                            <div class="rp-chart-legend">
-                                                <span>↑ sens du vent (direction de propagation)</span>
-                                                <span><span style="color:#22c55e;">■</span> axe favorable&nbsp;&nbsp;<span style="color:#ef4444;">■</span> hors axe</span>
-                                            </div>
-                                        </div>
-                                        <div class="rp-chart-box" style="margin-top:12px;">
-                                            <svg id="ceiling-svg" viewBox="0 0 428 112"
-                                                 style="display:block;width:100%;height:auto;overflow:visible;"></svg>
-                                            <div class="rp-chart-legend">
-                                                <span>plafond en altitude absolue (m) — Min / Moy / Max des modèles</span>
-                                                <span><span style="color:#fbbf24;">┄</span> altitude du décollage&nbsp;&nbsp;<span style="color:#ef4444;">■</span> Moy sous le décollage</span>
-                                            </div>
-                                        </div>
-                                        <div class="rp-chart-foot">
-                                            <span x-text="'Journée : ' + (days[selectedDayIdx]?.label ?? '—')"></span>
-                                            <span x-text="chartDayCount + ' créneaux analysés'"></span>
-                                        </div>
-                                    </div>
-                                </template>
-                                <template x-if="!chartHasData">
-                                    <div class="rp-placeholder">Aucune donnée disponible pour ce jour.</div>
-                                </template>
-                            </div>
-                        </div>
-
-                        {{-- ── Onglet « Détail du scoring (voting logic) · 5 jours » ── --}}
-                        {{-- Tableau par jour : 5 paramètres + ligne statut global,    --}}
-                        {{-- une colonne par heure de la fenêtre solaire, case colorée --}}
-                        {{-- selon le résultat de la voting logic.                     --}}
-                        <div class="rp-pane rp-pane-scroll" x-show="rpTab === 'voting'">
-                            <template x-if="!votingHasData">
-                                <div class="rp-placeholder">Aucune donnée de scoring disponible.</div>
-                            </template>
-                            <template x-if="votingHasData">
-                                <div class="rp-voting">
-                                    <template x-for="day in votingDays" :key="day.raw">
-                                        <div class="rp-voting-day">
-                                            <div class="rp-voting-daylabel">
-                                                <span x-text="day.label"></span>
-                                                <span class="rp-voting-dayhint" x-text="day.hint"></span>
-                                            </div>
-                                            <div class="rp-voting-tablewrap">
-                                                <table class="rp-voting-table">
-                                                    <thead>
-                                                        <tr>
-                                                            <th class="rp-voting-th-param">Paramètre</th>
-                                                            <template x-for="h in day.hours" :key="h">
-                                                                <th class="rp-voting-th-hour" x-text="h + 'h'"></th>
-                                                            </template>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        <template x-for="row in day.rows" :key="row.key">
-                                                            <tr :class="row.key === 'status' ? 'rp-voting-status' : ''">
-                                                                <td class="rp-voting-td-param" x-text="row.label"></td>
-                                                                <template x-for="(cell, idx) in row.cells" :key="idx">
-                                                                    <td class="rp-voting-cell">
-                                                                        {{-- Cas standard : pastille unie. Cas split (perso ≠ global) :
-                                                                             carré découpé en diagonale, triangle haut-gauche = global,
-                                                                             triangle bas-droite = perso. Tooltip = double titre. --}}
-                                                                        <template x-if="!cell.colorGlobal">
-                                                                            <span class="rp-voting-dot" :class="'rp-voting-' + (cell.color || 'na')"
-                                                                                  @mouseenter="showVotingTip($event, cell.title)"
-                                                                                  @mouseleave="hideVotingTip()"></span>
-                                                                        </template>
-                                                                        <template x-if="cell.colorGlobal">
-                                                                            <span class="rp-voting-dot rp-voting-split"
-                                                                                  :style="`background:
-                                                                                    linear-gradient(135deg, var(--rp-v-${cell.colorGlobal}) 0%, var(--rp-v-${cell.colorGlobal}) 46%,
-                                                                                    var(--rp-v-sep) 46%, var(--rp-v-sep) 54%,
-                                                                                    var(--rp-v-${cell.color}) 54%, var(--rp-v-${cell.color}) 100%)`"
-                                                                                  @mouseenter="showVotingTip($event, cell.titleGlobal + '\n' + cell.title)"
-                                                                                  @mouseleave="hideVotingTip()"></span>
-                                                                        </template>
-                                                                    </td>
-                                                                </template>
-                                                            </tr>
-                                                        </template>
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </div>
-                                    </template>
-                                    <div class="rp-voting-legend">
-                                        <span><span class="rp-voting-dot rp-voting-green"></span>OK</span>
-                                        <span><span class="rp-voting-dot rp-voting-orange"></span>Prudence</span>
-                                        <span><span class="rp-voting-dot rp-voting-red"></span>Éliminatoire</span>
-                                        <span><span class="rp-voting-dot rp-voting-na"></span>N/A</span>
-                                        <span x-show="authUser && selectedFeature?.user_scoring === 'active'" x-cloak>
-                                            <span class="rp-voting-dot rp-voting-split"
-                                                  style="background:linear-gradient(135deg,#f59e0b 0%,#f59e0b 46%,#fff 46%,#fff 54%,#22c55e 54%,#22c55e 100%);"></span>
-                                            Global / perso (haut-gauche = standard, bas-droite = perso)
-                                        </span>
-                                    </div>
-                                </div>
-                            </template>
-                        </div>
-
-                        {{-- ── Onglet « Modèles météo du jour » ── --}}
-                        <div class="rp-pane rp-pane-scroll" x-show="rpTab === 'models'">
-                            <div x-show="multimodelLoading" class="rp-loader"><div class="rp-spinner"></div></div>
-                            <template x-if="!multimodelLoading && multimodelData">
+                            <template x-if="!chartLoading && chartHasData">
                                 <div>
-                                    <div class="rp-summary">
-                                        <div class="panel-conformity">
-                                            <span>Conformité</span>
-                                            <div class="bar"><div class="fill" :style="`width:${multimodelData?.conformity_pct ?? 0}%;background:${conformityColor}`"></div></div>
-                                            <span class="val" x-text="(multimodelData?.conformity_pct ?? '—') + '%'"></span>
+                                    {{-- Hero strip --}}
+                                    <div class="hero-strip" :style="`background:${synthHero.bg};border-color:${synthHero.border}`">
+                                        <div class="hero-dot" :style="`background:${synthHero.dot}`"><i class="ti" :class="synthHero.icon" aria-hidden="true"></i></div>
+                                        <div style="min-width:0;">
+                                            <div class="hverdict" :style="`color:${synthHero.text}`" x-text="synthHero.label"></div>
+                                            <div class="hwin" x-text="'Fenêtre optimale : ' + synthWindowLabel"></div>
+                                        </div>
+                                        <div class="hbig" :style="`color:${synthHero.text}`" x-text="synthScore ?? '—'"></div>
+                                    </div>
+
+                                    {{-- Nuages --}}
+                                    <div class="block">
+                                        <div class="blbl"><span><i class="ti ti-cloud" aria-hidden="true"></i> Couverture nuageuse</span><span style="color:rgba(255,255,255,0.16)">bas · moy · haut</span></div>
+                                        <div class="cloud-wrap" id="rp2-cloud-wrap"></div>
+                                        <div class="cax" id="rp2-cloud-ax"></div>
+                                    </div>
+
+                                    {{-- Vent double-axe --}}
+                                    <div class="block">
+                                        <div class="blbl"><span><i class="ti ti-wind" aria-hidden="true"></i> Vent · direction · altitude</span></div>
+                                        <div class="chart-outer" id="rp2-chart-outer">
+                                            <canvas id="rp2-wind-cv" role="img" aria-label="Graphique vent moyen, rafales, plafond et décollage avec tooltip interactif"></canvas>
+                                            <div class="hover-line" id="rp2-hover-line"></div>
+                                            <div class="tt" id="rp2-wind-tt">
+                                                <div class="tt-h" id="rp2-tt-hour">—</div>
+                                                <div class="tt-r"><span class="tt-l"><i class="ti ti-wind" aria-hidden="true"></i>Vent moy.</span><span class="tt-v" id="rp2-tt-mean">—</span></div>
+                                                <div class="tt-r"><span class="tt-l"><i class="ti ti-bolt" aria-hidden="true"></i>Rafales</span><span class="tt-v" id="rp2-tt-gust" style="color:#fbbf24">—</span></div>
+                                                <div class="tt-r"><span class="tt-l"><i class="ti ti-compass" aria-hidden="true"></i>Direction</span><span class="tt-v" id="rp2-tt-dir">—</span></div>
+                                                <div class="tt-sep"></div>
+                                                <div class="tt-r"><span class="tt-l"><i class="ti ti-arrow-bar-up" aria-hidden="true"></i>Plafond</span><span class="tt-v" id="rp2-tt-ceil" style="color:#60a5fa">—</span></div>
+                                                <div class="tt-r"><span class="tt-l"><i class="ti ti-map-pin" aria-hidden="true"></i>Décollage</span><span class="tt-v" id="rp2-tt-deco">—</span></div>
+                                                <div class="tt-r"><span class="tt-l"><i class="ti ti-ruler" aria-hidden="true"></i>Marge vol</span><span class="tt-v" id="rp2-tt-margin">—</span></div>
+                                            </div>
+                                        </div>
+                                        <div class="dir-strip" id="rp2-dir-strip"></div>
+                                        <div class="axis-strip" id="rp2-axis-strip"></div>
+                                        <div class="wax" id="rp2-wax"></div>
+                                        <div class="wind-leg">
+                                            <div class="wleg"><div class="wleg-b" style="background:rgba(74,222,128,0.85)"></div>Moy.</div>
+                                            <div class="wleg"><div class="wleg-b" style="background:rgba(251,191,36,0.6)"></div>Rafales</div>
+                                            <div class="wleg"><div class="wleg-l" style="background:#60a5fa"></div>Plafond</div>
+                                            <div class="wleg"><div class="wleg-d"></div>Décollage</div>
+                                            <div class="wleg"><div class="wleg-b" style="background:rgba(74,222,128,0.28)"></div>Axe</div>
+                                            <div class="wleg"><div class="wleg-b" style="background:rgba(239,68,68,0.25)"></div>Hors axe</div>
                                         </div>
                                     </div>
-                                    <div class="panel-legend">
-                                        <template x-for="m in (multimodelData?.models ?? [])" :key="m.id">
-                                            <span class="pg-chip" :title="m.provider"><span class="pg-chip-dot" :style="`background:${m.color}`"></span><span x-text="m.name"></span></span>
-                                        </template>
-                                        <span class="pg-chip pg-chip-consensus"><span class="pg-chip-dot"></span>Consensus</span>
-                                    </div>
-                                    <template x-for="cfg in CHART_CONFIGS" :key="cfg.id">
-                                        <div class="chart-section">
-                                            <div class="chart-header" @click="toggleChart(cfg.id)">
-                                                <span><span class="chart-title" x-text="cfg.title"></span><span class="chart-unit" x-text="cfg.unit"></span></span>
-                                                <span class="chart-toggle" :class="chartCollapsed[cfg.id] ? 'collapsed' : ''">▾</span>
-                                            </div>
-                                            <div class="chart-svg-wrap" :class="chartCollapsed[cfg.id] ? 'collapsed' : ''">
-                                                <svg :id="'svg-' + cfg.id" class="chart-svg"></svg>
+
+                                    {{-- Mini rose (vers la rose animée complète plus tard) --}}
+                                    <div class="mini-rose" style="cursor:default;">
+                                        <svg width="44" height="44" viewBox="0 0 44 44" aria-label="Mini rose des vents">
+                                            <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+                                            <circle cx="22" cy="22" r="11" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
+                                            <line x1="22" y1="4" x2="22" y2="40" stroke="rgba(255,255,255,0.05)" stroke-width="0.5"/>
+                                            <line x1="4" y1="22" x2="40" y2="22" stroke="rgba(255,255,255,0.05)" stroke-width="0.5"/>
+                                            <template x-if="synthMiniRose && synthMiniRose.dir != null">
+                                                <g :transform="`rotate(${(synthMiniRose.dir + 180) % 360} 22 22)`">
+                                                    <line x1="22" y1="22" x2="22" y2="8" :stroke="synthMiniRose.inAxis ? '#4ade80' : '#f87171'" stroke-width="2" stroke-linecap="round"/>
+                                                    <polygon points="22,4 19,10 25,10" :fill="synthMiniRose.inAxis ? '#4ade80' : '#f87171'"/>
+                                                </g>
+                                            </template>
+                                            <circle cx="22" cy="22" r="3" :fill="synthMiniRose && synthMiniRose.inAxis ? '#4ade80' : '#f87171'"/>
+                                            <text x="22" y="3" text-anchor="middle" font-size="7" fill="rgba(255,255,255,0.3)">N</text>
+                                        </svg>
+                                        <div style="flex:1;min-width:0;">
+                                            <div class="mr-lbl" x-text="'Direction — ' + (synthMiniRose?.hour ?? '—')"></div>
+                                            <div class="mr-row">
+                                                <div>
+                                                    <div class="mrv" :style="`color:${synthMiniRose && synthMiniRose.inAxis ? '#4ade80' : '#f87171'}`">
+                                                        <span x-text="synthMiniRose?.dir != null ? Math.round(synthMiniRose.dir) + '°' : '—'"></span>
+                                                        <span class="mrvu" x-text="synthMiniRose?.dirCompass ?? ''"></span>
+                                                    </div>
+                                                    <div class="mrsub" x-text="synthMiniRose && synthMiniRose.inAxis ? 'Dans l\'axe' : 'Hors axe'"></div>
+                                                </div>
+                                                <div>
+                                                    <div class="mrv" style="color:#4ade80"><span x-text="synthMiniRose?.avg != null ? Math.round(synthMiniRose.avg) : '—'"></span> <span class="mrvu">km/h</span></div>
+                                                    <div class="mrsub">Moy.</div>
+                                                </div>
+                                                <div>
+                                                    <div class="mrv" style="color:#fbbf24"><span x-text="synthMiniRose?.gust != null ? Math.round(synthMiniRose.gust) : '—'"></span> <span class="mrvu">km/h</span></div>
+                                                    <div class="mrsub">Rafales</div>
+                                                </div>
                                             </div>
                                         </div>
-                                    </template>
+                                    </div>
+
+                                    {{-- Certitude consensus --}}
+                                    <div class="cert">
+                                        <div class="cert-row"><span class="cert-lbl">Certitude consensus</span><span class="cert-val" x-text="(chartConfidence ?? '—') + '%'"></span></div>
+                                        <div class="cert-bg"><div class="cert-fill" :style="`width:${chartConfidence ?? 0}%`"></div></div>
+                                        <div class="cert-sub" x-text="synthModels ? (synthModels.conv + ' modèles sur ' + synthModels.total + ' convergent') : 'Convergence indisponible'"></div>
+                                    </div>
                                 </div>
                             </template>
-                            <template x-if="!multimodelLoading && !multimodelData">
-                                <div class="rp-placeholder">Aucune donnée disponible pour ce jour.</div>
+                            <template x-if="!chartLoading && !chartHasData">
+                                <div class="rp-placeholder" style="padding:32px 16px;text-align:center;">Aucune donnée disponible pour ce jour.</div>
                             </template>
                         </div>
 
-                        {{-- ── Onglet « Modèles météo sur 5 jours » ── --}}
-                        <div class="rp-pane rp-pane-scroll" x-show="rpTab === 'models5'">
-                            <div x-show="multimodel5Loading" class="rp-loader"><div class="rp-spinner"></div></div>
-                            <template x-if="!multimodel5Loading && multimodel5Data">
-                                <div>
-                                    <div class="rp-summary">
-                                        <span class="rp-range" x-text="fiveDaysRangeLabel"></span>
-                                        <div class="panel-conformity">
-                                            <span>Conformité moy.</span>
-                                            <div class="bar"><div class="fill" :style="`width:${multimodel5Data?.conformity_pct ?? 0}%;background:${conformity5Color}`"></div></div>
-                                            <span class="val" x-text="(multimodel5Data?.conformity_pct ?? '—') + '%'"></span>
-                                        </div>
-                                    </div>
-                                    <div class="panel-legend">
-                                        <template x-for="m in (multimodel5Data?.models ?? [])" :key="m.id">
-                                            <span class="pg-chip" :title="m.provider"><span class="pg-chip-dot" :style="`background:${m.color}`"></span><span x-text="m.name"></span></span>
-                                        </template>
-                                        <span class="pg-chip pg-chip-consensus"><span class="pg-chip-dot"></span>Consensus</span>
-                                    </div>
-                                    <template x-for="cfg in CHART_CONFIGS" :key="'5d-' + cfg.id">
-                                        <div class="chart-section">
-                                            <div class="chart-header" @click="toggleChart5(cfg.id)">
-                                                <span><span class="chart-title" x-text="cfg.title"></span><span class="chart-unit" x-text="cfg.unit"></span></span>
-                                                <span class="chart-toggle" :class="chartCollapsed5[cfg.id] ? 'collapsed' : ''">▾</span>
-                                            </div>
-                                            <div class="chart-svg-wrap" :class="chartCollapsed5[cfg.id] ? 'collapsed' : ''">
-                                                <svg :id="'svg5-' + cfg.id" class="chart-svg"></svg>
-                                            </div>
-                                        </div>
-                                    </template>
-                                </div>
-                            </template>
-                            <template x-if="!multimodel5Loading && !multimodel5Data">
-                                <div class="rp-placeholder">Aucune donnée disponible.</div>
-                            </template>
+                        {{-- ══ VUE SCORING (Phase 2) ══ --}}
+                        <div class="view" :class="rpTab === 'score' ? 'on' : ''">
+                            <div class="rp-placeholder" style="padding:40px 20px;text-align:center;">Onglet « Scoring » — intégration en cours (Phase 2).</div>
+                        </div>
+
+                        {{-- ══ VUE MODÈLES (Phase 3) ══ --}}
+                        <div class="view" :class="rpTab === 'mod' ? 'on' : ''">
+                            <div class="rp-placeholder" style="padding:40px 20px;text-align:center;">Onglet « Modèles » — intégration en cours (Phase 3).</div>
                         </div>
 
                     </div>
