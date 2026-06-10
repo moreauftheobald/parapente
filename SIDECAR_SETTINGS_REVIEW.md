@@ -146,16 +146,24 @@ mode, cf. `FF_grid_reliability.md` étape 5.)
 consommées par `ReliabilityCalculator` (fiabilité balises quotidienne) et
 socle du futur `ComputeStationReliabilityJob` (FF_grid_reliability).
 
-### ⚠️ Clés lues par le sidecar mais ABSENTES du catalogue Laravel
-Le sidecar lit aussi en base : `consensus.legacy_epsilon`,
-`consensus.improved_epsilon`, `consensus.mad_floor`,
-`consensus.mad_z_threshold`, `consensus.mad_z_threshold_circular`,
-`consensus.use_weighted_median`, `consensus.use_mad_filtering`,
-`consensus.min_samples_for_method_C`, `consensus.grid_resolution_deg`.
-Elles ne sont **ni dans `Settings::DEFAULTS` ni éditables dans l'admin**
-(le service les laisse traverser comme « orphelines » si elles existent
-en base). **À faire** : récupérer leurs valeurs par défaut effectives
-côté sidecar, puis les ajouter au catalogue (groupe `consensus_global`
-recréé) pour les rendre visibles/éditables — ne PAS inventer les défauts
-(le seeder les écrirait en base et changerait le comportement du
-consensus sur une installation fraîche).
+### ✅ Clés sidecar hors catalogue — INTÉGRÉES (2026-06-11)
+Les 9 clés globales lues par le sidecar ont été ajoutées à
+`Settings::DEFAULTS` (groupe `consensus_global` recréé, onglet
+« Sidecar / consensus » du hub `/admin/settings`), avec les **défauts
+exacts du sidecar** (`src/config.py:80-88`) — l'absence de clé en base et
+la clé seedée à ces valeurs produisent le même comportement :
+
+| Clé | Type | Défaut |
+|---|---|---|
+| `consensus.legacy_epsilon` | float | 0.001 |
+| `consensus.improved_epsilon` | float | 1.0 |
+| `consensus.mad_floor` | float | 0.5 |
+| `consensus.mad_z_threshold` | float | 2.5 |
+| `consensus.mad_z_threshold_circular` | float | 2.0 |
+| `consensus.use_weighted_median` | bool | true |
+| `consensus.use_mad_filtering` | bool | true |
+| `consensus.min_samples_for_method_C` | int | 50 |
+| `consensus.grid_resolution_deg` | float | 0.025 (~2,77 km) |
+
+> ⚠️ Si les défauts changent côté sidecar (`src/config.py`), répercuter
+> ici — sinon l'admin affichera de faux « défauts ».

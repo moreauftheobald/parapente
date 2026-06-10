@@ -342,12 +342,15 @@ utilisent `TracksExecution` (suivi `job_monitors`, affiché dans les écrans adm
     (ET par `UserScoringService` côté Laravel) ;
   - `quality_profiles` / `quality_axes` : profils de scoring qualité
     (résultat dans `site_scores_*.quality_detail`).
+  - `consensus.<réglage>` (9 clés globales, groupe `consensus_global`) :
+    epsilons méthodes A/B, plancher MAD, seuils z linéaire/circulaire,
+    médiane pondérée, filtrage MAD, `min_samples_for_method_C`,
+    `grid_resolution_deg` — **défauts alignés sur `src/config.py` du
+    sidecar** (à resynchroniser si le sidecar change les siens) ;
   - Le **scheduler du sidecar est un daemon autonome** (env
     `CONSENSUS_TICK_MINUTE`), PAS piloté par `settings` — les clés
     `consensus.global.*` / `consensus.scheduler.*` ont été supprimées
-    (audit 2026-06-11, cf. `SIDECAR_SETTINGS_REVIEW.md`). 9 clés
-    `consensus.*` lues par le sidecar restent hors catalogue Laravel
-    (à intégrer, cf. la revue).
+    (audit 2026-06-11, cf. `SIDECAR_SETTINGS_REVIEW.md`).
 - **Qualité d'une journée** : calculée à la lecture par `DayQualityCalculator`
   (cloche horaire ~13h30 × facteur de continuité ; seuils éditables `viability.*`).
 
@@ -459,7 +462,7 @@ flash messages globaux via `<x-admin.alert>` — ne pas les répéter dans les v
 | Profils qualité | CRUD `quality_profiles`/`quality_axes` (lus par le sidecar) |
 | Trafic | KPI `page_views` (jour/7j/30j, top pages, devices) |
 | Articles / Wiki / Modules | éditeurs TinyMCE (upload images disque `public` ⇒ `storage:link`), menu |
-| Paramètres (`/admin/settings`) | **hub par catégories** (5 onglets : scoring & viabilité, balises, fiabilité, qualité, trafic) — toutes les clés simples de `Settings::DEFAULTS` avec description en bulle d'aide ; audit `settings_audit` |
+| Paramètres (`/admin/settings`) | **hub par catégories** (6 onglets : scoring & viabilité, balises, fiabilité, sidecar/consensus, qualité, trafic) — toutes les clés simples de `Settings::DEFAULTS` avec description en bulle d'aide ; audit `settings_audit` |
 | Logs | 2 onglets : **explorateur des exécutions de jobs** (`/admin/logs/jobs`, `job_monitors` 30 j, filtres catégorie/job/statut, runs sidecar inclus) + tail logs Laravel |
 
 Composants Blade standardisés dans `resources/views/components/admin/`
@@ -483,6 +486,7 @@ table `settings_audit`. Groupes :
 | analytics | `pageviews.retention_days` |
 | balises | `windy.api_key` |
 | reliability | `shadow_enabled`, `min_samples`, `factor_min/max`, `window_days`… |
+| consensus_global | 9 réglages globaux du sidecar (epsilons, MAD, grille…) — défauts = `src/config.py` sidecar |
 | consensus_vars | `consensus.config.<variable>` ×30 (JSON, lues par le sidecar — cf. Scoring & consensus) |
 
 ---
