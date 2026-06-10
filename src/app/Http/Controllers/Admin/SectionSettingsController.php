@@ -46,7 +46,6 @@ class SectionSettingsController extends Controller
         'general'       => ['label' => 'Général',           'icon' => 'fa-solid fa-sliders'],
         'data'          => ['label' => 'Data',              'icon' => 'fa-solid fa-cloud-arrow-down'],
         'consensus'     => ['label' => 'Consensus',         'icon' => 'fa-solid fa-scale-balanced'],
-        'orchestration' => ['label' => 'Orchestration',     'icon' => 'fa-solid fa-clock'],
         'variables'     => ['label' => 'Variables',         'icon' => 'fa-solid fa-table-cells'],
         'dependencies'  => ['label' => 'Dépendances',       'icon' => 'fa-solid fa-diagram-project'],
         'sidecar'       => ['label' => 'État sidecar',      'icon' => 'fa-solid fa-satellite-dish'],
@@ -116,27 +115,6 @@ class SectionSettingsController extends Controller
                 ];
             }
             $data['varConfigs']     = $varConfigs;
-            $data['defaultMethod']  = $allValues['consensus.global.default_method'] ?? 'B';
-            $data['previewEnabled'] = (bool) ($allValues['consensus.global.preview_enabled'] ?? false);
-        }
-
-        if ($tab === 'orchestration') {
-            $allValues = $settings->all();
-            $schedulerKeys = array_filter(
-                Settings::DEFAULTS,
-                fn ($meta) => ($meta['group'] ?? '') === 'consensus_scheduler'
-            );
-            $schedulerSettings = [];
-            foreach ($schedulerKeys as $key => $meta) {
-                $schedulerSettings[$key] = [
-                    'value'   => $allValues[$key] ?? $meta['default'],
-                    'label'   => $meta['label'],
-                    'description' => $meta['description'],
-                    'type'    => $meta['type'] ?? 'int',
-                    'default' => $meta['default'],
-                ];
-            }
-            $data['schedulerSettings'] = $schedulerSettings;
         }
 
         if ($tab === 'variables') {
@@ -168,8 +146,6 @@ class SectionSettingsController extends Controller
     public function updateConsensus(Request $request, Settings $settings): RedirectResponse
     {
         $data = $request->validate([
-            'default_method'      => ['required', 'string', 'in:A,B'],
-            'preview_enabled'     => ['nullable', 'boolean'],
             'vars'                => ['required', 'array'],
             'vars.*.method'       => ['required', 'string', 'in:A,B,derived,vote'],
             'vars.*.z_threshold'  => ['required', 'numeric', 'min:0.5', 'max:10'],
@@ -182,10 +158,7 @@ class SectionSettingsController extends Controller
             'vars.*.render_tiles'         => ['nullable', 'boolean'],
         ]);
 
-        $values = [
-            'consensus.global.default_method'  => $data['default_method'],
-            'consensus.global.preview_enabled' => (bool) ($data['preview_enabled'] ?? false),
-        ];
+        $values = [];
 
         foreach ($data['vars'] as $var => $cfg) {
             if (! in_array($var, self::CONSENSUS_VARIABLES, true)) {
@@ -216,10 +189,7 @@ class SectionSettingsController extends Controller
      */
     public function restoreConsensusDefaults(Settings $settings): RedirectResponse
     {
-        $values = [
-            'consensus.global.default_method'  => Settings::DEFAULTS['consensus.global.default_method']['default'],
-            'consensus.global.preview_enabled' => Settings::DEFAULTS['consensus.global.preview_enabled']['default'],
-        ];
+        $values = [];
 
         foreach (self::CONSENSUS_VARIABLES as $var) {
             $key = "consensus.config.{$var}";
@@ -231,44 +201,6 @@ class SectionSettingsController extends Controller
         return redirect()
             ->route('admin.meteo.settings', ['tab' => 'consensus'])
             ->with('status', 'Configuration consensus restaurée aux valeurs par défaut.');
-    }
-
-    /**
-     * POST — save orchestration/scheduler settings.
-     */
-    public function updateOrchestration(Request $request, Settings $settings): RedirectResponse
-    {
-        $rules = [];
-        foreach (Settings::DEFAULTS as $key => $meta) {
-            if (($meta['group'] ?? '') !== 'consensus_scheduler') {
-                continue;
-            }
-            $field = str_replace('.', '__', $key);
-            $rules[$field] = match ($meta['type'] ?? 'int') {
-                'string' => ['required', 'string', 'in:cron,event_driven'],
-                default  => ['required', 'integer', 'min:0'],
-            };
-        }
-
-        $data = $request->validate($rules);
-
-        $values = [];
-        foreach (Settings::DEFAULTS as $key => $meta) {
-            if (($meta['group'] ?? '') !== 'consensus_scheduler') {
-                continue;
-            }
-            $field = str_replace('.', '__', $key);
-            $raw = $data[$field] ?? $meta['default'];
-            $values[$key] = ($meta['type'] ?? 'int') === 'string'
-                ? (string) $raw
-                : (int) $raw;
-        }
-
-        $settings->setMany($values);
-
-        return redirect()
-            ->route('admin.meteo.settings', ['tab' => 'orchestration'])
-            ->with('status', 'Paramètres d\'orchestration enregistrés.');
     }
 
     /**

@@ -271,22 +271,6 @@ class Settings
             'type'        => 'int',
         ],
 
-        // ── Consensus sidecar — defaults globaux ─────────────────
-        'consensus.global.default_method' => [
-            'default'     => 'B',
-            'label'       => 'Méthode de consensus par défaut',
-            'description' => "Méthode appliquée aux variables qui n'ont pas de config explicite (A = legacy inverse-carré, B = amélioré MAD/médiane). Le sidecar lit cette valeur à chaque run.",
-            'group'       => 'consensus_global',
-            'type'        => 'string',
-        ],
-        'consensus.global.preview_enabled' => [
-            'default'     => false,
-            'label'       => 'Endpoint preview actif',
-            'description' => "Active l'endpoint /v1/consensus/preview côté sidecar (debug uniquement).",
-            'group'       => 'consensus_global',
-            'type'        => 'bool',
-        ],
-
         // ── Consensus sidecar — config par variable ──────────────
         // Chaque clé `consensus.config.<variable>` est un objet JSON
         // avec la méthode de consensus et ses options.
@@ -507,77 +491,6 @@ class Settings
             'type'        => 'json',
         ],
 
-        // ── Orchestration du sidecar ────────────────────────────
-        'consensus.scheduler.mode' => [
-            'default'     => 'cron',
-            'label'       => 'Mode de scheduling',
-            'description' => "Mode d'orchestration du sidecar : « cron » (horaire classique) ou « event_driven » (déclenché par les mises à jour Open-Meteo). Le mode event-driven sera activable quand la phase 3 sera livrée.",
-            'group'       => 'consensus_scheduler',
-            'type'        => 'string',
-        ],
-        'consensus.scheduler.cron_minute' => [
-            'default'     => 25,
-            'label'       => 'Minute du cron horaire',
-            'description' => "Minute à laquelle le run consensus se déclenche en mode cron (0-59).",
-            'group'       => 'consensus_scheduler',
-            'type'        => 'int',
-        ],
-        'consensus.scheduler.event_debounce_seconds' => [
-            'default'     => 30,
-            'label'       => 'Debounce event-driven (s)',
-            'description' => "Délai d'attente après détection d'un event Open-Meteo avant de lancer le run (coalescing, évite les runs en rafale).",
-            'group'       => 'consensus_scheduler',
-            'type'        => 'int',
-        ],
-        'consensus.scheduler.safety_net_hours' => [
-            'default'     => 6,
-            'label'       => 'Filet de sécurité (h)',
-            'description' => "En mode event-driven, force un run global si rien n'a tourné depuis X heures.",
-            'group'       => 'consensus_scheduler',
-            'type'        => 'int',
-        ],
-        'consensus.scheduler.priority_horizon_J' => [
-            'default'     => 100,
-            'label'       => 'Priorité J (aujourd\'hui)',
-            'description' => "Priorité du run pour l'horizon J (plus haut = plus prioritaire, échelle 0-100).",
-            'group'       => 'consensus_scheduler',
-            'type'        => 'int',
-        ],
-        'consensus.scheduler.priority_horizon_J1' => [
-            'default'     => 80,
-            'label'       => 'Priorité J+1',
-            'description' => "Priorité du run pour l'horizon J+1.",
-            'group'       => 'consensus_scheduler',
-            'type'        => 'int',
-        ],
-        'consensus.scheduler.priority_horizon_J2' => [
-            'default'     => 60,
-            'label'       => 'Priorité J+2',
-            'description' => "Priorité du run pour l'horizon J+2.",
-            'group'       => 'consensus_scheduler',
-            'type'        => 'int',
-        ],
-        'consensus.scheduler.priority_horizon_J3' => [
-            'default'     => 40,
-            'label'       => 'Priorité J+3',
-            'description' => "Priorité du run pour l'horizon J+3.",
-            'group'       => 'consensus_scheduler',
-            'type'        => 'int',
-        ],
-        'consensus.scheduler.priority_horizon_J4' => [
-            'default'     => 20,
-            'label'       => 'Priorité J+4',
-            'description' => "Priorité du run pour l'horizon J+4.",
-            'group'       => 'consensus_scheduler',
-            'type'        => 'int',
-        ],
-        'consensus.scheduler.priority_derived' => [
-            'default'     => 10,
-            'label'       => 'Priorité variables dérivées',
-            'description' => "Poids appliqué aux jobs de variables dérivées (cloud_base, dew_point…) relatif à leur source.",
-            'group'       => 'consensus_scheduler',
-            'type'        => 'int',
-        ],
     ];
 
     /**

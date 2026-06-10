@@ -118,8 +118,44 @@ mode, cf. `FF_grid_reliability.md` étape 5.)
 
 ---
 
-## Réponse attendue
+## ✅ VERDICT (réponse sidecar du 2026-06-11) — RÉSOLU
 
-Pour les listes A et B : par clé, `lue` / `pas lue` / `réservée à une
-phase future identifiée`. Les « pas lues » sans justification seront
-supprimées de `Settings::DEFAULTS`, du seeder et des écrans d'admin.
+### Lues activement par le sidecar → conservées
+- `consensus.config.<variable>` (30) — sous-champs lus : `method`,
+  `epsilon`, `z_threshold`, `mad_floor`, `use_mad_filtering`,
+  `use_weighted_median`, `render_tiles`.
+- Sous-champs `use_weight_factor` / `use_bias_correction` : parsés,
+  ignorés (WARNING), réservés méthode C / fiabilité phase 4 → **conservés**.
+- `scoring.precip_orange_mmh` / `scoring.precip_red_mmh` /
+  `scoring.gust_orange_kmh` / `scoring.gust_red_kmh` — lus par le scoring
+  prod sidecar (en plus de `UserScoringService` côté Laravel).
+- `scoring_table` — pointeur de buffer (clé système, hors catalogue).
+
+### Pas lues → SUPPRIMÉES (Laravel, 2026-06-11)
+- `consensus.global.default_method` / `preview_enabled` (le sidecar a ses
+  défauts en dur + override par variable ; l'endpoint preview est
+  toujours actif) → clés + UI « Defaults globaux » de l'onglet consensus.
+- `consensus.scheduler.*` (10) — le scheduler est un daemon Python
+  autonome (env `CONSENSUS_TICK_MINUTE` / `--tick-minute`, fallback 2 h en
+  dur) → clés + **onglet « Orchestration » entier** + route + vue.
+- Lignes en base purgées par la migration
+  `2026_06_11_100000_purge_obsolete_settings_keys` (+ `stations.*`).
+
+### « Pas lues » par le sidecar mais CONSERVÉES (consommateur Laravel)
+`reliability.min_samples` / `factor_min` / `factor_max` / `window_days` —
+consommées par `ReliabilityCalculator` (fiabilité balises quotidienne) et
+socle du futur `ComputeStationReliabilityJob` (FF_grid_reliability).
+
+### ⚠️ Clés lues par le sidecar mais ABSENTES du catalogue Laravel
+Le sidecar lit aussi en base : `consensus.legacy_epsilon`,
+`consensus.improved_epsilon`, `consensus.mad_floor`,
+`consensus.mad_z_threshold`, `consensus.mad_z_threshold_circular`,
+`consensus.use_weighted_median`, `consensus.use_mad_filtering`,
+`consensus.min_samples_for_method_C`, `consensus.grid_resolution_deg`.
+Elles ne sont **ni dans `Settings::DEFAULTS` ni éditables dans l'admin**
+(le service les laisse traverser comme « orphelines » si elles existent
+en base). **À faire** : récupérer leurs valeurs par défaut effectives
+côté sidecar, puis les ajouter au catalogue (groupe `consensus_global`
+recréé) pour les rendre visibles/éditables — ne PAS inventer les défauts
+(le seeder les écrirait en base et changerait le comportement du
+consensus sur une installation fraîche).
