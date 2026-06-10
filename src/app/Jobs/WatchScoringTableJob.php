@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Models\JobMonitor;
 use App\Models\Site;
 use App\Models\SiteScore;
 use App\Services\Map\MapBundleBuilder;
@@ -39,6 +40,13 @@ class WatchScoringTableJob implements ShouldQueue
     /** Dernier buffer actif observé (mémorisé en cache, sans TTL). */
     public const SEEN_KEY = 'map.scoring_table.seen';
 
+    /**
+     * Pseudo job_class sous lequel chaque run du sidecar (= chaque flip)
+     * est journalisé dans `job_monitors` — visible dans l'explorateur
+     * /admin/logs/jobs, groupe « sidecar ».
+     */
+    public const SIDECAR_JOB_CLASS = 'sidecar:consensus-grid-v2';
+
     public function handle(
         SiteDetailCache $detailCache,
         UserScoringService $userScoring,
@@ -66,8 +74,18 @@ class WatchScoringTableJob implements ShouldQueue
 
             $cache->forever(self::SEEN_KEY, $current);
 
-            // Un flip = un nouveau run sidecar → recale le watchdog de fraîcheur.
+            // Un flip = un nouveau run sidecar → recale le watchdog de fraîcheur
+            // et journalise le run dans job_monitors (historique sidecar).
             $freshness->recordRun();
+
+            JobMonitor::create([
+                'job_class'   => self::SIDECAR_JOB_CLASS,
+                'job_group'   => 'sidecar',
+                'status'      => 'success',
+                'started_at'  => now(),
+                'finished_at' => now(),
+                'message'     => "Run consensus terminé — flip du buffer vers {$current}",
+            ]);
 
             Log::info("WatchScoringTableJob: flip du buffer scoring → {$current} (précédent: " . ($seen ?? '∅') . '), caches invalidés + rebuild bundle dispatché.');
         }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\TracksExecution;
 use App\Models\PageView;
 use App\Services\Settings;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -20,14 +21,21 @@ use Illuminate\Support\Facades\Log;
 class PurgePageViewsJob implements ShouldQueue
 {
     use Queueable;
+    use TracksExecution;
 
     public int $timeout = 600;
     public int $tries   = 1;
 
     private const CHUNK_SIZE = 5000;
 
+    protected function monitorGroup(): string
+    {
+        return 'systeme';
+    }
+
     public function handle(Settings $settings): void
     {
+        $this->trackStart();
         $retentionDays = max(1, (int) $settings->get('pageviews.retention_days', 365));
         $cutoff = now()->subDays($retentionDays);
 
@@ -44,5 +52,12 @@ class PurgePageViewsJob implements ShouldQueue
             'cutoff'         => $cutoff->toDateTimeString(),
             'deleted'        => $totalDeleted,
         ]);
+
+        $this->trackSuccess("{$totalDeleted} lignes purgées (rétention {$retentionDays} j)", ['deleted' => $totalDeleted]);
+    }
+
+    public function failed(\Throwable $e): void
+    {
+        $this->trackFailure($e);
     }
 }

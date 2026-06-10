@@ -8,9 +8,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Balise;
 use App\Models\BaliseReading;
 use App\Models\Forecast;
+use App\Models\JobMonitor;
 use App\Models\Site;
 use App\Models\SiteScore;
 use App\Models\WeatherModel;
+use App\Services\Admin\SupervisionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
@@ -18,12 +20,13 @@ use Illuminate\View\View;
 /**
  * BackOffice — Logs et monitoring.
  *
- * Trois sections :
- *   1. Compteurs DB (volumétrie des grandes tables)
- *   2. Logs Laravel : tail du fichier storage/logs/laravel.log filtré
- *      par niveau et recherche texte. Lecture limitée aux derniers
- *      ~500 Ko pour rester rapide même si le fichier grossit.
- *   3. Dernières exécutions des jobs (extrait depuis les logs).
+ * Deux écrans :
+ *   - `jobs()`  : explorateur des exécutions de jobs (`job_monitors`,
+ *     30 j) filtrable par catégorie / job / statut — y compris les runs
+ *     du sidecar journalisés par WatchScoringTableJob.
+ *   - `index()` : logs Laravel bruts — tail du fichier
+ *     storage/logs/laravel.log filtré par niveau et recherche texte
+ *     (~500 derniers Ko), + volumétrie DB.
  */
 class LogController extends Controller
 {
@@ -33,19 +36,65 @@ class LogController extends Controller
     /** Nb max d'entrées affichées */
     private const MAX_ENTRIES = 200;
 
+    /** Libellés des catégories de jobs (colonne job_monitors.job_group). */
+    public const GROUP_LABELS = [
+        'sites'     => 'Sites',
+        'balises'   => 'Balises',
+        'stations'  => 'Stations météo',
+        'fiabilite' => 'Fiabilité',
+        'sidecar'   => 'Sidecar',
+        'systeme'   => 'Système',
+    ];
+
+    /**
+     * Explorateur des exécutions de jobs, par catégorie / job / statut.
+     */
+    public function jobs(Request $request): View
+    {
+        $group  = $request->input('group');
+        $job    = $request->input('job');
+        $status = $request->input('status');
+
+        $query = JobMonitor::query()->orderByDesc('started_at');
+        if ($group)  $query->where('job_group', $group);
+        if ($job)    $query->where('job_class', $job);
+        if ($status) $query->where('status', $status);
+
+        // Listes des filtres dérivées des données réelles (pas de registre
+        // en dur : tout job qui trace apparaît automatiquement).
+        $groups  = JobMonitor::query()->distinct()->orderBy('job_group')->pluck('job_group');
+        $classes = JobMonitor::query()->distinct()->orderBy('job_class')->pluck('job_class');
+
+        // Labels lisibles : registre Supervision pour les jobs connus,
+        // class_basename sinon.
+        $labels = [];
+        foreach (SupervisionService::JOBS as $class => [$label]) {
+            $labels[$class] = $label;
+        }
+        $labels[\App\Jobs\WatchScoringTableJob::SIDECAR_JOB_CLASS] = 'Run sidecar (consensus + scoring)';
+
+        return view('admin.logs.jobs', [
+            'runs'    => $query->paginate(50)->withQueryString(),
+            'group'   => $group,
+            'job'     => $job,
+            'status'  => $status,
+            'groups'  => $groups,
+            'classes' => $classes,
+            'labels'  => $labels,
+        ]);
+    }
+
     public function index(Request $request): View
     {
         $level  = $request->input('level');
         $search = trim((string) $request->input('search', ''));
 
-        $entries  = $this->readRecentLogEntries($level, $search);
-        $jobStats = $this->extractJobStats($entries);
+        $entries = $this->readRecentLogEntries($level, $search);
 
         return view('admin.logs.index', [
             'level'       => $level,
             'search'      => $search,
             'entries'     => $entries,
-            'jobStats'    => $jobStats,
             'logSize'     => $this->logFileSize(),
             'logPath'     => storage_path('logs/laravel.log'),
             'counts'      => [
@@ -117,31 +166,6 @@ class LogController extends Controller
 
         // Plus récent en haut, limite
         return array_slice(array_reverse(array_values($entries)), 0, self::MAX_ENTRIES);
-    }
-
-    /**
-     * Extrait des entrées les dernières exécutions des jobs connus.
-     * Les jobs loguent un message "JobNameJob completed" + JSON contexte.
-     *
-     * @param  array $entries
-     * @return array<string, array{time:string, message:string}>  job_name => …
-     */
-    private function extractJobStats(array $entries): array
-    {
-        $jobs = [
-            'FetchPiouPiouReadingsJob'     => null,
-            'FetchMetarStationReadingsJob' => null,
-            'FetchBaliseForecastsJob'      => null,
-            'PurgeOldForecastsJob'         => null,
-        ];
-        foreach ($entries as $e) {
-            foreach (array_keys($jobs) as $jobName) {
-                if ($jobs[$jobName] === null && str_contains($e['message'], $jobName . ' completed')) {
-                    $jobs[$jobName] = $e;
-                }
-            }
-        }
-        return $jobs;
     }
 
     private function logFileSize(): ?int

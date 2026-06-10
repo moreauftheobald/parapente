@@ -58,8 +58,8 @@
                     <span class="{{ $jobs_summary['failed'] > 0 ? 'text-red-300' : 'text-gray-600' }}">{{ $jobs_summary['failed'] }} <span class="text-xs text-gray-500">échec</span></span>
                 </div>
                 <div class="text-xs text-gray-500 mt-1">
-                    {{ $jobs_summary['unknown'] }} sans trace (7 j) ·
-                    <a href="{{ route('admin.logs.index') }}" class="text-sky-400 hover:underline">logs</a>
+                    {{ $jobs_summary['unknown'] }} sans trace (30 j) ·
+                    <a href="{{ route('admin.logs.jobs') }}" class="text-sky-400 hover:underline">historique des jobs</a>
                 </div>
             </div>
 

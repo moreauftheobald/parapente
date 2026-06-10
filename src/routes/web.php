@@ -238,8 +238,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
         // ── Logs / monitoring ─────────────────────────────────────
         Route::get('/logs', [AdminLogController::class, 'index'])->name('logs.index');
+        Route::get('/logs/jobs', [AdminLogController::class, 'jobs'])->name('logs.jobs');
 
-        // ── Paramètres généraux (seuils de scoring) ───────────────
+        // ── Paramètres (hub par catégories + audit) ───────────────
         Route::get('/settings',       [AdminSettingsController::class, 'index'])->name('settings.index');
         Route::patch('/settings',     [AdminSettingsController::class, 'update'])->name('settings.update');
         Route::get('/settings/audit', [AdminSettingsAuditController::class, 'index'])->name('settings.audit');

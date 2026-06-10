@@ -66,6 +66,23 @@ Cache : blocs lourds (volumétrie, couverture) 5-10 min ; blocs santé en direct
 `WatchScoringTableJob` ne trace pas dans `job_monitors` (cadence 1 min) — sa
 santé est portée par le bloc Sidecar.
 
+## Étape 1bis — Logs par job/catégorie + hub de paramètres (FAIT, 2026-06-11)
+
+- **`/admin/logs/jobs`** : explorateur des exécutions (`job_monitors`,
+  rétention passée à **30 j**), filtres catégorie / job / statut, traces
+  d'erreur dépliables, pagination. Les 4 jobs qui ne traçaient pas
+  (`ComputeModelReliability`, `ComputeBaliseConsensusCompare`,
+  `PurgeOldForecasts`, `PurgePageViews`) utilisent désormais
+  `TracksExecution`, et **chaque run du sidecar** (flip détecté par
+  `WatchScoringTableJob`) est journalisé sous le pseudo-job
+  `sidecar:consensus-grid-v2` (groupe « sidecar »).
+- **`/admin/settings` devient le hub des paramètres** : 7 onglets par
+  catégorie (scoring & viabilité, balises, stations, fiabilité,
+  sidecar/consensus, qualité données, trafic), toutes les clés simples de
+  `Settings::DEFAULTS` éditables avec leur description en **bulle d'aide**
+  (« ? »), sauvegarde par onglet, audit conservé. La config consensus par
+  variable (JSON) reste dans Météo → Paramètres.
+
 ## Étapes suivantes (ordre suggéré)
 
 2. **Réorganisation de la sidebar** en 5 groupes (pur Blade, zéro logique).
@@ -74,8 +91,8 @@ santé est portée par le bloc Sidecar.
    reformuler la description / **supprimer**). Candidats morts déjà repérés :
    `stations.retention_days` (les rétentions sont des constantes de
    `PurgeOldForecastsJob` — soit brancher, soit supprimer), groupe
-   `reliability.*` du shadow mode (mourra avec lui). Bulles d'aide
-   systématiques (composant tooltip réutilisable + descriptions réécrites).
+   `reliability.*` du shadow mode (mourra avec lui). Reformuler les
+   descriptions floues (elles sont désormais visibles partout via le hub).
 4. **Consolidation des écrans de settings** : fusionner `/admin/settings`
    dans les pages par section ; rapprocher APIs météo et APIs stations
    (même pattern d'écran).
