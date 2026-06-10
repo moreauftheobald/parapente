@@ -32,10 +32,10 @@ class SectionSettingsController extends Controller
             'App\Jobs\FetchMetarStationReadingsJob'      => ['label' => 'METAR (NOAA)',         'schedule' => 'Toutes les 30 min'],
             'App\Jobs\FetchInfoclimatStationReadingsJob' => ['label' => 'Infoclimat (StatIC)',  'schedule' => 'Toutes les heures'],
             'App\Jobs\FetchStationForecastsJob'          => ['label' => 'Archive prévisions',   'schedule' => 'Toutes les heures (:15)'],
+            'App\Jobs\AggregateStationObservationsHourlyJob' => ['label' => 'Agrégation horaire', 'schedule' => 'Toutes les heures (:07)'],
         ],
         'balises' => [
             'App\Jobs\FetchPiouPiouReadingsJob'         => ['label' => 'PiouPiou',              'schedule' => 'Toutes les 10 min'],
-            'App\Jobs\FetchMetarReadingsJob'            => ['label' => 'METAR (balises)',        'schedule' => 'Toutes les 30 min'],
             'App\Jobs\FetchWindyReadingsJob'            => ['label' => 'Windy Open Data',       'schedule' => 'Toutes les 30 min'],
             'App\Jobs\FetchBaliseForecastsJob'          => ['label' => 'Archive prévisions',    'schedule' => 'Toutes les heures'],
             'App\Jobs\AggregateBaliseReadingsHourlyJob' => ['label' => 'Agrégation horaire',    'schedule' => 'Toutes les heures (:05)'],

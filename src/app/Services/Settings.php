@@ -275,7 +275,7 @@ class Settings
         'reliability.window_days' => [
             'default'     => 7,
             'label'       => 'Fenêtre glissante (jours)',
-            'description' => "Profondeur d'historique utilisée pour calculer la fiabilité d'un modèle. Aligné par défaut sur la rétention de balise_readings_hourly.",
+            'description' => "Profondeur d'historique utilisée pour calculer la fiabilité d'un modèle. Extensible jusqu'à 30 j (rétention des agrégats horaires balises/stations et des archives de prévisions).",
             'group'       => 'reliability',
             'type'        => 'int',
         ],

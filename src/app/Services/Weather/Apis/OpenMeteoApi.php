@@ -64,6 +64,27 @@ class OpenMeteoApi implements WeatherApiInterface
         'precipitation',
         'pressure_msl',
         'cloud_cover',
+        'cloud_cover_low',
+        'cloud_cover_mid',
+        'cloud_cover_high',
+    ];
+
+    /**
+     * Sous-ensemble servi par le consensus sidecar (qui_vole_consensus)
+     * aux coords des stations : vent + température + point de rosée +
+     * couverture nuageuse par étage. Le sidecar ne sert PAS
+     * relative_humidity_2m / precipitation / pressure_msl / cloud_cover
+     * (total) — les demander provoquerait un 400.
+     */
+    public const HOURLY_VARS_STATIONS_CONSENSUS = [
+        'wind_speed_10m',
+        'wind_gusts_10m',
+        'wind_direction_10m',
+        'temperature_2m',
+        'dew_point_2m',
+        'cloud_cover_low',
+        'cloud_cover_mid',
+        'cloud_cover_high',
     ];
 
     // Variables journalières — agrégées à la volée par Open-Meteo.
@@ -330,7 +351,7 @@ class OpenMeteoApi implements WeatherApiInterface
      * @param  array<int, array{id:int|string, lat:float, lng:float}> $points
      * @return array<int|string, array<string, array<string, float|int|null>>>
      */
-    public function fetchBatchForStations(array $points, WeatherModel $model): array
+    public function fetchBatchForStations(array $points, WeatherModel $model, ?array $hourlyVars = null): array
     {
         if (empty($points)) {
             return [];
@@ -339,7 +360,7 @@ class OpenMeteoApi implements WeatherApiInterface
         $result = [];
         $chunks = array_chunk(array_values($points), self::BATCH_CHUNK);
         foreach ($chunks as $chunk) {
-            $partial = $this->fetchStationBatchChunk($chunk, $model);
+            $partial = $this->fetchStationBatchChunk($chunk, $model, $hourlyVars);
             foreach ($partial as $id => $parsed) {
                 $result[$id] = $parsed;
             }
@@ -347,7 +368,7 @@ class OpenMeteoApi implements WeatherApiInterface
         return $result;
     }
 
-    public function fetchStationBatchChunk(array $points, WeatherModel $model): array
+    public function fetchStationBatchChunk(array $points, WeatherModel $model, ?array $hourlyVars = null): array
     {
         $lats = array_map(fn ($p) => (string) $p['lat'], $points);
         $lngs = array_map(fn ($p) => (string) $p['lng'], $points);
@@ -358,7 +379,7 @@ class OpenMeteoApi implements WeatherApiInterface
                 ->get($this->baseUrl . '/forecast', [
                     'latitude'        => implode(',', $lats),
                     'longitude'       => implode(',', $lngs),
-                    'hourly'          => implode(',', self::HOURLY_VARS_STATIONS),
+                    'hourly'          => implode(',', $hourlyVars ?? self::HOURLY_VARS_STATIONS),
                     'models'          => $model->code,
                     'forecast_days'   => self::DAYS,
                     'wind_speed_unit' => self::WIND_UNIT,
@@ -426,6 +447,9 @@ class OpenMeteoApi implements WeatherApiInterface
                 'precipitation'  => $this->getFloatValue($hourly, 'precipitation', $index),
                 'pressure_hpa'   => $this->getFloatValue($hourly, 'pressure_msl', $index),
                 'cloud_cover'    => $this->getIntValue($hourly, 'cloud_cover', $index),
+                'cloud_cover_low'  => $this->getIntValue($hourly, 'cloud_cover_low', $index),
+                'cloud_cover_mid'  => $this->getIntValue($hourly, 'cloud_cover_mid', $index),
+                'cloud_cover_high' => $this->getIntValue($hourly, 'cloud_cover_high', $index),
             ];
         }
 

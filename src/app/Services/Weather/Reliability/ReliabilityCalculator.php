@@ -26,52 +26,8 @@ use Illuminate\Support\Facades\DB;
  */
 class ReliabilityCalculator
 {
-    /**
-     * Cache mémoire (par process) pour éviter N requêtes SQL dans une
-     * même boucle de scoring. Clé : "{modelId}:{baliseId}:{bucket}:{variable}".
-     *
-     * @var array<string, float>
-     */
-    private array $cache = [];
-
     public function __construct(private Settings $settings)
     {
-    }
-
-    /**
-     * Retourne le multiplicateur de fiabilité à appliquer aux poids d'un
-     * modèle pour un (balise, bucket, variable) donné.
-     *
-     * Retourne 1.0 (neutre) si :
-     *  - aucune ligne `model_reliability` n'existe pour ce tuple ;
-     *  - `samples_n` est inférieur au seuil `reliability.min_samples`.
-     *
-     * Sinon, retourne la valeur de `weight_factor` clampée entre
-     * `reliability.factor_min` et `reliability.factor_max` (sécurité —
-     * la valeur en base devrait déjà être clampée à l'écriture).
-     */
-    public function weightFactorFor(
-        int $weatherModelId,
-        int $baliseId,
-        string $horizonBucket,
-        string $variable
-    ): float {
-        $key = "{$weatherModelId}:{$baliseId}:{$horizonBucket}:{$variable}";
-        if (array_key_exists($key, $this->cache)) {
-            return $this->cache[$key];
-        }
-
-        $row = ModelReliability::query()
-            ->where('weather_model_id', $weatherModelId)
-            ->where('balise_id', $baliseId)
-            ->where('horizon_bucket', $horizonBucket)
-            ->where('variable', $variable)
-            ->first(['weight_factor', 'samples_n']);
-
-        $value = $this->resolveValue($row?->samples_n, $row?->weight_factor);
-        $this->cache[$key] = $value;
-
-        return $value;
     }
 
     /**
@@ -175,7 +131,8 @@ class ReliabilityCalculator
 
             // Pour chaque variable, calcule la médiane des MAE des
             // modèles éligibles, puis dérive le weight_factor de chaque
-            // modèle et upsert dans model_reliability.
+            // modèle. Upsert par lots (un tuple par modèle × variable).
+            $rows = [];
             foreach ($stats as $variable => $modelStats) {
                 $medianMae = $this->medianOfEligibleMaes($modelStats, $minSamples);
 
@@ -185,29 +142,30 @@ class ReliabilityCalculator
                         $minSamples, $factorMin, $factorMax
                     );
 
-                    ModelReliability::query()->updateOrCreate(
-                        [
-                            'weather_model_id' => $modelId,
-                            'balise_id'        => $balise->id,
-                            'horizon_bucket'   => $bucket,
-                            'variable'         => $variable,
-                        ],
-                        [
-                            'mae'           => round($s['mae'], 2),
-                            'rmse'          => round($s['rmse'], 2),
-                            'bias_signed'   => round($s['bias'], 2),
-                            'weight_factor' => round($factor, 2),
-                            'samples_n'     => $s['n'],
-                            'computed_at'   => $now,
-                        ]
-                    );
-                    $upserted++;
+                    $rows[] = [
+                        'weather_model_id' => $modelId,
+                        'balise_id'        => $balise->id,
+                        'horizon_bucket'   => $bucket,
+                        'variable'         => $variable,
+                        'mae'              => round($s['mae'], 2),
+                        'rmse'             => round($s['rmse'], 2),
+                        'bias_signed'      => round($s['bias'], 2),
+                        'weight_factor'    => round($factor, 2),
+                        'samples_n'        => $s['n'],
+                        'computed_at'      => $now,
+                    ];
                 }
             }
-        }
 
-        // Invalide le cache mémoire interne (sécurité — même process).
-        $this->cache = [];
+            foreach (array_chunk($rows, 500) as $chunk) {
+                ModelReliability::query()->upsert(
+                    $chunk,
+                    ['weather_model_id', 'balise_id', 'horizon_bucket', 'variable'],
+                    ['mae', 'rmse', 'bias_signed', 'weight_factor', 'samples_n', 'computed_at'],
+                );
+                $upserted += count($chunk);
+            }
+        }
 
         return $upserted;
     }

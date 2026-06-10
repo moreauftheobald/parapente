@@ -19,14 +19,13 @@ use Illuminate\Support\Facades\DB;
  *
  * Axe : 5 jours × 8 pas de 3 h = 40 points (J−2 00h → J+2 21h, Europe/Paris).
  *  - `measure`   : relevés agrégés en pas de 3 h (passé jusqu'à maintenant) ;
- *                  source `balise_readings_hourly` (rétention 7 j).
+ *                  source `balise_readings_hourly` (rétention 30 j).
  *  - `consensus` : LU dans `forecast_archive_balises` comme le modèle
  *                  `qui_vole_consensus` (écrit par le job d'archivage,
  *                  source unique = sidecar). Agrégé par pas de 3 h.
  *
  * Le consensus n'est PAS recalculé ici : une seule source de vérité, le
- * sidecar. Le passé manquant est rempli une fois par la commande
- * `forecasts:backfill-consensus`.
+ * sidecar (archivé heure par heure par les jobs Fetch*ForecastsJob).
  */
 final class ComparisonSeriesBuilder
 {
