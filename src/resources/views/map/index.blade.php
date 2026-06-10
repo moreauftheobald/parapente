@@ -12,6 +12,9 @@
 
     @push('styles')
         <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+        {{-- Tabler Icons (webfont) — utilisé par le panneau droit v2. CDN pour
+             l'instant ; un self-host est possible plus tard (cf. plan refonte). --}}
+        <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/dist/tabler-icons.min.css" rel="stylesheet">
         <style>
             @include('map._partials.styles.base')
             @include('map._partials.styles.left-panel')
@@ -19,6 +22,7 @@
             @include('map._partials.styles.panel')
             @include('map._partials.styles.charts')
             @include('map._partials.styles.tooltip')
+            @include('map._partials.styles.right-panel-v2')
             [x-cloak]{ display:none !important; }
         </style>
     @endpush
@@ -62,6 +66,9 @@
     @include('map._partials.html.dropdowns')
 
     @push('scripts')
+        {{-- Chart.js — uniquement pour le Consensus Ribbon (onglet Modèles, Phase 3).
+             Chargé avant le bloc inline pour que `Chart` soit défini à l'usage. --}}
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
         <script>
             @include('map._partials.scripts.config')
             @include('map._partials.scripts.icon')
