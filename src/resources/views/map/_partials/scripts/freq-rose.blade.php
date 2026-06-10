@@ -5,7 +5,7 @@
 // readings : [{dir, spd}] ; current : {dir, mean, gust} (champs nullables).
 
 (function(){
-    const CX = 100, CY = 100, MAX_R = 88, MAX_SPD = 50, SZ = 200;
+    const CX = 100, CY = 100, MAX_R = 88, SZ = 200;
     const SECTORS = 36, RINGS = 5;
     const RAMP = [[78,168,224],[74,222,128],[251,191,36],[249,115,22],[239,68,68]];
 
@@ -22,11 +22,20 @@
         ctx.clearRect(0, 0, SZ, SZ);
 
         const ringR = MAX_R / RINGS;
+        // Échelle dynamique : pic de vent (relevés + actuel + rafales) arrondi
+        // au multiple de 5 supérieur, plancher à 25 km/h. Un anneau = scale/5.
+        const speeds = [];
+        (readings || []).forEach(r => { if(r.spd != null) speeds.push(r.spd); });
+        if(current){ if(current.mean != null) speeds.push(current.mean); if(current.gust != null) speeds.push(current.gust); }
+        const peak = speeds.length ? Math.max(...speeds) : 40;
+        const maxScale = Math.max(25, Math.ceil(peak/5)*5);
+        const band = maxScale / RINGS;
+
         const grid = Array.from({length:SECTORS}, () => new Array(RINGS).fill(0));
         (readings || []).forEach(({dir, spd}) => {
             if(dir == null || spd == null) return;
             const si = Math.floor((((dir+5)%360)+360)%360 / 10) % SECTORS;
-            const ri = Math.min(RINGS-1, Math.max(0, Math.floor(spd/10)));
+            const ri = Math.min(RINGS-1, Math.max(0, Math.floor(spd/band)));
             grid[si][ri]++;
         });
         const max = Math.max(...grid.map(s => s.reduce((a,b)=>a+b,0)), 1);
@@ -73,16 +82,16 @@
         });
         // labels vitesse
         ctx.font = '8px sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.textAlign = 'left';
-        [10,20,30,40].forEach((v, i) => ctx.fillText(v+'km', CX+3, CY-(i+1)*ringR+4));
+        [1,2,3,4].forEach(i => ctx.fillText(Math.round(i*band)+'km', CX+3, CY-i*ringR+4));
 
         // vecteur relevé actuel
         if(current && current.dir != null && current.mean != null){
-            const r = Math.round((current.mean/MAX_SPD)*MAX_R);
+            const r = Math.round((current.mean/maxScale)*MAX_R);
             const tip = polar(current.dir, r);
             const col = spdCol(current.mean);
             const ang = (current.dir-90)*Math.PI/180;
             if(current.gust != null){
-                const gr = Math.round((current.gust/MAX_SPD)*MAX_R);
+                const gr = Math.round(Math.min(1, current.gust/maxScale)*MAX_R);
                 ctx.beginPath(); ctx.arc(tip.x, tip.y, Math.max(3, gr-r), 0, Math.PI*2);
                 ctx.strokeStyle = 'rgba(78,168,224,0.28)'; ctx.lineWidth = 1.5; ctx.stroke();
             }

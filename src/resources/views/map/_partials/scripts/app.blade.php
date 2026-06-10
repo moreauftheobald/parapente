@@ -634,6 +634,9 @@ function mapApp(){return{
 
     // ── Popup flottante balise / station (refonte v2) ────────────
     openFeaturePopup(type, id, latlng){
+        // Re-clic sur la même feature déjà ouverte → ne rien faire (évite
+        // que la popup saute/se recharge inutilement).
+        if(this.featurePopup.open && this.featurePopup.type === type && this.featurePopup.id === id) return;
         this.featurePopup = { open:true, type, id, tab:'rose' };
         this._fpAnchor = latlng;
         this.fpWindow = 24;
