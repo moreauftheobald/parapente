@@ -37,7 +37,7 @@ function mapApp(){return{
     hiddenSiteIds:[],
 
     // ── Volet droit (site) : onglets + données ──
-    rpTab:'synthese',                              // synthese | voting | models | models5
+    rpTab:'synth',                                 // synth | score | mod (refonte v2)
     chartData:null, chartLoading:false, chartSite:null,   // onglet « Synthèse » (= ancienne popup)
     multimodelData:null,  multimodelLoading:false,        // onglet « Modèles du jour »
     multimodel5Data:null, multimodel5Loading:false,       // onglet « Modèles 5 jours »
@@ -145,9 +145,7 @@ function mapApp(){return{
             _resizeTimer = setTimeout(() => {
                 if (!this.rightOpen) return;
                 if (this.selectedFeature?.type === 'site') {
-                    if (this.rpTab === 'synthese' && this.chartData)       this.renderSynthese();
-                    if (this.rpTab === 'models'   && this.multimodelData)  this.renderCharts();
-                    if (this.rpTab === 'models5'  && this.multimodel5Data) this.renderCharts5();
+                    if (this.rpTab === 'synth' && this.chartData) this.renderSynthese();
                 } else if (this.selectedFeature?.type === 'balise' && this.baliseData) {
                     this.renderBaliseCharts();
                 }
@@ -402,8 +400,7 @@ function mapApp(){return{
         // Si le volet droit affiche un site : le jour a changé → MAJ contenu
         if(this.rightOpen && this.selectedFeature?.type==='site'){
             this.multimodelData=null; // endpoint multimodèle est par jour → invalidé
-            if(this.rpTab==='synthese' && this.chartData) this.$nextTick(()=>this.renderSynthese());
-            if(this.rpTab==='models') this.loadMultimodel();
+            if(this.rpTab==='synth' && this.chartData) this.$nextTick(()=>this.renderSynthese());
         }
     },
 
@@ -477,7 +474,7 @@ function mapApp(){return{
         markerEl?.querySelector('.pg-site-marker')?.classList.add('selected');
         this.site=site;
         this.selectedFeature={type:'site',...site};
-        this.rpTab='synthese';
+        this.rpTab='synth';
         this.chartData=null; this.chartSite=null;
         this.multimodelData=null; this.multimodel5Data=null;
         this._multimodelByDay={};
@@ -502,14 +499,90 @@ function mapApp(){return{
         this.chartLoading=false;
         this.$nextTick(()=>this.renderSynthese());
     },
+    // Refonte v2 : rendu canvas (nuages + vent double-axe). Cf.
+    // map/_partials/scripts/panel-synthese.
     renderSynthese(){
         if(!this.chartData) return;
-        const day=this.days[this.selectedDayIdx]?.raw;
-        const dayData=this.chartData.days?.[day]??[];
         this.$nextTick(()=>{
-            buildChartSVG(dayData,this.chartData.site,this);
-            buildCeilingSVG(dayData,this.chartData.site,this);
+            buildSynthClouds(this);
+            buildSynthWind(this);
         });
+    },
+
+    // ── Onglet « Synthèse » (refonte v2) : helpers + getters ─────
+    get synthDay(){ return this.days[this.selectedDayIdx]?.raw; },
+    // Données horaires du jour, clippées à la fenêtre solaire (axe « daylight »).
+    get synthDayData(){
+        const day=this.synthDay;
+        const arr=this.chartData?.days?.[day]??[];
+        const win=this.chartData?.sun_windows?.[day];
+        if(win && win.start_hour!=null && win.end_hour!=null){
+            return arr.filter(h=>{const hh=parseInt(h.hour,10);return hh>=win.start_hour && hh<=win.end_hour;});
+        }
+        return arr;
+    },
+    get synthQuality(){
+        const id=this.site?.id;
+        return (id!=null && this.dayQuality[id]) ? (this.dayQuality[id][this.synthDay] ?? null) : null;
+    },
+    get synthScore(){ const q=this.synthQuality; return q && q.viability!=null ? Math.round(q.viability) : null; },
+    get synthStatus(){ return this.synthQuality?.status ?? 'unknown'; },
+    get synthHero(){
+        const map={
+            green:  {label:'Site favorable',         icon:'ti-check',          dot:'#16a34a', text:'#4ade80', bg:'rgba(22,163,74,0.1)',  border:'rgba(22,163,74,0.24)'},
+            orange: {label:'Conditions incertaines', icon:'ti-alert-triangle', dot:'#d97706', text:'#fbbf24', bg:'rgba(217,119,6,0.1)',  border:'rgba(217,119,6,0.24)'},
+            red:    {label:'Site défavorable',       icon:'ti-x',              dot:'#dc2626', text:'#f87171', bg:'rgba(220,38,38,0.1)',  border:'rgba(220,38,38,0.24)'},
+            unknown:{label:'Données indisponibles',  icon:'ti-help',           dot:'#6b7280', text:'#9ca3af', bg:'rgba(255,255,255,0.04)', border:'rgba(255,255,255,0.08)'},
+        };
+        return map[this.synthStatus] ?? map.unknown;
+    },
+    // Plus longue plage verte consécutive de la journée (fenêtre optimale).
+    get synthWindow(){
+        let best=null, cur=null;
+        for(const h of this.synthDayData){
+            const hh=parseInt(h.hour,10);
+            if(h.status==='green'){
+                cur = cur ? {start:cur.start, end:hh} : {start:hh, end:hh};
+                if(!best || (cur.end-cur.start) > (best.end-best.start)) best={...cur};
+            } else cur=null;
+        }
+        return best;
+    },
+    get synthWindowLabel(){
+        const w=this.synthWindow;
+        if(!w) return 'aucun créneau favorable';
+        return `${String(w.start).padStart(2,'0')}h – ${String(w.end+1).padStart(2,'0')}h`;
+    },
+    // Moyenne convergence/total des modèles sur la journée (depuis allScores).
+    get synthModels(){
+        const id=this.site?.id, day=this.synthDay;
+        const arr=(this.allScores[id]||[]).filter(s=>s.day===day);
+        const conv=arr.map(s=>s.models_conv).filter(v=>v!=null);
+        const tot =arr.map(s=>s.models_count).filter(v=>v!=null);
+        if(!conv.length || !tot.length) return null;
+        const avg=a=>Math.round(a.reduce((x,y)=>x+y,0)/a.length);
+        return { conv:avg(conv), total:avg(tot) };
+    },
+    // Créneau le plus proche de 13h pour la mini-rose.
+    get synthMiniRose(){
+        const arr=this.synthDayData;
+        if(!arr.length) return null;
+        let best=arr[0], bd=99;
+        for(const h of arr){ const d=Math.abs(parseInt(h.hour,10)-13); if(d<bd){bd=d;best=h;} }
+        const dir=best.wind_dir;
+        return {
+            hour: parseInt(best.hour,10)+'h',
+            dir,
+            dirCompass: dir!=null ? degToCompass(dir) : '',
+            avg: best.wind_avg, gust: best.wind_max,
+            inAxis: dir!=null ? this._inAxis(dir) : false,
+        };
+    },
+    // Direction dans l'axe favorable du site (gère le passage par le Nord).
+    _inAxis(dir){
+        const a=this.selectedFeature?.wind_dir_min, b=this.selectedFeature?.wind_dir_max;
+        if(a==null || b==null || dir==null) return false;
+        return a<=b ? (dir>=a && dir<=b) : (dir>=a || dir<=b);
     },
     get chartHasData(){
         const day=this.days[this.selectedDayIdx]?.raw;
@@ -544,21 +617,13 @@ function mapApp(){return{
     get chartConfidenceColor(){ return this._conformityColor(this.chartConfidence); },
 
     // ── Onglets du volet droit ───────────────────────────────────
+    // Refonte v2 : onglets synth | score | mod. Synthèse rendue en canvas ;
+    // Scoring (Phase 2) et Modèles (Phase 3) sont des placeholders pour
+    // l'instant — les méthodes loadMultimodel/votingDays/renderCharts* sont
+    // conservées en vue de leur ré-câblage.
     async setRpTab(tab){
         this.rpTab=tab;
-        if(tab==='synthese'){
-            if(this.chartData) this.$nextTick(()=>this.renderSynthese());
-        }else if(tab==='voting'){
-            // L'onglet « Détail du scoring » est purement déclaratif :
-            // il lit allScores[site.id] (déjà chargé via /api/sites/{id}/scores)
-            // qui contient désormais le sous-champ `detail` avec les couleurs.
-        }else if(tab==='models'){
-            if(!this.multimodelData && !this.multimodelLoading) await this.loadMultimodel();
-            else if(this.multimodelData) this.$nextTick(()=>this.renderCharts());
-        }else if(tab==='models5'){
-            if(!this.multimodel5Data && !this.multimodel5Loading) await this.loadFiveDays();
-            else if(this.multimodel5Data) this.$nextTick(()=>this.renderCharts5());
-        }
+        if(tab==='synth' && this.chartData) this.$nextTick(()=>this.renderSynthese());
     },
 
     // ── Onglet « Détail du scoring (voting logic) · 5 jours » ────
