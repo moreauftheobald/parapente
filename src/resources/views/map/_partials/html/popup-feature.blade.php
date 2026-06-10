@@ -3,7 +3,6 @@
      Cohabite avec le drawer site. Rose pilotée en JS (freq-rose) ;
      stats/header en bindings Alpine. Onglet Évolution : Phase 2/3. --}}
 <div id="feature-popup" class="fpop" x-show="featurePopup.open" x-cloak
-     :style="fpReady ? '' : 'visibility:hidden'"
      @click.stop>
 
     {{-- HEADER --}}
