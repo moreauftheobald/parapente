@@ -227,7 +227,7 @@ src/                        ← Racine Laravel
 | `model_reliability` | Fiabilité par modèle × **balise** × bucket × variable (MAE/RMSE/biais/`weight_factor`) | — |
 | `balise_consensus_compare` | Historique triple-consensus A/B/C (shadow legacy, panel balises) | 14 j |
 | `weather_fetch_log` | Journal des fetches (modèle, scope site/balise/station, rows) — écran couverture | **30 j** |
-| `job_monitors` | Suivi d'exécution des jobs (`TracksExecution`) — écrans admin | **7 j** |
+| `job_monitors` | Suivi d'exécution des jobs (`TracksExecution`) + runs sidecar — explorateur `/admin/logs/jobs` | **30 j** |
 | `settings` | Paramètres globaux (clé/valeur JSON) — cf. section Settings | — |
 | `settings_audit` | Audit des modifications de paramètres | — |
 | `quality_profiles` / `quality_axes` | Profils de scoring qualité lus par le sidecar (axes thermal/ceiling/…) | — |
@@ -451,8 +451,8 @@ flash messages globaux via `<x-admin.alert>` — ne pas les répéter dans les v
 | Profils qualité | CRUD `quality_profiles`/`quality_axes` (lus par le sidecar) |
 | Trafic | KPI `page_views` (jour/7j/30j, top pages, devices) |
 | Articles / Wiki / Modules | éditeurs TinyMCE (upload images disque `public` ⇒ `storage:link`), menu |
-| Settings / Audit | paramètres restants + `settings_audit` |
-| Logs | tail logs Laravel + dernières exécutions jobs (`job_monitors`) |
+| Paramètres (`/admin/settings`) | **hub par catégories** (7 onglets : scoring & viabilité, balises, stations, fiabilité, sidecar/consensus, qualité, trafic) — toutes les clés simples de `Settings::DEFAULTS` avec description en bulle d'aide ; audit `settings_audit` |
+| Logs | 2 onglets : **explorateur des exécutions de jobs** (`/admin/logs/jobs`, `job_monitors` 30 j, filtres catégorie/job/statut, runs sidecar inclus) + tail logs Laravel |
 
 Composants Blade standardisés dans `resources/views/components/admin/`
 (`<x-admin.button>`, `page-title`, `badge`, `empty-state`, `alert`, `input`,

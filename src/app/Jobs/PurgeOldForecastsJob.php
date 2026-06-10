@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\TracksExecution;
 use App\Models\Forecast;
 use App\Models\JobMonitor;
 use Carbon\Carbon;
@@ -46,9 +47,15 @@ use Illuminate\Support\Facades\Log;
 class PurgeOldForecastsJob implements ShouldQueue
 {
     use Queueable;
+    use TracksExecution;
 
     public int $timeout = 600;
     public int $tries   = 1;
+
+    protected function monitorGroup(): string
+    {
+        return 'systeme';
+    }
 
     /**
      * Combien de jours dans le passé on garde les forecasts/scores
@@ -86,7 +93,12 @@ class PurgeOldForecastsJob implements ShouldQueue
      */
     private const READINGS_RETENTION_DAYS = 7;
 
-    private const JOB_MONITOR_RETENTION_DAYS = 7;
+    /**
+     * 30 jours : l'explorateur de logs admin (/admin/logs/jobs) sert à
+     * revoir l'historique des exécutions — aligné sur les autres
+     * historiques longs.
+     */
+    private const JOB_MONITOR_RETENTION_DAYS = 30;
 
     /**
      * Taille des lots de DELETE pour les tables volumineuses (lectures
@@ -97,6 +109,7 @@ class PurgeOldForecastsJob implements ShouldQueue
 
     public function handle(): void
     {
+        $this->trackStart();
         $forecastCutoff = Carbon::now()->subDays(self::FORECASTS_RETENTION_DAYS)->startOfDay();
         $archiveCutoff  = Carbon::now()->subDays(self::ARCHIVE_RETENTION_DAYS)->startOfDay();
         $hourlyCutoff   = Carbon::now()->subDays(self::HOURLY_RETENTION_DAYS)->startOfDay();
@@ -153,6 +166,17 @@ class PurgeOldForecastsJob implements ShouldQueue
 
         $deletedMonitors = JobMonitor::purgeOlderThan(self::JOB_MONITOR_RETENTION_DAYS);
 
+        $this->trackSuccess(
+            sprintf(
+                'forecasts %d · archives %d/%d · horaires %d/%d · brut %d/%d · fetch_log %d',
+                $deletedForecasts,
+                $deletedArchive, $deletedArchiveStations,
+                $deletedHourly, $deletedStationHourly,
+                $deletedReadings, $deletedObservations,
+                $deletedFetchLog,
+            ),
+        );
+
         Log::info('PurgeOldForecastsJob completed', [
             'forecasts_deleted'         => $deletedForecasts,
             'archive_balises_deleted'   => $deletedArchive,
@@ -169,6 +193,11 @@ class PurgeOldForecastsJob implements ShouldQueue
             'fetch_log_cutoff'          => $fetchLogCutoff->toDateTimeString(),
             'readings_cutoff'           => $readingsCutoff->toDateTimeString(),
         ]);
+    }
+
+    public function failed(\Throwable $e): void
+    {
+        $this->trackFailure($e);
     }
 
     /**

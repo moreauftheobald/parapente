@@ -42,7 +42,7 @@ class SupervisionService
      * `WatchScoringTableJob` (cadence 1 min, sans TracksExecution) est
      * couvert par le bloc Sidecar via ScoringFreshness.
      */
-    private const JOBS = [
+    public const JOBS = [
         \App\Jobs\FetchForecastsJob::class                     => ['Prévisions sites (multimodèles)', 'Météo',    60],
         \App\Jobs\FetchPiouPiouReadingsJob::class              => ['Lectures PiouPiou',               'Balises',  10],
         \App\Jobs\FetchWindyReadingsJob::class                 => ['Lectures Windy',                  'Balises',  30],
@@ -115,7 +115,7 @@ class SupervisionService
                 : null;
 
             $state = match (true) {
-                $last === null                  => 'unknown',
+                $last === null                  => 'unknown', // aucune trace sur la fenêtre job_monitors (30 j)
                 $last->status === 'failed'      => 'failed',
                 $successAgeMin === null         => 'late',
                 $successAgeMin > ($expectedMin * 2 + self::LATE_GRACE_MINUTES) => 'late',

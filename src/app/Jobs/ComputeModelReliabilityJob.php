@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\TracksExecution;
 use App\Models\Balise;
 use App\Services\Weather\Reliability\ReliabilityCalculator;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -31,12 +32,19 @@ use Illuminate\Support\Facades\Log;
 class ComputeModelReliabilityJob implements ShouldQueue
 {
     use Queueable;
+    use TracksExecution;
 
     public int $timeout = 600;   // 10 min — large, ~1-2 s par balise en pratique
     public int $tries   = 2;
 
+    protected function monitorGroup(): string
+    {
+        return 'fiabilite';
+    }
+
     public function handle(ReliabilityCalculator $reliability): void
     {
+        $this->trackStart();
         $balises = Balise::query()
             ->where('active', true)
             ->where('in_consensus_compare_panel', true)
@@ -44,6 +52,7 @@ class ComputeModelReliabilityJob implements ShouldQueue
 
         if ($balises->isEmpty()) {
             Log::info('ComputeModelReliabilityJob: panel vide, rien à calculer.');
+            $this->trackSuccess('Panel vide, rien à calculer');
             return;
         }
 
@@ -66,5 +75,12 @@ class ComputeModelReliabilityJob implements ShouldQueue
             'balises_count' => $balises->count(),
             'tuples_total'  => $total,
         ]);
+
+        $this->trackSuccess("{$balises->count()} balises, {$total} tuples", ['balises' => $balises->count(), 'tuples' => $total]);
+    }
+
+    public function failed(\Throwable $e): void
+    {
+        $this->trackFailure($e);
     }
 }

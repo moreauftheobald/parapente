@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\TracksExecution;
 use App\Models\Balise;
 use App\Services\Weather\Reliability\BaliseConsensusCompareService;
 use Carbon\Carbon;
@@ -36,6 +37,7 @@ use Illuminate\Support\Facades\Log;
 class ComputeBaliseConsensusCompareJob implements ShouldQueue
 {
     use Queueable;
+    use TracksExecution;
 
     public int $timeout = 300;   // 5 min — ~6 s par balise en pratique
     public int $tries   = 2;
@@ -43,8 +45,14 @@ class ComputeBaliseConsensusCompareJob implements ShouldQueue
     /** Demi-fenêtre en heures (passé + futur). 72 = J / J+1 / J+2. */
     private const WINDOW_HOURS = 72;
 
+    protected function monitorGroup(): string
+    {
+        return 'fiabilite';
+    }
+
     public function handle(BaliseConsensusCompareService $service): void
     {
+        $this->trackStart();
         $balises = Balise::query()
             ->where('active', true)
             ->where('in_consensus_compare_panel', true)
@@ -52,6 +60,7 @@ class ComputeBaliseConsensusCompareJob implements ShouldQueue
 
         if ($balises->isEmpty()) {
             Log::info('ComputeBaliseConsensusCompareJob: panel vide, rien à calculer.');
+            $this->trackSuccess('Panel vide, rien à calculer');
             return;
         }
 
@@ -79,5 +88,12 @@ class ComputeBaliseConsensusCompareJob implements ShouldQueue
             'balises_count' => $balises->count(),
             'tuples_total'  => $total,
         ]);
+
+        $this->trackSuccess("{$balises->count()} balises, {$total} tuples", ['balises' => $balises->count(), 'tuples' => $total]);
+    }
+
+    public function failed(\Throwable $e): void
+    {
+        $this->trackFailure($e);
     }
 }

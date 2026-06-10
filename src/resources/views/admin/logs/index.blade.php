@@ -27,6 +27,16 @@
         </x-slot:subtitle>
     </x-admin.page-title>
 
+    {{-- Onglets Jobs / Laravel --}}
+    <div class="flex gap-1 mb-5 border-b border-gray-800">
+        <a href="{{ route('admin.logs.jobs') }}" class="px-4 py-2 text-sm text-gray-400 hover:text-gray-200">
+            <i class="fa-solid fa-clipboard-list mr-1"></i> Jobs
+        </a>
+        <span class="px-4 py-2 text-sm text-sky-300 border-b-2 border-sky-500 -mb-px">
+            <i class="fa-solid fa-scroll mr-1"></i> Logs Laravel
+        </span>
+    </div>
+
     {{-- ─────────────────────────────────────────────
          Compteurs DB
     ───────────────────────────────────────────────── --}}
@@ -65,39 +75,8 @@
     </div>
 
     {{-- ─────────────────────────────────────────────
-         Dernières exécutions des jobs
-    ───────────────────────────────────────────────── --}}
-    <h2 class="text-xs uppercase tracking-wider text-gray-400 mb-3">
-        <i class="fa-solid fa-clipboard-list text-emerald-400"></i> Dernières exécutions des jobs
-    </h2>
-    <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden mb-8">
-        <table class="w-full text-sm">
-            <thead class="bg-gray-950 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-800">
-                <tr>
-                    <th class="px-4 py-2 text-left">Job</th>
-                    <th class="px-4 py-2 text-left w-44">Dernière exécution</th>
-                    <th class="px-4 py-2 text-left">Résultat</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-800">
-                @foreach ($jobStats as $jobName => $entry)
-                    <tr>
-                        <td class="px-4 py-2 font-mono text-xs text-gray-300">{{ $jobName }}</td>
-                        @if ($entry)
-                            <td class="px-4 py-2 font-mono text-xs text-emerald-300">{{ $entry['time'] }}</td>
-                            <td class="px-4 py-2 font-mono text-xs text-gray-400 break-all">{{ \Illuminate\Support\Str::limit($entry['message'], 200) }}</td>
-                        @else
-                            <td class="px-4 py-2 font-mono text-xs text-gray-600 italic">jamais (dans les ~{{ $fmtSize(500_000) }} récents)</td>
-                            <td class="px-4 py-2 text-xs text-gray-600">—</td>
-                        @endif
-                    </tr>
-                @endforeach
-            </tbody>
-        </table>
-    </div>
-
-    {{-- ─────────────────────────────────────────────
          Logs Laravel
+         (les exécutions des jobs vivent dans l'onglet « Jobs »)
     ───────────────────────────────────────────────── --}}
     <div class="flex items-baseline justify-between mb-3">
         <h2 class="text-xs uppercase tracking-wider text-gray-400">
