@@ -6,7 +6,7 @@
 // site / jour / onglet / resize (cf. app.renderSynthese).
 
 (function(){
-    const PAD_L = 32, PAD_R = 40, CH = 100, MAX_W = 45;
+    const PAD_L = 32, PAD_R = 40, CH = 140, MAX_W = 45;
     // Géométrie du dernier rendu du graphe vent (pour le tooltip). Un seul
     // panneau droit à la fois → une variable de closure suffit.
     let WIND = null;
@@ -110,7 +110,7 @@
         altTicks.forEach(v => { ctx.strokeStyle='rgba(255,255,255,0.04)'; ctx.lineWidth=0.5; ctx.beginPath(); ctx.moveTo(PAD_L, ay(v)); ctx.lineTo(PAD_L+CW, ay(v)); ctx.stroke(); });
 
         // axe Y gauche (km/h)
-        ctx.fillStyle='rgba(255,255,255,0.22)'; ctx.font='9px sans-serif'; ctx.textAlign='right';
+        ctx.fillStyle='rgba(255,255,255,0.55)'; ctx.font='9px sans-serif'; ctx.textAlign='right';
         [0,20,40].forEach(v => ctx.fillText(v, PAD_L-4, wy(v)+3));
         ctx.fillStyle='rgba(255,255,255,0.16)'; ctx.font='8px sans-serif'; ctx.fillText('km/h', PAD_L-4, CH-1);
 

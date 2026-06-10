@@ -98,7 +98,7 @@
 
         params.forEach(p => {
             const isG = p.label === 'Global';
-            const H = isG ? 16 : 11;
+            const H = isG ? 20 : 14;
             const row = document.createElement('div'); row.className = 'prow';
             const lbl = document.createElement('div'); lbl.className = isG ? 'plbl gb' : 'plbl';
             if(isPerso) lbl.style.color = isG ? '#a78bfa' : 'rgba(167,139,250,0.6)';
