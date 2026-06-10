@@ -129,8 +129,9 @@
                                         </div>
                                     </div>
 
-                                    {{-- Mini rose (vers la rose animée complète plus tard) --}}
-                                    <div class="mini-rose" style="cursor:default;">
+                                    {{-- Mini rose → ouvre la rose des vents animée (modale) --}}
+                                    <div class="mini-rose" role="button" tabindex="0" title="Ouvrir la rose des vents animée"
+                                         @click="openWindRose()" @keydown.enter="openWindRose()">
                                         <svg width="44" height="44" viewBox="0 0 44 44" aria-label="Mini rose des vents">
                                             <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
                                             <circle cx="22" cy="22" r="11" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
@@ -165,6 +166,7 @@
                                                 </div>
                                             </div>
                                         </div>
+                                        <i class="ti ti-chevron-right" aria-hidden="true" style="font-size:13px;color:rgba(255,255,255,0.25);flex-shrink:0"></i>
                                     </div>
 
                                     {{-- Certitude consensus --}}

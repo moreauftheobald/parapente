@@ -41,6 +41,7 @@ function mapApp(){return{
     scZoom:'1j', scMode:'global',                  // onglet Scoring : zoom 1j|5j, mode global|perso
     modVar:'speed', modZoom:'1j', modHidden:{},    // onglet Modèles : variable, zoom 1j|5j, modèles masqués
     MOD_VARS,                                       // catalogue variables ribbon (panel-ribbon)
+    windRoseOpen:false, wrPlaying:false, wrIdx:0,   // rose des vents animée (modale, panel-windrose)
     chartData:null, chartLoading:false, chartSite:null,   // onglet « Synthèse » (= ancienne popup)
     multimodelData:null,  multimodelLoading:false,        // onglet « Modèles du jour »
     multimodel5Data:null, multimodel5Loading:false,       // onglet « Modèles 5 jours »
@@ -224,6 +225,7 @@ function mapApp(){return{
         this._multimodelByDay={};
         this.baliseData=null; this._baliseObj=null;
         this.stationData=null; this._stationObj=null;
+        this.closeWindRose();
         if(typeof destroyModelsChart==='function') destroyModelsChart();
         this._clearAllMarkerSelection();
     },
@@ -485,6 +487,7 @@ function mapApp(){return{
         this.rpTab='synth';
         this.scZoom='1j'; this.scMode='global';
         this.modVar='speed'; this.modZoom='1j'; this.modHidden={};
+        this.closeWindRose();
         if(typeof destroyModelsChart==='function') destroyModelsChart();
         this.chartData=null; this.chartSite=null;
         this.multimodelData=null; this.multimodel5Data=null;
@@ -595,6 +598,30 @@ function mapApp(){return{
         if(a==null || b==null || dir==null) return false;
         return a<=b ? (dir>=a && dir<=b) : (dir>=a || dir<=b);
     },
+
+    // ── Rose des vents animée (modale, refonte v2) ───────────────
+    openWindRose(){
+        if(!this.synthDayData.length) return;
+        this.windRoseOpen=true;
+        this.$nextTick(()=>{ if(typeof wrInit==='function') wrInit(this); });
+    },
+    closeWindRose(){ this.wrStopPlay(); this.windRoseOpen=false; },
+    wrStep(delta){
+        const n=this._wrData?.length||0; if(!n) return;
+        this.wrIdx=Math.max(0,Math.min(n-1,this.wrIdx+delta));
+        if(typeof wrRender==='function') wrRender(this);
+    },
+    wrSetIdx(i){ this.wrIdx=i; if(typeof wrRender==='function') wrRender(this); },
+    wrTogglePlay(){
+        if(this.wrPlaying){ this.wrStopPlay(); return; }
+        this.wrPlaying=true;
+        this._wrTimer=setInterval(()=>{
+            const n=this._wrData?.length||0; if(!n){ this.wrStopPlay(); return; }
+            this.wrIdx=(this.wrIdx+1)%n;
+            if(typeof wrRender==='function') wrRender(this);
+        }, 650);
+    },
+    wrStopPlay(){ if(this._wrTimer){ clearInterval(this._wrTimer); this._wrTimer=null; } this.wrPlaying=false; },
     get chartHasData(){
         const day=this.days[this.selectedDayIdx]?.raw;
         return (this.chartData?.days?.[day]?.length ?? 0) > 0;
