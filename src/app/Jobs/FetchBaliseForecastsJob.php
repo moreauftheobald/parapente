@@ -180,13 +180,85 @@ class FetchBaliseForecastsJob implements ShouldQueue
             ]);
         }
 
-        $this->trackSuccess("{$balises->count()} balises, {$models->count()} modèles, {$totalUpsert} rows", ['balises' => $balises->count(), 'models' => $models->count(), 'rows_upserted' => $totalUpsert]);
+        // Consensus : même source que les sites de vol (sidecar). Fetché aux
+        // coords des balises et archivé comme le modèle qui_vole_consensus.
+        $totalUpsert += $this->archiveConsensus($openMeteo, $points, $fetchedAt);
+
+        $this->trackSuccess("{$balises->count()} balises, {$models->count()} modèles (+ consensus), {$totalUpsert} rows", ['balises' => $balises->count(), 'models' => $models->count(), 'rows_upserted' => $totalUpsert]);
 
         Log::info('FetchBaliseForecastsJob completed', [
             'balises_count' => $balises->count(),
             'models_count'  => $models->count(),
             'rows_upserted' => $totalUpsert,
         ]);
+    }
+
+    /**
+     * Fetch le consensus aux coords des balises (sidecar, via l'API
+     * `consensus` / modèle `qui_vole_consensus`) et l'archive comme
+     * n'importe quel modèle. Résilient : si le modèle/API consensus est
+     * absent ou injoignable, on log et on ignore (0 ligne).
+     *
+     * @param  array<int, array{id:int, lat:float, lng:float}> $points
+     */
+    private function archiveConsensus(OpenMeteoApi $openMeteo, array $points, Carbon $fetchedAt): int
+    {
+        $consensus = WeatherModel::with('api')->where('code', WeatherModel::CONSENSUS_CODE)->first();
+        if (! $consensus || ! $consensus->api) {
+            Log::warning('FetchBaliseForecastsJob: modèle/API consensus absent — archivage consensus ignoré');
+            return 0;
+        }
+
+        $openMeteo->setConfig($consensus->api);
+        $batch = $openMeteo->fetchBatchForBalises($points, $consensus);
+
+        $upserted = 0;
+        if (! empty($batch)) {
+            $rows = [];
+            foreach ($batch as $baliseId => $forecasts) {
+                foreach ($forecasts as $datetime => $values) {
+                    $targetAt = Carbon::parse($datetime);
+                    $horizonH = (int) $fetchedAt->diffInHours($targetAt, false);
+                    if ($horizonH < 0 || $horizonH > self::MAX_HORIZON_HOURS) {
+                        continue;
+                    }
+                    $rows[] = [
+                        'balise_id'        => $baliseId,
+                        'weather_model_id' => $consensus->id,
+                        'target_at'        => $targetAt->format('Y-m-d H:i:s'),
+                        'fetched_at'       => $fetchedAt->format('Y-m-d H:i:s'),
+                        'horizon_bucket'   => $this->bucketFor($horizonH),
+                        'wind_direction'   => $values['wind_direction'],
+                        'wind_speed_avg'   => $values['wind_speed_avg'],
+                        'wind_speed_min'   => $values['wind_speed_min'],
+                        'wind_speed_max'   => $values['wind_speed_max'],
+                        'temperature'      => $values['temperature'],
+                        'created_at'       => $fetchedAt->format('Y-m-d H:i:s'),
+                        'updated_at'       => $fetchedAt->format('Y-m-d H:i:s'),
+                    ];
+                }
+            }
+            foreach (array_chunk($rows, 500) as $chunk) {
+                DB::table('forecast_archive_balises')->upsert(
+                    $chunk,
+                    ['balise_id', 'weather_model_id', 'target_at', 'horizon_bucket'],
+                    ['fetched_at', 'wind_direction', 'wind_speed_avg', 'wind_speed_min', 'wind_speed_max', 'temperature', 'updated_at']
+                );
+                $upserted += count($chunk);
+            }
+        } else {
+            Log::warning('FetchBaliseForecastsJob: consensus sidecar vide/injoignable');
+        }
+
+        WeatherFetchLog::create([
+            'weather_model_id' => $consensus->id,
+            'scope'            => 'balise',
+            'fetched_at'       => $fetchedAt,
+            'rows_upserted'    => $upserted,
+            'provider_run_at'  => null,
+        ]);
+
+        return $upserted;
     }
 
     /**

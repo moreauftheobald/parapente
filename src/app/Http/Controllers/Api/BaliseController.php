@@ -9,6 +9,7 @@ use App\Models\Balise;
 use App\Models\BaliseReading;
 use App\Services\Balises\BaliseReadingFormatter;
 use App\Services\Map\BalisesBundleCache;
+use App\Services\Map\ComparisonSeriesBuilder;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -125,6 +126,27 @@ class BaliseController extends Controller
             $balise->id,
             fn () => $this->buildHistoryPayload($balise, $window),
             $window,
+        );
+
+        return response()->json($payload);
+    }
+
+    /**
+     * Séries « mesures vs consensus » J−2 → J+2 (onglet Évolution popup).
+     *
+     * GET /api/balises/{id}/comparison
+     *
+     * Le consensus n'étant pas archivé (modèle qui_vole_consensus inactif),
+     * il est calculé à la lecture par ComparisonSeriesBuilder (moyenne des
+     * modèles archivés). Caché 10 min.
+     */
+    public function comparison(int $id, ComparisonSeriesBuilder $builder): JsonResponse
+    {
+        $balise = Balise::active()->findOrFail($id);
+
+        $payload = $this->cache->rememberComparison(
+            $balise->id,
+            fn () => $builder->forBalise($balise),
         );
 
         return response()->json($payload);

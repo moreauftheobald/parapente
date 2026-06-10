@@ -24,8 +24,9 @@ Route::prefix('sites')->group(function () {
 });
 
 Route::prefix('balises')->group(function () {
-    Route::get('/',             [BaliseController::class, 'index']);
-    Route::get('/{id}/history', [BaliseController::class, 'history']);
+    Route::get('/',                [BaliseController::class, 'index']);
+    Route::get('/{id}/history',    [BaliseController::class, 'history']);
+    Route::get('/{id}/comparison', [BaliseController::class, 'comparison']);
 });
 
 Route::get('weather-stations', [WeatherStationController::class, 'index']);
