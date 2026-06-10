@@ -201,13 +201,23 @@ class FetchStationForecastsJob implements ShouldQueue
         }
 
         $openMeteo->setConfig($consensus->api);
-        $upserted = 0;
 
+        // Le consensus sidecar ne sert qu'un sous-ensemble de variables (vent
+        // + température). On utilise donc le fetch « balise » (4 variables)
+        // plutôt que le fetch station complet (dew_point/pressure_msl/cloud
+        // non servis par le consensus → 400, futur vide). humidity/pression
+        // consensus restent donc null (colonnes nullable).
+        $points = [];
         foreach ($pointChunks as $chunk) {
-            $batch = $openMeteo->fetchStationBatchChunk($chunk, $consensus);
-            if (empty($batch)) {
-                continue;
+            foreach ($chunk as $p) {
+                $points[] = $p;
             }
+        }
+
+        $batch = $openMeteo->fetchBatchForBalises($points, $consensus);
+
+        $upserted = 0;
+        if (! empty($batch)) {
             $rows = [];
             foreach ($batch as $stationId => $forecasts) {
                 foreach ($forecasts as $datetime => $values) {
@@ -226,11 +236,11 @@ class FetchStationForecastsJob implements ShouldQueue
                         'wind_speed_avg'     => $values['wind_speed_avg'],
                         'wind_speed_max'     => $values['wind_speed_max'],
                         'temperature'        => $values['temperature'],
-                        'dew_point'          => $values['dew_point'],
-                        'humidity'           => $values['humidity'],
-                        'precipitation'      => $values['precipitation'],
-                        'pressure_hpa'       => $values['pressure_hpa'],
-                        'cloud_cover'        => $values['cloud_cover'],
+                        'dew_point'          => null,
+                        'humidity'           => null,
+                        'precipitation'      => null,
+                        'pressure_hpa'       => null,
+                        'cloud_cover'        => null,
                         'created_at'         => $fetchedAtStr,
                         'updated_at'         => $fetchedAtStr,
                     ];
@@ -244,7 +254,8 @@ class FetchStationForecastsJob implements ShouldQueue
                 );
                 $upserted += count($upsertChunk);
             }
-            unset($batch, $rows);
+        } else {
+            Log::warning('FetchStationForecastsJob: consensus sidecar vide/injoignable');
         }
 
         WeatherFetchLog::create([
