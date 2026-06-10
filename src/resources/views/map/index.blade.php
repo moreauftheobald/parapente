@@ -94,6 +94,7 @@
             @include('map._partials.scripts.panel-ribbon')
             @include('map._partials.scripts.panel-windrose')
             @include('map._partials.scripts.freq-rose')
+            @include('map._partials.scripts.compar-chart')
             @include('map._partials.scripts.app')
         </script>
     @endpush

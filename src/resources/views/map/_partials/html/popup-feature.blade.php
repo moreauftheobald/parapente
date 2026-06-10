@@ -95,9 +95,51 @@
         <div class="fp-placeholder">Onglet « Mesures » — intégration en cours (Phase 3).</div>
     </div>
 
-    {{-- ══ VUE ÉVOLUTION (Phase 2) ══ --}}
+    {{-- ══ VUE ÉVOLUTION (mesures vs consensus J−2 → J+2) ══ --}}
     <div class="view" :class="featurePopup.tab === 'evo' ? 'on' : ''">
-        <div class="fp-placeholder">Graphe « mesures vs consensus » — intégration en cours (Phase 2).</div>
+        <div class="vtabs">
+            <template x-for="v in fpComparVars" :key="v.key">
+                <div class="vtab" :class="fpComparVar === v.key ? 'on' : ''" @click="setFpComparVar(v.key)" x-text="v.label"></div>
+            </template>
+        </div>
+        <div x-show="fpComparLoading" class="fp-loader"><div class="fp-spinner"></div></div>
+        <template x-if="!fpComparLoading && fpComparData">
+            <div>
+                <div class="chart-area">
+                    <div class="chart-lbl">
+                        <span x-text="fpComparVarLabel + ' — mesures vs consensus'"></span>
+                        <span style="color:rgba(255,255,255,0.32);font-style:italic;font-size:9px">J−2 → J+2</span>
+                    </div>
+                    <div class="chart-wrap">
+                        <canvas id="fpop-g-cv" class="chart-cv" height="130" role="img" aria-label="Graphique comparatif mesures vs consensus"></canvas>
+                        <div class="hl" id="fpop-g-hl"></div>
+                        <div class="ctt" id="fpop-g-tt">
+                            <div class="ctt-h" id="fpop-g-tt-h">—</div>
+                            <div class="ctt-r"><span class="ctt-l" style="color:#4ade80">● Mesure</span><span class="ctt-v" id="fpop-g-tt-m">—</span></div>
+                            <div class="ctt-r"><span class="ctt-l">– – Consensus</span><span class="ctt-v" id="fpop-g-tt-c">—</span></div>
+                            <div class="ctt-r"><span class="ctt-l">Écart</span><span class="ctt-v" id="fpop-g-tt-e">—</span></div>
+                        </div>
+                    </div>
+                    <div class="days-ax" id="fpop-g-days"></div>
+                </div>
+                <div class="chart-leg">
+                    <div class="cl"><div class="cl-line" style="background:#4ade80"></div>Mesures</div>
+                    <div class="cl"><div class="cl-line" style="background:rgba(255,255,255,0.5)"></div>Consensus</div>
+                    <div class="cl" style="color:rgba(255,255,255,0.32);font-style:italic"><i class="ti ti-arrow-right" aria-hidden="true" style="font-size:9px"></i>Projection</div>
+                </div>
+                <div class="fiab">
+                    <div class="fiab-icon"><i class="ti ti-certificate" aria-hidden="true"></i></div>
+                    <div style="flex:1">
+                        <div class="fiab-title">Score de fiabilité consensus</div>
+                        <div class="fiab-sub">MAE mesures / prévisions — à venir</div>
+                    </div>
+                    <div class="fiab-badge">Bientôt</div>
+                </div>
+            </div>
+        </template>
+        <template x-if="!fpComparLoading && !fpComparData">
+            <div class="fp-placeholder">Données de comparaison indisponibles.</div>
+        </template>
     </div>
 
 </div>

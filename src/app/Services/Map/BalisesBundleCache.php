@@ -44,6 +44,9 @@ final class BalisesBundleCache
      */
     public const HISTORY_TTL_SECONDS = 120;
 
+    /** Comparaison mesures vs consensus (onglet Évolution) : 10 min. */
+    public const COMPARISON_TTL_SECONDS = 600;
+
     public function __construct(
         private readonly CacheRepository $cache,
     ) {}
@@ -75,6 +78,20 @@ final class BalisesBundleCache
     public function rememberHistory(int $baliseId, callable $builder, ?int $windowHours = null): array
     {
         return $this->cache->remember(self::historyKey($baliseId, $windowHours), self::HISTORY_TTL_SECONDS, $builder);
+    }
+
+    public static function comparisonKey(int $baliseId): string
+    {
+        return "map.balises.comparison.{$baliseId}.v" . self::CACHE_VERSION;
+    }
+
+    /**
+     * @param callable():array $builder
+     * @return array<string,mixed>
+     */
+    public function rememberComparison(int $baliseId, callable $builder): array
+    {
+        return $this->cache->remember(self::comparisonKey($baliseId), self::COMPARISON_TTL_SECONDS, $builder);
     }
 
     /**

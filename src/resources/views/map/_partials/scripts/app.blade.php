@@ -45,6 +45,7 @@ function mapApp(){return{
     // Popup flottante balise/station (refonte v2 — cohabite avec le drawer site).
     featurePopup:{ open:false, type:null, id:null, tab:'rose' },
     fpData:null, fpLoading:false, fpWindow:24, _fpAnchor:null, fpReady:false,
+    fpComparData:null, fpComparLoading:false, fpComparVar:'wind_mean', // onglet Évolution
     chartData:null, chartLoading:false, chartSite:null,   // onglet « Synthèse » (= ancienne popup)
     multimodelData:null,  multimodelLoading:false,        // onglet « Modèles du jour »
     multimodel5Data:null, multimodel5Loading:false,       // onglet « Modèles 5 jours »
@@ -643,6 +644,7 @@ function mapApp(){return{
         this.fpReady = false;         // masquée tant que pas positionnée (pas de flash/saut)
         this.fpWindow = 24;
         this.fpData = null;
+        this.fpComparData = null; this.fpComparVar = 'wind_mean';
         this.loadFeaturePopup();
     },
     closeFeaturePopup(){
@@ -670,7 +672,49 @@ function mapApp(){return{
         });
     },
     setFpWindow(w){ if(w === this.fpWindow) return; this.fpWindow = w; this.loadFeaturePopup(); },
-    setFpTab(tab){ this.featurePopup.tab = tab; this.$nextTick(()=>this.renderFeaturePopup()); },
+    setFpTab(tab){
+        this.featurePopup.tab = tab;
+        this.$nextTick(()=>{
+            this.renderFeaturePopup();
+            if(tab === 'evo'){
+                if(!this.fpComparData && !this.fpComparLoading) this.loadFpCompar();
+                else this.renderFpCompar();
+            }
+        });
+    },
+    // ── Onglet Évolution (mesures vs consensus) ──
+    async loadFpCompar(){
+        const { type, id } = this.featurePopup;
+        if(id == null) return;
+        this.fpComparLoading = true;
+        try{
+            const url = type === 'balise'
+                ? `/api/balises/${id}/comparison`
+                : `/api/weather-stations/${id}/comparison`;
+            const r = await fetch(url, {credentials:'same-origin'});
+            this.fpComparData = await r.json();
+        }catch(e){ console.error('comparison load failed', e); this.fpComparData = null; }
+        this.fpComparLoading = false;
+        this.$nextTick(()=>this.renderFpCompar());
+    },
+    renderFpCompar(){
+        if(this.featurePopup.tab !== 'evo') return;
+        const d = this.fpComparData; if(!d) return;
+        const v = d.vars?.[this.fpComparVar]; if(!v) return;
+        drawComparChart(v.measure, v.consensus, {
+            unit:v.unit, min:v.min, max:v.max, color:v.color,
+            nowStep:d.now_step, nowIdx:d.now_idx, days:d.days,
+        });
+    },
+    setFpComparVar(k){ this.fpComparVar = k; this.$nextTick(()=>this.renderFpCompar()); },
+    get fpComparVars(){
+        if(this.featurePopup.type === 'station') return [
+            {key:'wind_mean',label:'Vent moyen'}, {key:'wind_gust',label:'Rafales'},
+            {key:'temp',label:'Température'}, {key:'humidity',label:'Humidité'}, {key:'pressure',label:'Pression'},
+        ];
+        return [{key:'wind_mean',label:'Vent moyen'}, {key:'wind_gust',label:'Rafales'}, {key:'wind_dir',label:'Direction'}];
+    },
+    get fpComparVarLabel(){ return (this.fpComparVars.find(v => v.key === this.fpComparVar) || {}).label || ''; },
     renderFeaturePopup(){
         if(this.featurePopup.tab === 'rose' && this.fpData){
             const readings = (this.fpData.readings || []).map(r => ({ dir:r.wind_direction, spd:r.wind_speed_avg }));

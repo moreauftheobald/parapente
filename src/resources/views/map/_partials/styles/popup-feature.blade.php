@@ -60,6 +60,35 @@
 .fpop .fp-spinner{width:26px;height:26px;border:2px solid rgba(255,255,255,0.12);border-top-color:#4ea8e0;border-radius:50%;animation:fpopSpin 1s linear infinite}
 .fpop .fp-placeholder{padding:40px 20px;text-align:center;font-size:12px;color:rgba(255,255,255,0.45);line-height:1.6}
 
+/* VUE ÉVOLUTION (graphe comparatif mesures vs consensus) */
+.fpop .vtabs{display:flex;overflow-x:auto;scrollbar-width:none;border-bottom:0.5px solid rgba(255,255,255,0.07)}
+.fpop .vtabs::-webkit-scrollbar{display:none}
+.fpop .vtab{padding:6px 11px;font-size:10px;color:rgba(255,255,255,0.42);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:all 0.15s;flex-shrink:0}
+.fpop .vtab:hover{color:rgba(255,255,255,0.7)}
+.fpop .vtab.on{color:#4ea8e0;border-bottom-color:#4ea8e0}
+.fpop .chart-area{padding:10px 16px 4px}
+.fpop .chart-lbl{font-size:10px;color:rgba(255,255,255,0.5);margin-bottom:6px;display:flex;justify-content:space-between}
+.fpop .chart-wrap{position:relative;width:100%}
+.fpop .chart-cv{display:block;width:100%;cursor:crosshair}
+.fpop .hl{position:absolute;top:0;width:1px;background:rgba(255,255,255,0.15);pointer-events:none;display:none}
+.fpop .ctt{position:absolute;background:#182535;border:0.5px solid rgba(255,255,255,0.14);border-radius:7px;padding:7px 9px;pointer-events:none;display:none;z-index:10;min-width:130px;font-size:10px;color:#e8f4fd}
+.fpop .ctt-h{font-weight:500;margin-bottom:4px;padding-bottom:3px;border-bottom:0.5px solid rgba(255,255,255,0.08)}
+.fpop .ctt-r{display:flex;justify-content:space-between;gap:8px;padding:1.5px 0}
+.fpop .ctt-l{color:rgba(255,255,255,0.5);display:flex;align-items:center;gap:3px}
+.fpop .ctt-v{font-weight:500}
+.fpop .days-ax{display:flex;margin-top:1px}
+.fpop .day-lbl{flex:1;font-size:9px;color:rgba(255,255,255,0.4);text-align:center}
+.fpop .day-lbl.today{color:#4ea8e0;font-weight:500}
+.fpop .day-lbl.future{color:rgba(255,255,255,0.28);font-style:italic}
+.fpop .chart-leg{display:flex;gap:10px;padding:6px 16px 12px;flex-wrap:wrap}
+.fpop .cl{display:flex;align-items:center;gap:4px;font-size:10px;color:rgba(255,255,255,0.5)}
+.fpop .cl-line{width:14px;height:2px;border-radius:1px}
+.fpop .fiab{margin:0 16px 14px;background:rgba(255,255,255,0.03);border:0.5px solid rgba(255,255,255,0.08);border-radius:8px;padding:9px 12px;display:flex;align-items:center;gap:10px}
+.fpop .fiab-icon{width:30px;height:30px;border-radius:7px;background:rgba(78,168,224,0.12);border:0.5px solid rgba(78,168,224,0.2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px;color:#4ea8e0}
+.fpop .fiab-title{font-size:11px;font-weight:500;color:rgba(255,255,255,0.65);margin-bottom:2px}
+.fpop .fiab-sub{font-size:10px;color:rgba(255,255,255,0.4)}
+.fpop .fiab-badge{font-size:9px;padding:2px 7px;border-radius:3px;background:rgba(78,168,224,0.1);color:#4ea8e0;border:0.5px solid rgba(78,168,224,0.2);white-space:nowrap}
+
 @keyframes fpopPulse{0%,100%{opacity:1}50%{opacity:.35}}
 @keyframes fpopSpin{to{transform:rotate(360deg)}}
 
