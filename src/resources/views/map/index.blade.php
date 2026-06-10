@@ -23,6 +23,7 @@
             @include('map._partials.styles.charts')
             @include('map._partials.styles.tooltip')
             @include('map._partials.styles.right-panel-v2')
+            @include('map._partials.styles.windrose')
             [x-cloak]{ display:none !important; }
         </style>
     @endpush
@@ -65,6 +66,9 @@
     @include('map._partials.html.tooltip')
     @include('map._partials.html.dropdowns')
 
+    {{-- Modale rose des vents animée (ouverte depuis la mini-rose Synthèse) --}}
+    @include('map._partials.html.windrose')
+
     @push('scripts')
         {{-- Chart.js — uniquement pour le Consensus Ribbon (onglet Modèles, Phase 3).
              Chargé avant le bloc inline pour que `Chart` soit défini à l'usage. --}}
@@ -84,6 +88,7 @@
             @include('map._partials.scripts.panel-synthese')
             @include('map._partials.scripts.panel-scoring')
             @include('map._partials.scripts.panel-ribbon')
+            @include('map._partials.scripts.panel-windrose')
             @include('map._partials.scripts.app')
         </script>
     @endpush
