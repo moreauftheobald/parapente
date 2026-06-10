@@ -82,6 +82,7 @@
             @include('map._partials.scripts.station-icon')
             @include('map._partials.scripts.station-chart')
             @include('map._partials.scripts.panel-synthese')
+            @include('map._partials.scripts.panel-scoring')
             @include('map._partials.scripts.app')
         </script>
     @endpush

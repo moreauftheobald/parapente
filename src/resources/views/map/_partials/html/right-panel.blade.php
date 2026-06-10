@@ -180,9 +180,35 @@
                             </template>
                         </div>
 
-                        {{-- ══ VUE SCORING (Phase 2) ══ --}}
+                        {{-- ══ VUE SCORING ══ --}}
+                        {{-- Grilles construites en JS (canvas style B) :
+                             buildScoringTab → #rp2-sc-vola (réel) + #rp2-sc-qual (stub). --}}
                         <div class="view" :class="rpTab === 'score' ? 'on' : ''">
-                            <div class="rp-placeholder" style="padding:40px 20px;text-align:center;">Onglet « Scoring » — intégration en cours (Phase 2).</div>
+                            <div class="sc-ctrl">
+                                <div class="tog">
+                                    <div class="togtab" :class="scZoom === '1j' ? 'on' : ''" @click="setScZoom('1j')"><i class="ti ti-zoom-in" aria-hidden="true"></i>1j</div>
+                                    <div class="togtab" :class="scZoom === '5j' ? 'on' : ''" @click="setScZoom('5j')"><i class="ti ti-zoom-out" aria-hidden="true"></i>5j</div>
+                                </div>
+                                <div class="dnav" :style="scZoom === '5j' ? 'opacity:0.32' : ''">
+                                    <div class="dnavb" :class="(scZoom === '5j' || selectedDayIdx === 0) ? 'off' : ''" @click="scoringDayStep(-1)" aria-label="Précédent"><i class="ti ti-chevron-left" aria-hidden="true"></i></div>
+                                    <div class="dlbl" x-text="scZoom === '1j' ? (days[selectedDayIdx]?.label ?? '') : fiveDaysRangeLabel"></div>
+                                    <div class="dnavb" :class="(scZoom === '5j' || selectedDayIdx >= 4) ? 'off' : ''" @click="scoringDayStep(1)" aria-label="Suivant"><i class="ti ti-chevron-right" aria-hidden="true"></i></div>
+                                </div>
+                                <div class="tog" x-show="scoringHasPerso" x-cloak>
+                                    <div class="togtab" :class="scMode === 'global' ? 'on' : ''" @click="setScMode('global')">Global</div>
+                                    <div class="togtab" :class="scMode === 'perso' ? 'on-p' : ''" @click="setScMode('perso')"><i class="ti ti-user" aria-hidden="true"></i><span x-text="scoringPilotName"></span></div>
+                                </div>
+                            </div>
+                            <div id="rp2-day-strip"></div>
+                            <div class="sc-grid" id="rp2-sc-vola"></div>
+                            <div class="sc-div"></div>
+                            <div class="sc-grid sc-stub" id="rp2-sc-qual"></div>
+                            <div class="sc-leg">
+                                <div class="sleg"><div class="sleg-dot" style="background:#16a34a"></div>Favorable</div>
+                                <div class="sleg"><div class="sleg-dot" style="background:#d97706"></div>Incertain</div>
+                                <div class="sleg"><div class="sleg-dot" style="background:#dc2626"></div>Défavorable</div>
+                                <div class="sleg" x-show="scMode === 'perso' && scoringHasPerso" x-cloak style="color:#a78bfa"><i class="ti ti-user" aria-hidden="true" style="font-size:9px"></i><span x-text="'Scoring ' + scoringPilotName"></span></div>
+                            </div>
                         </div>
 
                         {{-- ══ VUE MODÈLES (Phase 3) ══ --}}

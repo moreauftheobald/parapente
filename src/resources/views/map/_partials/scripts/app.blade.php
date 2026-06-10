@@ -38,6 +38,7 @@ function mapApp(){return{
 
     // ── Volet droit (site) : onglets + données ──
     rpTab:'synth',                                 // synth | score | mod (refonte v2)
+    scZoom:'1j', scMode:'global',                  // onglet Scoring : zoom 1j|5j, mode global|perso
     chartData:null, chartLoading:false, chartSite:null,   // onglet « Synthèse » (= ancienne popup)
     multimodelData:null,  multimodelLoading:false,        // onglet « Modèles du jour »
     multimodel5Data:null, multimodel5Loading:false,       // onglet « Modèles 5 jours »
@@ -146,6 +147,7 @@ function mapApp(){return{
                 if (!this.rightOpen) return;
                 if (this.selectedFeature?.type === 'site') {
                     if (this.rpTab === 'synth' && this.chartData) this.renderSynthese();
+                    if (this.rpTab === 'score') this.renderScoring();
                 } else if (this.selectedFeature?.type === 'balise' && this.baliseData) {
                     this.renderBaliseCharts();
                 }
@@ -401,6 +403,7 @@ function mapApp(){return{
         if(this.rightOpen && this.selectedFeature?.type==='site'){
             this.multimodelData=null; // endpoint multimodèle est par jour → invalidé
             if(this.rpTab==='synth' && this.chartData) this.$nextTick(()=>this.renderSynthese());
+            if(this.rpTab==='score') this.$nextTick(()=>this.renderScoring());
         }
     },
 
@@ -475,6 +478,7 @@ function mapApp(){return{
         this.site=site;
         this.selectedFeature={type:'site',...site};
         this.rpTab='synth';
+        this.scZoom='1j'; this.scMode='global';
         this.chartData=null; this.chartSite=null;
         this.multimodelData=null; this.multimodel5Data=null;
         this._multimodelByDay={};
@@ -623,8 +627,28 @@ function mapApp(){return{
     // conservées en vue de leur ré-câblage.
     async setRpTab(tab){
         this.rpTab=tab;
-        if(tab==='synth' && this.chartData) this.$nextTick(()=>this.renderSynthese());
+        if(tab==='synth' && this.chartData){
+            this.$nextTick(()=>this.renderSynthese());
+        }else if(tab==='score'){
+            if(this.site?.id!=null && !this.allScores[this.site.id]) await this.loadSiteScores(this.site.id);
+            this.$nextTick(()=>this.renderScoring());
+        }
     },
+
+    // ── Onglet « Scoring » (refonte v2) ──────────────────────────
+    renderScoring(){
+        if(this.site?.id==null) return;
+        this.$nextTick(()=>buildScoringTab(this));
+    },
+    setScZoom(z){ this.scZoom=z; this.renderScoring(); },
+    setScMode(m){ if(m==='perso' && !this.scoringHasPerso) return; this.scMode=m; this.renderScoring(); },
+    scoringDayStep(d){
+        if(this.scZoom==='5j') return;
+        const i=Math.max(0,Math.min(4,this.selectedDayIdx+d));
+        if(i!==this.selectedDayIdx) this.selectDay(i);
+    },
+    get scoringHasPerso(){ return !!(this.authUser && this.selectedFeature?.user_scoring==='active'); },
+    get scoringPilotName(){ return this.authUser?.display_name ?? this.authUser?.name ?? 'Perso'; },
 
     // ── Onglet « Détail du scoring (voting logic) · 5 jours » ────
     // Construit la structure d'affichage : 5 tableaux (1 par jour),
