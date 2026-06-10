@@ -27,15 +27,8 @@
         </x-slot:subtitle>
     </x-admin.page-title>
 
-    {{-- Onglets Jobs / Laravel --}}
-    <div class="flex gap-1 mb-5 border-b border-gray-800">
-        <a href="{{ route('admin.logs.jobs') }}" class="px-4 py-2 text-sm text-gray-400 hover:text-gray-200">
-            <i class="fa-solid fa-clipboard-list mr-1"></i> Jobs
-        </a>
-        <span class="px-4 py-2 text-sm text-sky-300 border-b-2 border-sky-500 -mb-px">
-            <i class="fa-solid fa-scroll mr-1"></i> Logs Laravel
-        </span>
-    </div>
+    {{-- Onglets --}}
+    @include('admin.logs._tabs', ['active' => 'laravel'])
 
     {{-- ─────────────────────────────────────────────
          Compteurs DB

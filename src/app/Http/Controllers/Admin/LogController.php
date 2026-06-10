@@ -84,6 +84,18 @@ class LogController extends Controller
         ]);
     }
 
+    /**
+     * Historique des runs du sidecar (panneau Alpine alimenté par les
+     * proxys JSON /admin/meteo/sidecar/runs-*).
+     */
+    public function sidecar(): View
+    {
+        return view('admin.logs.sidecar', [
+            'runsRecentEndpoint' => route('admin.meteo.sidecar.runs-recent', [], false),
+            'runsStatsEndpoint'  => route('admin.meteo.sidecar.runs-stats', [], false),
+        ]);
+    }
+
     public function index(Request $request): View
     {
         $level  = $request->input('level');

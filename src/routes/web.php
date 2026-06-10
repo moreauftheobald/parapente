@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\ArticleController as AdminArticleController;
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\BaliseController as AdminBaliseController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\DataController as AdminDataController;
 use App\Http\Controllers\Admin\DataQualityController as AdminDataQualityController;
 use App\Http\Controllers\Admin\DataSyncController as AdminSyncController;
 use App\Http\Controllers\Admin\LogController as AdminLogController;
@@ -119,7 +120,6 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
         // ── Paramètres par section ───────────────────────────────
-        Route::get('/contenu/settings', [AdminSectionSettingsController::class, 'contenu'])->name('contenu.settings');
         Route::get('/meteo/settings',              [AdminSectionSettingsController::class, 'meteo'])->name('meteo.settings');
         Route::post('/meteo/settings/consensus',          [AdminSectionSettingsController::class, 'updateConsensus'])->name('meteo.settings.consensus');
         Route::post('/meteo/settings/consensus/restore', [AdminSectionSettingsController::class, 'restoreConsensusDefaults'])->name('meteo.settings.consensus.restore');
@@ -129,15 +129,6 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/meteo/sidecar/models-variables',   [AdminSectionSettingsController::class, 'sidecarModelsVariables'])->name('meteo.sidecar.models-variables');
         Route::get('/meteo/sidecar/runs-recent',      [AdminSectionSettingsController::class, 'sidecarRunsRecent'])->name('meteo.sidecar.runs-recent');
         Route::get('/meteo/sidecar/runs-stats',        [AdminSectionSettingsController::class, 'sidecarRunsStats'])->name('meteo.sidecar.runs-stats');
-        Route::get('/sites/settings',    [AdminSectionSettingsController::class, 'sites'])->name('sites.settings');
-        Route::patch('/sites/settings/general', [AdminSectionSettingsController::class, 'updateSiteSettings'])->name('sites.settings.general');
-        Route::get('/balises/settings',  [AdminSectionSettingsController::class, 'balises'])->name('balises.settings');
-        Route::get('/weather-stations/settings',          [AdminSectionSettingsController::class, 'weatherStations'])->name('weather-stations.settings');
-        Route::patch('/weather-stations/settings/general', [AdminSectionSettingsController::class, 'updateWeatherStationSettings'])->name('weather-stations.settings.general');
-        Route::patch('/balises/settings/general', [AdminSectionSettingsController::class, 'updateBaliseSettings'])->name('balises.settings.general');
-        Route::get('/weather-stations/settings',          [AdminSectionSettingsController::class, 'weatherStations'])->name('weather-stations.settings');
-        Route::patch('/weather-stations/settings/general', [AdminSectionSettingsController::class, 'updateWeatherStationSettings'])->name('weather-stations.settings.general');
-        Route::patch('/meteo/settings/general',   [AdminSectionSettingsController::class, 'updateMeteoGeneralSettings'])->name('meteo.settings.general');
 
         // ── Profils qualité (scoring sidecar) ───────────────────
         Route::get('/quality-profiles',                         [AdminQualityProfileController::class, 'index'])->name('quality-profiles.index');
@@ -235,9 +226,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/modules',           [AdminModuleController::class, 'index'])->name('modules.index');
         Route::patch('/modules/{module}', [AdminModuleController::class, 'update'])->name('modules.update');
 
+        // ── Data / couverture (modèles, sites, balises, stations) ─
+        Route::get('/data', [AdminDataController::class, 'index'])->name('data.index');
+
         // ── Logs / monitoring ─────────────────────────────────────
         Route::get('/logs', [AdminLogController::class, 'index'])->name('logs.index');
         Route::get('/logs/jobs', [AdminLogController::class, 'jobs'])->name('logs.jobs');
+        Route::get('/logs/sidecar', [AdminLogController::class, 'sidecar'])->name('logs.sidecar');
 
         // ── Paramètres (hub par catégories + audit) ───────────────
         Route::get('/settings',       [AdminSettingsController::class, 'index'])->name('settings.index');

@@ -1,7 +1,7 @@
 {{-- Onglets réutilisables pour les pages Paramètres de chaque section.
      Variables attendues :
        $tab          — onglet actif ('general', 'data', 'logs', …)
-       $baseRoute    — nom de la route (ex: 'admin.sites.settings')
+       $baseRoute    — nom de la route (ex: 'admin.data.index')
        $tabs         — (optionnel) liste personnalisée des onglets
                        Format : ['key' => ['label' => '…', 'icon' => 'fa-…'], …]
 --}}

@@ -23,15 +23,8 @@
     <x-admin.page-title title="Logs — exécutions des jobs"
         subtitle="Historique 30 jours de chaque job (et des runs du sidecar), filtrable par catégorie." />
 
-    {{-- Onglets Jobs / Laravel --}}
-    <div class="flex gap-1 mb-5 border-b border-gray-800">
-        <span class="px-4 py-2 text-sm text-sky-300 border-b-2 border-sky-500 -mb-px">
-            <i class="fa-solid fa-clipboard-list mr-1"></i> Jobs
-        </span>
-        <a href="{{ route('admin.logs.index') }}" class="px-4 py-2 text-sm text-gray-400 hover:text-gray-200">
-            <i class="fa-solid fa-scroll mr-1"></i> Logs Laravel
-        </a>
-    </div>
+    {{-- Onglets --}}
+    @include('admin.logs._tabs', ['active' => 'jobs'])
 
     {{-- Filtres --}}
     <form method="GET" class="flex items-center gap-2 flex-wrap mb-4">

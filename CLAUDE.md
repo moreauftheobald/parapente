@@ -453,7 +453,8 @@ flash messages globaux via `<x-admin.alert>` — ne pas les répéter dans les v
 | Section | Contenu |
 |---|---|
 | Dashboard **Supervision** (`/admin`) | santé du système en lecture seule : fraîcheur sidecar, état de chaque job schedulé vs cadence attendue (`SupervisionService::JOBS`), résumé couverture, APIs (quotas/erreurs), incidents 24 h, volumétrie + formulaire de déploiement géographique. Cf. `FF_admin_redesign.md` |
-| **Paramètres par section** (`SectionSettingsController`) | `/admin/meteo/settings` (**7 onglets** : général, data = couverture `DataCoverage`, consensus par variable, variables = `model_variable_overrides`, dépendances, sidecar, logs) ; `/admin/{sites,balises,weather-stations,contenu}/settings` |
+| **Consensus & sidecar** (`SectionSettingsController`, `/admin/meteo/settings`) | 4 onglets : consensus par variable (30 configs JSON), variables = `model_variable_overrides`, dépendances (graphe sidecar), état sidecar. Les anciennes pages « Paramètres — Sites/Balises/Stations/Contenu » ont été supprimées (généraux → hub Paramètres, data → Data/couverture, logs → Logs/jobs) |
+| **Data / couverture** (`DataController`, `/admin/data`) | 4 onglets (modèles / sites / balises / stations) : fraîcheur des fetches, couverture prévisions + observations (`DataCoverage`), imports ParaglidingEarth, découverte balises/stations |
 | Sites / Balises / Stations / Users | listings filtrables (`HasFilterableIndex` : pays/région/département…), fiches, toggles |
 | Modèles / APIs météo / APIs stations | édition cadence, activation, credentials (OAuth2 MF, clés), test/inspect |
 | Sync (`DataSyncController`) | import sites ParaglidingEarth, découverte balises/stations, deploy |
@@ -463,7 +464,7 @@ flash messages globaux via `<x-admin.alert>` — ne pas les répéter dans les v
 | Trafic | KPI `page_views` (jour/7j/30j, top pages, devices) |
 | Articles / Wiki / Modules | éditeurs TinyMCE (upload images disque `public` ⇒ `storage:link`), menu |
 | Paramètres (`/admin/settings`) | **hub par catégories** (6 onglets : scoring & viabilité, balises, fiabilité, sidecar/consensus, qualité, trafic) — toutes les clés simples de `Settings::DEFAULTS` avec description en bulle d'aide ; audit `settings_audit` |
-| Logs | 2 onglets : **explorateur des exécutions de jobs** (`/admin/logs/jobs`, `job_monitors` 30 j, filtres catégorie/job/statut, runs sidecar inclus) + tail logs Laravel |
+| Logs | 3 onglets : **explorateur des exécutions de jobs** (`/admin/logs/jobs`, `job_monitors` 30 j, filtres catégorie/job/statut) + **runs sidecar** (`/admin/logs/sidecar`, API /runs du sidecar) + tail logs Laravel |
 
 Composants Blade standardisés dans `resources/views/components/admin/`
 (`<x-admin.button>`, `page-title`, `badge`, `empty-state`, `alert`, `input`,
@@ -637,10 +638,9 @@ docker exec -it parapente_php php artisan db:scrub        # anonymise un dump pr
 10. **`CHANGELOG.md`** : proposer la mise à jour après chaque changement majeur.
 11. **Scheduler** : tout nouveau job schedulé se déclare dans
     `routes/console.php` avec `->name()` + `->withoutOverlapping()`, et
-    s'enregistre dans **deux registres** : les labels de
-    `SectionSettingsController::SCHEDULED_JOBS` (s'il concerne
-    data/balises/stations) et `SupervisionService::JOBS` (cadence attendue —
-    sinon il est invisible du dashboard Supervision).
+    s'enregistre dans `SupervisionService::JOBS` (label + cadence attendue) —
+    sinon il est invisible du dashboard Supervision et mal libellé dans
+    l'explorateur `/admin/logs/jobs`.
 12. **Sidecar piloté par `settings`** : les clés `consensus.*` sont lues par le
     sidecar à chaque run — les modifier via `/admin/meteo/settings`, jamais en
     SQL direct (audit + cache).

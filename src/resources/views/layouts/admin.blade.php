@@ -43,14 +43,8 @@
                 <a href="{{ route('admin.data-quality.index') }}" class="{{ $adminLink($adminSegment === 'data-quality') }}">
                     <i class="fa-solid fa-code-merge w-4 text-center"></i> Fusion / dédoublonnage
                 </a>
-                <a href="{{ route('admin.sites.settings') }}" class="{{ $adminSubLink($adminSegment === 'sites' && request()->segment(3) === 'settings') }}">
-                    <i class="fa-solid fa-gear w-4 text-center"></i> Paramètres sites
-                </a>
-                <a href="{{ route('admin.balises.settings') }}" class="{{ $adminSubLink($adminSegment === 'balises' && request()->segment(3) === 'settings') }}">
-                    <i class="fa-solid fa-gear w-4 text-center"></i> Paramètres balises
-                </a>
-                <a href="{{ route('admin.weather-stations.settings') }}" class="{{ $adminSubLink($adminSegment === 'weather-stations' && request()->segment(3) === 'settings') }}">
-                    <i class="fa-solid fa-gear w-4 text-center"></i> Paramètres stations
+                <a href="{{ route('admin.data.index') }}" class="{{ $adminLink($adminSegment === 'data') }}">
+                    <i class="fa-solid fa-cloud-arrow-down w-4 text-center"></i> Data / couverture
                 </a>
 
                 {{-- ── 3. Météo (modèles, APIs, consensus, fiabilité) ── --}}
@@ -67,8 +61,11 @@
                 <a href="{{ route('admin.reliability.compare') }}" class="{{ $adminLink($adminSegment === 'reliability') }}">
                     <i class="fa-solid fa-flask-vial w-4 text-center"></i> Fiabilité des modèles
                 </a>
-                <a href="{{ route('admin.meteo.settings') }}" class="{{ $adminSubLink($adminSegment === 'meteo') }}">
-                    <i class="fa-solid fa-gear w-4 text-center"></i> Paramètres météo / sidecar
+                <a href="{{ route('admin.meteo.settings') }}" class="{{ $adminLink($adminSegment === 'meteo') }}">
+                    <i class="fa-solid fa-scale-balanced w-4 text-center"></i> Consensus & sidecar
+                </a>
+                <a href="{{ route('admin.quality-profiles.index') }}" class="{{ $adminLink($adminSegment === 'quality-profiles') }}">
+                    <i class="fa-solid fa-bullseye w-4 text-center"></i> Profils qualité
                 </a>
 
                 {{-- ── 4. Contenu & utilisateurs ────────────────── --}}
@@ -87,9 +84,6 @@
                 </a>
                 <a href="{{ route('admin.traffic.index') }}" class="{{ $adminLink($adminSegment === 'traffic') }}">
                     <i class="fa-solid fa-chart-line w-4 text-center"></i> Trafic
-                </a>
-                <a href="{{ route('admin.contenu.settings') }}" class="{{ $adminSubLink($adminSegment === 'contenu') }}">
-                    <i class="fa-solid fa-gear w-4 text-center"></i> Paramètres contenu
                 </a>
 
                 {{-- ── 5. Système ───────────────────────────────── --}}
