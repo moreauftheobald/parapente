@@ -11,6 +11,82 @@ Conventions :
 
 ---
 
+## 2026-06-10 — Cap fiabilité par maille : cadrage, nettoyage et refonte CLAUDE.md
+
+Préparation du chantier « fiabilité par maille via stations météo »
+(pondération du consensus sidecar par la fiabilité 30 j des modèles,
+calculée aux stations et étendue aux mailles dans un rayon de confiance
+de 25 km — maille non couverte = consensus brut).
+
+### Ajouté
+- **`FF_grid_reliability.md`** : cadrage complet (architecture 2 étages —
+  table `model_reliability_stations` côté Laravel + mapping maille → station
+  la plus proche en KD-tree côté sidecar, **rien de matérialisé par maille** ;
+  alternatives écartées, garde-fous, découpage, risques).
+
+### Supprimé (code mort)
+- `FetchMetarReadingsJob` + `MetarProvider` (METAR balises, orphelins depuis
+  la bascule vers le système stations).
+- Commandes one-shot jouées : `stations:migrate-metar`,
+  `forecasts:backfill-consensus{,-stations}`, `consensus:export-fixtures`.
+- `ReliabilityCalculator::weightFactorFor()` (sans appelant) + son cache.
+
+### Modifié
+- `ReliabilityCalculator::recomputeForBalise()` : upserts par lots de 500
+  (au lieu d'un `updateOrCreate` par tuple).
+- `FetchStationForecastsJob` : chunks de 40 alignés sur le batch Open-Meteo
+  (~2× moins d'appels HTTP par run).
+- **`CLAUDE.md` entièrement refondu** (1468 → 739 lignes) : flux de données,
+  système stations, schéma de rétention, scheduler, settings sidecar,
+  BackOffice, état/objectif fiabilité — aligné sur l'état réel (branche V4,
+  ~1100 sites). Le shadow mode triple-consensus A/B/C est documenté **legacy,
+  à ne pas étendre** (dépréciation prévue à l'étape 5 du FF).
+
+---
+
+## 2026-06-10 — Agrégat horaire des observations stations + inversion des rétentions
+
+Les agrégats horaires deviennent la vérité-terrain longue durée du calcul
+de fiabilité (30 j) ; les lectures brutes ne servent plus qu'au temps réel
+et redescendent à 7 j.
+
+### Ajouté
+- **`weather_station_observations_hourly`** (pendant stations de
+  `balise_readings_hourly`) : moyenne circulaire de la direction, AVG/MAX
+  des vitesses, AVG temp/Td/humidité/pression/nuages, SUM précipitations.
+- **`AggregateStationObservationsHourlyJob`** (horaire à :07, fenêtre
+  glissante 3 h, upsert idempotent) + commande de backfill
+  **`stations:backfill-hourly --days=30`** (logique partagée).
+
+### Base de données / rétentions
+- `balise_readings_hourly` et `weather_station_observations_hourly` :
+  conservés **30 jours** (avant : 7 j / inexistant).
+- `balise_readings` et `weather_station_observations` (brut) : **7 jours**.
+- `reliability.window_days` extensible à 30 (description mise à jour).
+
+> ⚠️ Au déploiement : lancer `stations:backfill-hourly --days=30` et
+> `readings:backfill-hourly --days=30` **avant** la purge de 03h00.
+
+---
+
+## 2026-06-10 — Consensus stations enrichi + purge des lectures brutes
+
+### Ajouté
+- `forecast_archive_stations` : colonnes **`cloud_cover_low/mid/high`**,
+  remplies pour les modèles ET le consensus sidecar.
+- Le consensus sidecar étant capable de servir `dew_point_2m` et la
+  couverture nuageuse par étage, son archivage aux coords des stations
+  utilise une liste de variables dédiée
+  (`OpenMeteoApi::HOURLY_VARS_STATIONS_CONSENSUS`) au lieu du fetch
+  « balise » 4 variables — plus de `null` sur `dew_point` et les nuages.
+
+### Modifié
+- `PurgeOldForecastsJob` : purge des lectures brutes (`balise_readings`,
+  `weather_station_observations`) par lots de 10 000 — ces tables
+  croissaient indéfiniment.
+
+---
+
 ## 2026-06-09 — Watchdog de fraîcheur du scoring (parade sidecar figé)
 
 Quand le worker du sidecar `consensus-grid-v2` se fige (hang), il ne fait
