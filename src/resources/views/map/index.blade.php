@@ -2,7 +2,7 @@
     title="Carte de volabilité parapente"
     page-title="Carte de volabilité"
     x-data="mapApp()"
-    right-class="w-full max-w-full lg:w-[clamp(420px,45vw,640px)] lg:max-w-[60vw] xl:w-[50vw] xl:max-w-[50vw]"
+    right-class="w-full max-w-full lg:w-[420px] lg:max-w-[420px]"
     main-class="overflow-hidden"
     root-class="map-shell"
     :hide-detail-header="true"
