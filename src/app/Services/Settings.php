@@ -180,22 +180,13 @@ class Settings
             'type'        => 'secret',
         ],
 
-        // ── Stations météo (configuration) ───────────────────────
-        // Les clés API vivent dans la table `station_apis` (page /admin/station-apis).
-        'stations.fetch_enabled' => [
-            'default'     => false,
-            'label'       => 'Fetch automatique actif',
-            'description' => "Active le fetch horaire automatique des observations depuis les 3 réseaux de stations météo (MF, METAR, Infoclimat). Kill switch global.",
-            'group'       => 'stations',
-            'type'        => 'bool',
-        ],
-        'stations.retention_days' => [
-            'default'     => 30,
-            'label'       => 'Rétention des observations (jours)',
-            'description' => "Durée de conservation des observations en base. Au-delà, les anciennes observations sont purgées quotidiennement.",
-            'group'       => 'stations',
-            'type'        => 'int',
-        ],
+        // ── Stations météo ────────────────────────────────────────
+        // Aucune clé `settings` : les kill switches vivent dans
+        // `station_apis.active` (par réseau, /admin/station-apis) et les
+        // rétentions sont des constantes délibérées de PurgeOldForecastsJob
+        // (brut 7 j / horaire 30 j). Les clés `stations.fetch_enabled` et
+        // `stations.retention_days` ont été supprimées (audit 2026-06-11) :
+        // jamais consommées par le code.
 
         // ── Fiabilité des modèles (phase 2 + 2.5) ────────────────
         // Cf. FF_model_reliability.md. Tous ces paramètres pilotent

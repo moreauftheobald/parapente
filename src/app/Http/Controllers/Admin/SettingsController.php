@@ -40,11 +40,6 @@ class SettingsController extends Controller
             'icon'   => 'fa-tower-broadcast',
             'groups' => ['balises'],
         ],
-        'stations' => [
-            'label'  => 'Stations météo',
-            'icon'   => 'fa-tower-observation',
-            'groups' => ['stations'],
-        ],
         'reliability' => [
             'label'  => 'Fiabilité',
             'icon'   => 'fa-scale-balanced',
