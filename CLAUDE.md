@@ -100,7 +100,7 @@ fiabilité par maille via stations, cf. section Fiabilité), `FF_model_reliabili
         ▼
   sidecar consensus-grid-v2 ──► site_scores_1/2 (double-buffer, flip scoring_table)
                             ──► overlays PNG carte météo (/carte-meteo)
-                            ──► lit `settings` (consensus.config.*, scheduler, seuils)
+                            ──► lit `settings` (consensus.config.*, seuils scoring)
 ```
 
 Principes structurants :
@@ -334,12 +334,20 @@ utilisent `TracksExecution` (suivi `job_monitors`, affiché dans les écrans adm
   `scoring_custom:user:{id}` TTL 1 h, fallback scoring global sur panne).
   3 invalidations : flip buffer, édition d'un scoring, changement de seuil global.
 - **Pilotage du sidecar via la table `settings`** (le sidecar la lit à chaque run) :
-  - `consensus.global.default_method` (A legacy / B amélioré) + preview ;
-  - `consensus.config.<variable>` (~24 variables) : méthode, epsilon, MAD,
-    z-threshold, `use_weight_factor`, `use_bias_correction`, render_tiles… ;
-  - `consensus.scheduler.*` : mode cron/event-driven, priorités par horizon ;
+  - `consensus.config.<variable>` (30 variables) : sous-champs lus = méthode,
+    epsilon, z_threshold, mad_floor, use_mad_filtering, use_weighted_median,
+    render_tiles ; `use_weight_factor`/`use_bias_correction` parsés mais
+    réservés à la fiabilité par maille (ne pas supprimer) ;
+  - `scoring.precip_*` / `scoring.gust_*` : seuils lus par le scoring sidecar
+    (ET par `UserScoringService` côté Laravel) ;
   - `quality_profiles` / `quality_axes` : profils de scoring qualité
     (résultat dans `site_scores_*.quality_detail`).
+  - Le **scheduler du sidecar est un daemon autonome** (env
+    `CONSENSUS_TICK_MINUTE`), PAS piloté par `settings` — les clés
+    `consensus.global.*` / `consensus.scheduler.*` ont été supprimées
+    (audit 2026-06-11, cf. `SIDECAR_SETTINGS_REVIEW.md`). 9 clés
+    `consensus.*` lues par le sidecar restent hors catalogue Laravel
+    (à intégrer, cf. la revue).
 - **Qualité d'une journée** : calculée à la lecture par `DayQualityCalculator`
   (cloche horaire ~13h30 × facteur de continuité ; seuils éditables `viability.*`).
 
@@ -442,7 +450,7 @@ flash messages globaux via `<x-admin.alert>` — ne pas les répéter dans les v
 | Section | Contenu |
 |---|---|
 | Dashboard **Supervision** (`/admin`) | santé du système en lecture seule : fraîcheur sidecar, état de chaque job schedulé vs cadence attendue (`SupervisionService::JOBS`), résumé couverture, APIs (quotas/erreurs), incidents 24 h, volumétrie + formulaire de déploiement géographique. Cf. `FF_admin_redesign.md` |
-| **Paramètres par section** (`SectionSettingsController`) | `/admin/meteo/settings` (**8 onglets** : général, data = couverture `DataCoverage`, consensus global + par variable, orchestration scheduler sidecar, variables = `model_variable_overrides`, dépendances, sidecar, logs) ; `/admin/{sites,balises,weather-stations,contenu}/settings` |
+| **Paramètres par section** (`SectionSettingsController`) | `/admin/meteo/settings` (**7 onglets** : général, data = couverture `DataCoverage`, consensus par variable, variables = `model_variable_overrides`, dépendances, sidecar, logs) ; `/admin/{sites,balises,weather-stations,contenu}/settings` |
 | Sites / Balises / Stations / Users | listings filtrables (`HasFilterableIndex` : pays/région/département…), fiches, toggles |
 | Modèles / APIs météo / APIs stations | édition cadence, activation, credentials (OAuth2 MF, clés), test/inspect |
 | Sync (`DataSyncController`) | import sites ParaglidingEarth, découverte balises/stations, deploy |
@@ -451,7 +459,7 @@ flash messages globaux via `<x-admin.alert>` — ne pas les répéter dans les v
 | Profils qualité | CRUD `quality_profiles`/`quality_axes` (lus par le sidecar) |
 | Trafic | KPI `page_views` (jour/7j/30j, top pages, devices) |
 | Articles / Wiki / Modules | éditeurs TinyMCE (upload images disque `public` ⇒ `storage:link`), menu |
-| Paramètres (`/admin/settings`) | **hub par catégories** (7 onglets : scoring & viabilité, balises, stations, fiabilité, sidecar/consensus, qualité, trafic) — toutes les clés simples de `Settings::DEFAULTS` avec description en bulle d'aide ; audit `settings_audit` |
+| Paramètres (`/admin/settings`) | **hub par catégories** (5 onglets : scoring & viabilité, balises, fiabilité, qualité, trafic) — toutes les clés simples de `Settings::DEFAULTS` avec description en bulle d'aide ; audit `settings_audit` |
 | Logs | 2 onglets : **explorateur des exécutions de jobs** (`/admin/logs/jobs`, `job_monitors` 30 j, filtres catégorie/job/statut, runs sidecar inclus) + tail logs Laravel |
 
 Composants Blade standardisés dans `resources/views/components/admin/`
@@ -473,9 +481,9 @@ table `settings_audit`. Groupes :
 | viability | cloche horaire, continuité, seuils jour |
 | quality | seuils détection doublons sites/balises |
 | analytics | `pageviews.retention_days` |
-| balises / stations | `windy.api_key`, `stations.fetch_enabled`, `stations.retention_days` |
+| balises | `windy.api_key` |
 | reliability | `shadow_enabled`, `min_samples`, `factor_min/max`, `window_days`… |
-| consensus_global / consensus_vars / consensus_scheduler | pilotage du sidecar (cf. Scoring & consensus) |
+| consensus_vars | `consensus.config.<variable>` ×30 (JSON, lues par le sidecar — cf. Scoring & consensus) |
 
 ---
 

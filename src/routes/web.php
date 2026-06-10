@@ -123,7 +123,6 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/meteo/settings',              [AdminSectionSettingsController::class, 'meteo'])->name('meteo.settings');
         Route::post('/meteo/settings/consensus',          [AdminSectionSettingsController::class, 'updateConsensus'])->name('meteo.settings.consensus');
         Route::post('/meteo/settings/consensus/restore', [AdminSectionSettingsController::class, 'restoreConsensusDefaults'])->name('meteo.settings.consensus.restore');
-        Route::post('/meteo/settings/orchestration',     [AdminSectionSettingsController::class, 'updateOrchestration'])->name('meteo.settings.orchestration');
         Route::post('/meteo/settings/variable-override', [AdminSectionSettingsController::class, 'updateVariableOverride'])->name('meteo.settings.variable-override');
         Route::get('/meteo/sidecar/active-config',      [AdminSectionSettingsController::class, 'sidecarActiveConfig'])->name('meteo.sidecar.active-config');
         Route::get('/meteo/sidecar/dependency-graph',   [AdminSectionSettingsController::class, 'sidecarDependencyGraph'])->name('meteo.sidecar.dependency-graph');

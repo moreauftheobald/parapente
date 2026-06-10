@@ -92,13 +92,20 @@ santé est portée par le bloc Sidecar.
    (articles, wiki, modules, users, trafic) · Système (logs/jobs,
    hub paramètres, historique). Libellés de sous-paramètres explicites
    (« Paramètres sites » et non trois « Paramètres » identiques).
-3. **Audit des ~90 clés `settings`** : tableau clé → écran propriétaire →
-   consommateur réel (Laravel ou sidecar) → action (garder / déplacer /
-   reformuler la description / **supprimer**). Candidats morts déjà repérés :
-   `stations.retention_days` (les rétentions sont des constantes de
-   `PurgeOldForecastsJob` — soit brancher, soit supprimer), groupe
-   `reliability.*` du shadow mode (mourra avec lui). Reformuler les
-   descriptions floues (elles sont désormais visibles partout via le hub).
+3. **Audit des 74 clés `settings`** — **FAIT (2026-06-11)**, cf.
+   `SIDECAR_SETTINGS_REVIEW.md` (verdict sidecar inclus) :
+   - supprimées : `stations.*` (2, jamais consommées),
+     `consensus.global.*` (2) et `consensus.scheduler.*` (10, pas lues par
+     le sidecar — daemon autonome) + onglet « Orchestration » entier +
+     section « Defaults globaux » de l'onglet consensus + migration de
+     purge des lignes en base ;
+   - conservées : `consensus.config.*` (30, lues), `scoring.precip/gust_*`
+     (lues par le scoring sidecar ET Laravel), `reliability.min_samples/
+     factor_min/factor_max/window_days` (consommées par Laravel) ;
+   - reste à faire : intégrer au catalogue les 9 clés `consensus.*` lues
+     par le sidecar mais absentes de `DEFAULTS` (récupérer d'abord leurs
+     défauts effectifs côté sidecar) ; supprimer les 7 clés
+     `reliability.*` du shadow mode avec sa dépréciation.
 4. **Consolidation des écrans de settings** : fusionner `/admin/settings`
    dans les pages par section ; rapprocher APIs météo et APIs stations
    (même pattern d'écran).

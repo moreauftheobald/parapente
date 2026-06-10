@@ -23,29 +23,6 @@
 <form method="POST" action="{{ route('admin.meteo.settings.consensus') }}">
     @csrf
 
-    {{-- Defaults globaux ──────────────────────────────────────── --}}
-    <x-admin.section title="Defaults globaux" icon="fa-solid fa-sliders" color="sky" class="mb-6">
-        <div class="flex items-center gap-6 flex-wrap">
-            <x-admin.field name="default_method" label="Méthode par défaut"
-                           hint="Méthode appliquée aux variables sans config explicite. A = legacy inverse-carré, B = amélioré MAD/médiane.">
-                <select name="default_method" class="{{ $inputCls }} w-32">
-                    <option value="A" @selected(old('default_method', $defaultMethod) === 'A')>A (legacy)</option>
-                    <option value="B" @selected(old('default_method', $defaultMethod) === 'B')>B (amélioré)</option>
-                </select>
-            </x-admin.field>
-            <div>
-                <input type="hidden" name="preview_enabled" value="0">
-                <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-400">
-                    <input type="checkbox" name="preview_enabled" value="1"
-                           @checked(old('preview_enabled', $previewEnabled))
-                           class="h-4 w-4 rounded border-gray-700 bg-gray-800 text-sky-500 focus:ring-sky-500/30">
-                    Endpoint /preview actif
-                    <x-admin.tooltip text="Active l'endpoint /v1/consensus/preview côté sidecar (debug)." />
-                </label>
-            </div>
-        </div>
-    </x-admin.section>
-
     {{-- Config par variable ────────────────────────────────────── --}}
     @foreach ($categories as $catLabel => $catVars)
         <h2 class="text-xs uppercase tracking-wider text-gray-400 mb-3 mt-6">

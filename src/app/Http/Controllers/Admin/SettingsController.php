@@ -40,22 +40,10 @@ class SettingsController extends Controller
             'icon'   => 'fa-tower-broadcast',
             'groups' => ['balises'],
         ],
-        'stations' => [
-            'label'  => 'Stations météo',
-            'icon'   => 'fa-tower-observation',
-            'groups' => ['stations'],
-        ],
         'reliability' => [
             'label'  => 'Fiabilité',
             'icon'   => 'fa-scale-balanced',
             'groups' => ['reliability'],
-        ],
-        'sidecar' => [
-            'label'  => 'Sidecar / consensus',
-            'icon'   => 'fa-microchip',
-            'groups' => ['consensus_global', 'consensus_scheduler'],
-            'note'   => 'Ces clés sont lues par le sidecar consensus-grid-v2 à chaque run. '
-                . 'La configuration par variable et l\'édition guidée de l\'orchestration restent dans Météo → Paramètres.',
         ],
         'quality' => [
             'label'  => 'Qualité données',
@@ -78,10 +66,7 @@ class SettingsController extends Controller
         'quality'             => ['title' => 'Détection de doublons',          'icon' => 'fa-clone'],
         'analytics'           => ['title' => 'Trafic / analytics',             'icon' => 'fa-chart-line'],
         'balises'             => ['title' => 'Balises',                        'icon' => 'fa-tower-broadcast'],
-        'stations'            => ['title' => 'Stations météo',                 'icon' => 'fa-tower-observation'],
         'reliability'         => ['title' => 'Fiabilité des modèles',          'icon' => 'fa-scale-balanced'],
-        'consensus_global'    => ['title' => 'Consensus — global',             'icon' => 'fa-scale-balanced'],
-        'consensus_scheduler' => ['title' => 'Orchestration du sidecar',       'icon' => 'fa-clock'],
     ];
 
     public function __construct(private Settings $settings)

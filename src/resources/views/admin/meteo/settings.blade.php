@@ -4,7 +4,7 @@
 @section('content')
 <div>
     <x-admin.page-title title="Paramètres — Modèles Météo">
-        <x-slot:subtitle>Configuration des modèles météo, consensus sidecar, orchestration et scoring.</x-slot:subtitle>
+        <x-slot:subtitle>Configuration des modèles météo, consensus sidecar et scoring.</x-slot:subtitle>
     </x-admin.page-title>
 
     @include('admin._settings-tabs', ['tab' => $tab, 'baseRoute' => 'admin.meteo.settings', 'tabs' => $tabs])
@@ -17,9 +17,6 @@
 
     @elseif ($tab === 'consensus')
         @include('admin.meteo._tab-consensus')
-
-    @elseif ($tab === 'orchestration')
-        @include('admin.meteo._tab-orchestration')
 
     @elseif ($tab === 'variables')
         @include('admin.meteo._tab-variables')
