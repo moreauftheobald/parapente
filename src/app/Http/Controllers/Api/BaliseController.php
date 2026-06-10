@@ -11,6 +11,7 @@ use App\Services\Balises\BaliseReadingFormatter;
 use App\Services\Map\BalisesBundleCache;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 /**
  * API JSON des balises météo (PiouPiou pour la phase 1.1, FFVL/METAR
@@ -110,13 +111,20 @@ class BaliseController extends Controller
      * Caché 2 min (TTL court car les graphes doivent refléter les
      * nouveaux relevés rapidement).
      */
-    public function history(int $id): JsonResponse
+    public function history(Request $request, int $id): JsonResponse
     {
         $balise = Balise::active()->findOrFail($id);
 
+        // Fenêtre optionnelle pour la rose fréquentielle (popup carte) :
+        // 3 / 6 / 12 / 24 / 72 h glissantes. Sans param → comportement
+        // historique (relevés du jour + fallback 24 h).
+        $window = (int) $request->query('window', '0');
+        $window = in_array($window, [3, 6, 12, 24, 72], true) ? $window : null;
+
         $payload = $this->cache->rememberHistory(
             $balise->id,
-            fn () => $this->buildHistoryPayload($balise),
+            fn () => $this->buildHistoryPayload($balise, $window),
+            $window,
         );
 
         return response()->json($payload);
@@ -127,25 +135,35 @@ class BaliseController extends Controller
      *
      * @return array<string,mixed>
      */
-    private function buildHistoryPayload(Balise $balise): array
+    private function buildHistoryPayload(Balise $balise, ?int $windowHours = null): array
     {
         $tz       = new \DateTimeZone('Europe/Paris');
         $dayStart = Carbon::now($tz)->startOfDay();
 
         $cols = ['read_at', 'wind_direction', 'wind_speed_avg', 'wind_speed_min', 'wind_speed_max', 'temperature', 'humidity'];
 
-        $readings = $balise->readings()
-            ->where('read_at', '>=', $dayStart)
-            ->orderBy('read_at')
-            ->get($cols);
-
         $fallback = false;
-        if ($readings->isEmpty()) {
-            $fallback = true;
+
+        if ($windowHours !== null) {
+            // Mode fenêtre glissante (rose fréquentielle) : pas de fallback,
+            // on prend tout ce qu'il y a sur les N dernières heures.
             $readings = $balise->readings()
-                ->where('read_at', '>=', Carbon::now()->subDay())
+                ->where('read_at', '>=', Carbon::now()->subHours($windowHours))
                 ->orderBy('read_at')
                 ->get($cols);
+        } else {
+            $readings = $balise->readings()
+                ->where('read_at', '>=', $dayStart)
+                ->orderBy('read_at')
+                ->get($cols);
+
+            if ($readings->isEmpty()) {
+                $fallback = true;
+                $readings = $balise->readings()
+                    ->where('read_at', '>=', Carbon::now()->subDay())
+                    ->orderBy('read_at')
+                    ->get($cols);
+            }
         }
 
         $latest = $balise->readings()->orderByDesc('read_at')->first($cols);
@@ -174,6 +192,7 @@ class BaliseController extends Controller
             'readings' => $readings->map($serialize)->values()->all(),
             'day'      => $dayStart->format('Y-m-d'),
             'fallback' => $fallback,
+            'window'   => $windowHours,
         ];
     }
 

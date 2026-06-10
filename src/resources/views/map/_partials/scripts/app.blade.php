@@ -42,6 +42,9 @@ function mapApp(){return{
     modVar:'speed', modZoom:'1j', modHidden:{},    // onglet Modèles : variable, zoom 1j|5j, modèles masqués
     MOD_VARS,                                       // catalogue variables ribbon (panel-ribbon)
     windRoseOpen:false, wrPlaying:false, wrIdx:0,   // rose des vents animée (modale, panel-windrose)
+    // Popup flottante balise/station (refonte v2 — cohabite avec le drawer site).
+    featurePopup:{ open:false, type:null, id:null, tab:'rose' },
+    fpData:null, fpLoading:false, fpWindow:24, _fpAnchor:null,
     chartData:null, chartLoading:false, chartSite:null,   // onglet « Synthèse » (= ancienne popup)
     multimodelData:null,  multimodelLoading:false,        // onglet « Modèles du jour »
     multimodel5Data:null, multimodel5Loading:false,       // onglet « Modèles 5 jours »
@@ -123,6 +126,12 @@ function mapApp(){return{
             }
             this._stationsMoveTimer = setTimeout(() => this.loadStations(), 500);
         });
+
+        // Popup flottante balise/station : reste collée au marqueur au
+        // pan/zoom, se ferme au clic sur la carte (pas au clic marqueur,
+        // qui stoppe la propagation → permet d'en rouvrir une autre).
+        this.map.on('move zoom', () => { if(this.featurePopup.open) this.positionFeaturePopup(); });
+        this.map.on('click', () => { if(this.featurePopup.open) this.closeFeaturePopup(); });
 
         // Re-dimensionner Leaflet quand un volet s'ouvre ou se ferme + forcer
         // un repaint complet du document. Sur Chrome Android, on a observé
@@ -622,6 +631,101 @@ function mapApp(){return{
         }, 650);
     },
     wrStopPlay(){ if(this._wrTimer){ clearInterval(this._wrTimer); this._wrTimer=null; } this.wrPlaying=false; },
+
+    // ── Popup flottante balise / station (refonte v2) ────────────
+    openFeaturePopup(type, id, latlng){
+        this.featurePopup = { open:true, type, id, tab:'rose' };
+        this._fpAnchor = latlng;
+        this.fpWindow = 24;
+        this.fpData = null;
+        this.$nextTick(()=>this.positionFeaturePopup());
+        this.loadFeaturePopup();
+    },
+    closeFeaturePopup(){
+        this.featurePopup = { open:false, type:null, id:null, tab:'rose' };
+        this.fpData = null; this._fpAnchor = null;
+    },
+    async loadFeaturePopup(){
+        const { type, id } = this.featurePopup;
+        if(id == null) return;
+        this.fpLoading = true;
+        try{
+            const url = type === 'balise'
+                ? `/api/balises/${id}/history?window=${this.fpWindow}`
+                : `/api/weather-stations/${id}/detail?window=${this.fpWindow}`;
+            const r = await fetch(url, {credentials:'same-origin'});
+            this.fpData = await r.json();
+        }catch(e){ console.error('feature popup load failed', e); this.fpData = null; }
+        this.fpLoading = false;
+        this.$nextTick(()=>{ this.renderFeaturePopup(); this.positionFeaturePopup(); });
+    },
+    setFpWindow(w){ if(w === this.fpWindow) return; this.fpWindow = w; this.loadFeaturePopup(); },
+    setFpTab(tab){ this.featurePopup.tab = tab; this.$nextTick(()=>{ this.renderFeaturePopup(); this.positionFeaturePopup(); }); },
+    renderFeaturePopup(){
+        if(this.featurePopup.tab === 'rose' && this.fpData){
+            const readings = (this.fpData.readings || []).map(r => ({ dir:r.wind_direction, spd:r.wind_speed_avg }));
+            drawFreqRose(readings, this.fpCurrent);
+        }
+    },
+    positionFeaturePopup(){
+        if(!this.featurePopup.open || !this._fpAnchor || !this.map) return;
+        if(!window.AppShell.isDesktop()) return; // mobile = plein écran (CSS)
+        const el = document.getElementById('feature-popup');
+        const mapEl = document.getElementById('map');
+        if(!el || !mapEl) return;
+        const pt = this.map.latLngToContainerPoint(this._fpAnchor);
+        const rect = mapEl.getBoundingClientRect();
+        const ax = rect.left + pt.x, ay = rect.top + pt.y;
+        const W = el.offsetWidth || 360, H = el.offsetHeight || 320;
+        const gap = 16, m = 8;
+        let left = ax - W/2;
+        left = Math.max(m, Math.min(left, window.innerWidth - W - m));
+        let top = ay - H - gap;          // au-dessus du marqueur
+        if(top < m) top = ay + 28;       // flip en dessous si débordement haut
+        top = Math.max(m, Math.min(top, window.innerHeight - H - m));
+        el.style.left = left + 'px';
+        el.style.top  = top + 'px';
+    },
+    get fpName(){
+        return this.featurePopup.type === 'balise'
+            ? (this.fpData?.balise?.name ?? '')
+            : (this.fpData?.station?.name ?? '');
+    },
+    get fpAltitude(){
+        return this.featurePopup.type === 'balise'
+            ? (this.fpData?.balise?.altitude_m ?? null)
+            : (this.fpData?.station?.altitude_m ?? null);
+    },
+    get fpNetworkLabel(){
+        if(this.featurePopup.type === 'balise'){
+            const src = this.fpData?.balise?.source, ext = this.fpData?.balise?.external_id;
+            if(!src) return '';
+            return src.charAt(0).toUpperCase() + src.slice(1) + (ext ? ' #' + ext : '');
+        }
+        const net = this.fpData?.station?.network ?? '';
+        const map = {meteofrance_synop:'Météo-France SYNOP', mf:'Météo-France', metar:'METAR', infoclimat:'Infoclimat'};
+        return map[net] ?? (net ? net.toUpperCase() : '');
+    },
+    get fpCurrent(){
+        const l = this.fpData?.latest;
+        if(!l) return { dir:null, mean:null, gust:null };
+        return { dir:l.wind_direction, mean:l.wind_speed_avg, gust:l.wind_speed_max };
+    },
+    get fpRoseStats(){
+        const readings = (this.fpData?.readings || []).filter(r => r.wind_direction != null);
+        if(!readings.length) return null;
+        const sect = new Array(36).fill(0);
+        readings.forEach(r => { sect[Math.floor((((r.wind_direction%360)+360)%360)/10)%36]++; });
+        const di = sect.indexOf(Math.max(...sect));
+        const dom = di*10 + 5;
+        return { domDir:dom, domCard:degToCompass(dom), domPct:Math.round(sect[di]/readings.length*100) };
+    },
+    get fpFreshness(){ return formatAge(this.fpData?.latest?.read_at ?? this.fpData?.latest?.observed_at); },
+    get fpIsLive(){
+        const ts = this.fpData?.latest?.read_at ?? this.fpData?.latest?.observed_at;
+        return ts ? (Date.now() - new Date(ts).getTime())/60000 < 30 : false;
+    },
+    _spdColor(s){ return s == null ? '#9ca3af' : s < 12 ? '#4ade80' : s < 22 ? '#4ea8e0' : s < 32 ? '#fbbf24' : '#f87171'; },
     get chartHasData(){
         const day=this.days[this.selectedDayIdx]?.raw;
         return (this.chartData?.days?.[day]?.length ?? 0) > 0;
@@ -1012,7 +1116,7 @@ function mapApp(){return{
             const m = L.marker([b.lat,b.lng],{icon})
                 .bindTooltip(baliseTooltipHtml(b),{direction:'top',offset:[0,-22],opacity:.95});
             m._netKey = netKey;
-            m.on('click',(e)=>{L.DomEvent.stopPropagation(e);this.clickBalise(b.id,m.getElement());});
+            m.on('click',(e)=>{L.DomEvent.stopPropagation(e);this.clickBalise(b.id,m.getLatLng());});
             this._balisesMarkers[b.id] = m;
             if(!byNet[netKey]) byNet[netKey] = [];
             byNet[netKey].push(m);
@@ -1035,17 +1139,11 @@ function mapApp(){return{
     },
 
     // ── Clic sur une balise → volet droit (relevés + historique du jour) ──
-    clickBalise(id, markerEl){
-        const b=this.balises.find(x=>x.id===id);
-        if(!b) return;
-        this._clearAllMarkerSelection();
-        this.site={};
-        this._baliseObj=b;
-        this.selectedFeature={type:'balise', ...b};
-        this.chartData=null; this.multimodelData=null; this.multimodel5Data=null;
-        this.baliseData=null;
-        this.openRightPanel();
-        this.loadBaliseHistory(id);
+    // Refonte v2 : le clic balise ouvre une popup flottante (cohabite avec
+    // le drawer site), au lieu du drawer droit. _fpAnchor = position marqueur.
+    clickBalise(id, latlng){
+        this._baliseObj = this.balises.find(x => x.id === id) || null;
+        this.openFeaturePopup('balise', id, latlng);
     },
     async loadBaliseHistory(id){
         this.baliseLoading=true;

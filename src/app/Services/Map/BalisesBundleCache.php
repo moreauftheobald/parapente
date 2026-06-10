@@ -53,9 +53,10 @@ final class BalisesBundleCache
         return 'map.balises.bundle.v' . self::CACHE_VERSION;
     }
 
-    public static function historyKey(int $baliseId): string
+    public static function historyKey(int $baliseId, ?int $windowHours = null): string
     {
-        return "map.balises.history.{$baliseId}.v" . self::CACHE_VERSION;
+        $suffix = $windowHours !== null ? ".w{$windowHours}" : '';
+        return "map.balises.history.{$baliseId}{$suffix}.v" . self::CACHE_VERSION;
     }
 
     /**
@@ -71,9 +72,9 @@ final class BalisesBundleCache
      * @param callable():array $builder
      * @return array<string,mixed>
      */
-    public function rememberHistory(int $baliseId, callable $builder): array
+    public function rememberHistory(int $baliseId, callable $builder, ?int $windowHours = null): array
     {
-        return $this->cache->remember(self::historyKey($baliseId), self::HISTORY_TTL_SECONDS, $builder);
+        return $this->cache->remember(self::historyKey($baliseId, $windowHours), self::HISTORY_TTL_SECONDS, $builder);
     }
 
     /**
