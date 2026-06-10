@@ -441,7 +441,7 @@ flash messages globaux via `<x-admin.alert>` — ne pas les répéter dans les v
 
 | Section | Contenu |
 |---|---|
-| Dashboard | compteurs synthétiques |
+| Dashboard **Supervision** (`/admin`) | santé du système en lecture seule : fraîcheur sidecar, état de chaque job schedulé vs cadence attendue (`SupervisionService::JOBS`), résumé couverture, APIs (quotas/erreurs), incidents 24 h, volumétrie + formulaire de déploiement géographique. Cf. `FF_admin_redesign.md` |
 | **Paramètres par section** (`SectionSettingsController`) | `/admin/meteo/settings` (**8 onglets** : général, data = couverture `DataCoverage`, consensus global + par variable, orchestration scheduler sidecar, variables = `model_variable_overrides`, dépendances, sidecar, logs) ; `/admin/{sites,balises,weather-stations,contenu}/settings` |
 | Sites / Balises / Stations / Users | listings filtrables (`HasFilterableIndex` : pays/région/département…), fiches, toggles |
 | Modèles / APIs météo / APIs stations | édition cadence, activation, credentials (OAuth2 MF, clés), test/inspect |
@@ -625,8 +625,10 @@ docker exec -it parapente_php php artisan db:scrub        # anonymise un dump pr
 10. **`CHANGELOG.md`** : proposer la mise à jour après chaque changement majeur.
 11. **Scheduler** : tout nouveau job schedulé se déclare dans
     `routes/console.php` avec `->name()` + `->withoutOverlapping()`, et
-    s'enregistre dans les labels de `SectionSettingsController::SCHEDULED_JOBS`
-    s'il concerne data/balises/stations.
+    s'enregistre dans **deux registres** : les labels de
+    `SectionSettingsController::SCHEDULED_JOBS` (s'il concerne
+    data/balises/stations) et `SupervisionService::JOBS` (cadence attendue —
+    sinon il est invisible du dashboard Supervision).
 12. **Sidecar piloté par `settings`** : les clés `consensus.*` sont lues par le
     sidecar à chaque run — les modifier via `/admin/meteo/settings`, jamais en
     SQL direct (audit + cache).
