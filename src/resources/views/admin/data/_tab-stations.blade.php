@@ -1,3 +1,5 @@
+@include('admin.data._retention-bars', ['bars' => $retentionBars ?? []])
+
 {{-- Réseaux disponibles (description + état des clés) --}}
 <div class="mt-8 space-y-4">
             <h2 class="text-xs uppercase tracking-wider text-gray-400">

@@ -975,4 +975,341 @@ class DataCoverage
             default      => ucfirst($code),
         };
     }
+
+    // ════════════════════════════════════════════════════════════
+    //  Barres de rétention / profondeur (bandeau « coup d'œil »)
+    //  Cf. FF_admin_redesign.md — chaque flux = une barre de N jours
+    //  (rétention + marge), segment = jour, couleur = présence
+    //  (vert : ≥ SEG_HOURS_FULL h ET ≥ SEG_UNITS_FULL_PCT % d'unités ;
+    //   gris : aucune donnée ; orange : partiel). Cache paresseux 30 min,
+    //  invalidé par les jobs via forgetBars().
+    // ════════════════════════════════════════════════════════════
+
+    private const RETENTION_MARGIN_DAYS = 3;
+    private const SEG_HOURS_FULL        = 22;
+    private const SEG_UNITS_FULL_PCT    = 90;
+    private const BARS_CACHE_TTL_S      = 1800;
+
+    public const BARS_KEY_BALISES  = 'data_coverage.' . self::CACHE_VERSION . '.balise_retention_bars';
+    public const BARS_KEY_STATIONS = 'data_coverage.' . self::CACHE_VERSION . '.station_retention_bars';
+
+    /**
+     * Invalide le cache des barres d'un scope ('balises' | 'stations').
+     * Appelé par les jobs de collecte / agrégation / purge concernés
+     * (forget seulement — le recalcul est lazy au prochain affichage).
+     */
+    public static function forgetBars(string $scope): void
+    {
+        Cache::forget($scope === 'stations' ? self::BARS_KEY_STATIONS : self::BARS_KEY_BALISES);
+    }
+
+    /** @return array<int, array<string, mixed>> 3 barres (archive / horaire / brut) */
+    public function baliseRetentionBars(): array
+    {
+        return $this->cachedBars(self::BARS_KEY_BALISES, function () {
+            $active = Balise::where('active', true)->count();
+            return [
+                $this->buildRetentionBar('Archives prévisions', 'archive', 30,
+                    'forecast_archive_balises', 'target_at', 'balise_id', $active, 'model'),
+                $this->buildRetentionBar('Agrégat horaire', 'hourly', 30,
+                    'balise_readings_hourly', 'hour_at', 'balise_id', $active, 'balise_source'),
+                $this->buildRetentionBar('Relevés bruts', 'raw', 7,
+                    'balise_readings', 'read_at', 'balise_id', $active, 'balise_source'),
+            ];
+        });
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    public function stationRetentionBars(): array
+    {
+        return $this->cachedBars(self::BARS_KEY_STATIONS, function () {
+            $active = WeatherStation::where('active', true)->count();
+            return [
+                $this->buildRetentionBar('Archives prévisions', 'archive', 30,
+                    'forecast_archive_stations', 'target_at', 'weather_station_id', $active, 'model'),
+                $this->buildRetentionBar('Agrégat horaire', 'hourly', 30,
+                    'weather_station_observations_hourly', 'hour_at', 'weather_station_id', $active, 'station_network'),
+                $this->buildRetentionBar('Relevés bruts', 'raw', 7,
+                    'weather_station_observations', 'observed_at', 'weather_station_id', $active, 'station_network'),
+            ];
+        });
+    }
+
+    /**
+     * Cache paresseux + inflation post-cache. Payload caché = primitives
+     * uniquement (last_at en string) ; on reconvertit en Carbon à la
+     * lecture pour la vue. Sur erreur : rebuild sans cache, puis [].
+     *
+     * @param callable():array<int,array<string,mixed>> $build
+     * @return array<int, array<string, mixed>>
+     */
+    private function cachedBars(string $key, callable $build): array
+    {
+        try {
+            return $this->inflateBars(Cache::remember($key, self::BARS_CACHE_TTL_S, $build));
+        } catch (\Throwable $e) {
+            Log::error('DataCoverage::cachedBars failed', ['key' => $key, 'error' => $e->getMessage()]);
+            try {
+                return $this->inflateBars($build());
+            } catch (\Throwable) {
+                return [];
+            }
+        }
+    }
+
+    /**
+     * Construit une barre de rétention pour un flux donné.
+     *
+     * @param string $breakdown 'model' | 'balise_source' | 'station_network'
+     * @return array<string, mixed>
+     */
+    private function buildRetentionBar(
+        string $label,
+        string $key,
+        int $retentionDays,
+        string $table,
+        string $dateCol,
+        string $unitCol,
+        int $activeUnits,
+        string $breakdown,
+    ): array {
+        $window = $retentionDays + self::RETENTION_MARGIN_DAYS;
+        $today  = CarbonImmutable::now()->startOfDay();
+        $start  = $today->subDays($window - 1);
+
+        $bar = [
+            'key'            => $key,
+            'label'          => $label,
+            'retention_days' => $retentionDays,
+            'window_days'    => $window,
+            'active_units'   => $activeUnits,
+            'segments'       => [],
+            'breakdown'      => [],
+            'oldest_offset'  => null,
+            'oldest_date'    => null,
+            'last_at'        => null,
+            'verdict'        => ['empty' => true, 'has_hole' => false, 'purge_late' => false, 'complete' => false],
+        ];
+
+        if (! DB::getSchemaBuilder()->hasTable($table)) {
+            return $bar;
+        }
+
+        $startStr = $start->format('Y-m-d H:i:s');
+
+        $rows = DB::table($table)
+            ->where($dateCol, '>=', $startStr)
+            ->selectRaw("DATE($dateCol) d, COUNT(DISTINCT HOUR($dateCol)) h, COUNT(DISTINCT $unitCol) u")
+            ->groupBy('d')
+            ->get();
+
+        $byDay = [];
+        foreach ($rows as $r) {
+            $byDay[$r->d] = ['h' => (int) $r->h, 'u' => (int) $r->u];
+        }
+
+        // MIN/MAX sur toute la table (hors fenêtre) → détecte le débordement
+        // de purge et donne la dernière réception. Index sur la colonne date
+        // → coût négligeable.
+        $bounds = DB::table($table)->selectRaw("MIN($dateCol) mn, MAX($dateCol) mx")->first();
+        $oldest = ($bounds && $bounds->mn) ? CarbonImmutable::parse($bounds->mn)->startOfDay() : null;
+
+        $segments     = $this->daysToSegments($today, $window, $retentionDays, $byDay, $activeUnits);
+        $oldestOffset = $oldest ? (int) round(($oldest->timestamp - $today->timestamp) / 86400) : null;
+
+        // Trou = un jour passé DANS la rétention (hors aujourd'hui, hors marge)
+        // qui n'est pas plein.
+        $hasHole = false;
+        foreach ($segments as $s) {
+            if (! $s['is_today'] && ! $s['beyond'] && $s['offset'] <= -1 && $s['state'] !== 'green') {
+                $hasHole = true;
+                break;
+            }
+        }
+
+        // Purge en retard : la plus ancienne donnée est plus vieille que la
+        // rétention + 1 jour de grâce (timing du job de purge à 03h00).
+        $purgeLate = $oldestOffset !== null && $oldestOffset <= -($retentionDays + 1);
+
+        $bar['segments']      = $segments;
+        $bar['breakdown']     = $this->buildBreakdown($breakdown, $table, $dateCol, $unitCol, $startStr, $today, $window, $retentionDays, $activeUnits);
+        $bar['oldest_offset'] = $oldestOffset;
+        $bar['oldest_date']   = $oldest?->format('Y-m-d');
+        $bar['last_at']       = ($bounds && $bounds->mx) ? (string) $bounds->mx : null;
+        $bar['verdict']       = [
+            'empty'      => $activeUnits === 0,
+            'has_hole'   => $hasHole,
+            'purge_late' => $purgeLate,
+            'complete'   => $activeUnits > 0 && ! $hasHole,
+        ];
+
+        return $bar;
+    }
+
+    /**
+     * Transforme les stats journalières {Y-m-d => [h,u]} en segments
+     * colorés sur la fenêtre [today - (window-1) … today].
+     *
+     * @param array<string, array{h:int,u:int}> $byDay
+     * @return array<int, array<string, mixed>>
+     */
+    private function daysToSegments(
+        CarbonImmutable $today,
+        int $window,
+        int $retentionDays,
+        array $byDay,
+        int $activeUnits,
+    ): array {
+        $segments = [];
+        for ($offset = -($window - 1); $offset <= 0; $offset++) {
+            $day  = $today->addDays($offset);
+            $date = $day->format('Y-m-d');
+            $h    = $byDay[$date]['h'] ?? 0;
+            $u    = $byDay[$date]['u'] ?? 0;
+            $isToday = ($offset === 0);
+
+            $segments[] = [
+                'offset'      => $offset,
+                'date'        => $date,
+                'is_today'    => $isToday,
+                'beyond'      => $offset <= -$retentionDays,
+                'hours'       => $h,
+                'units'       => $u,
+                'units_total' => $activeUnits,
+                'state'       => $this->segmentState($h, $u, $activeUnits, $isToday),
+            ];
+        }
+        return $segments;
+    }
+
+    private function segmentState(int $hours, int $units, int $activeUnits, bool $isToday): string
+    {
+        if ($isToday) {
+            return 'pending';
+        }
+        if ($hours === 0 || $activeUnits <= 0) {
+            return 'gray';
+        }
+        $pct = ($units / $activeUnits) * 100;
+        return ($hours >= self::SEG_HOURS_FULL && $pct >= self::SEG_UNITS_FULL_PCT)
+            ? 'green'
+            : 'orange';
+    }
+
+    /**
+     * Détail dépliable : sous-barres par modèle (archives) ou par réseau
+     * (relevés / agrégat horaire).
+     *
+     * @return array<int, array{code:string, label:string, segments:array}>
+     */
+    private function buildBreakdown(
+        string $mode,
+        string $table,
+        string $dateCol,
+        string $unitCol,
+        string $startStr,
+        CarbonImmutable $today,
+        int $window,
+        int $retentionDays,
+        int $activeUnits,
+    ): array {
+        try {
+            return match ($mode) {
+                'model' => $this->breakdownByModel($table, $dateCol, $unitCol, $startStr, $today, $window, $retentionDays, $activeUnits),
+                'balise_source' => $this->breakdownByNetwork($table, $dateCol, $unitCol, $startStr, $today, $window, $retentionDays, 'balises', 'source', fn ($c) => $this->sourceLabel($c)),
+                'station_network' => $this->breakdownByNetwork($table, $dateCol, $unitCol, $startStr, $today, $window, $retentionDays, 'weather_stations', 'network', fn ($c) => $this->stationNetworkLabel($c)),
+                default => [],
+            };
+        } catch (\Throwable $e) {
+            Log::warning('DataCoverage breakdown failed', ['mode' => $mode, 'error' => $e->getMessage()]);
+            return [];
+        }
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function breakdownByModel(string $table, string $dateCol, string $unitCol, string $startStr, CarbonImmutable $today, int $window, int $retentionDays, int $activeUnits): array
+    {
+        $rows = DB::table($table)
+            ->where($dateCol, '>=', $startStr)
+            ->selectRaw("weather_model_id mid, DATE($dateCol) d, COUNT(DISTINCT HOUR($dateCol)) h, COUNT(DISTINCT $unitCol) u")
+            ->groupBy('mid', 'd')
+            ->get();
+
+        $perModel = [];
+        foreach ($rows as $r) {
+            $perModel[(int) $r->mid][$r->d] = ['h' => (int) $r->h, 'u' => (int) $r->u];
+        }
+
+        $models = WeatherModel::query()
+            ->where('active', true)
+            ->where('max_horizon_h', '>=', 24)
+            ->orderBy('name')
+            ->get();
+
+        $out = [];
+        foreach ($models as $m) {
+            $out[] = [
+                'code'     => $m->code,
+                'label'    => $m->name,
+                'segments' => $this->daysToSegments($today, $window, $retentionDays, $perModel[$m->id] ?? [], $activeUnits),
+            ];
+        }
+        return $out;
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function breakdownByNetwork(string $table, string $dateCol, string $unitCol, string $startStr, CarbonImmutable $today, int $window, int $retentionDays, string $joinTable, string $netCol, callable $label): array
+    {
+        $rows = DB::table($table)
+            ->join($joinTable, "$joinTable.id", '=', "$table.$unitCol")
+            ->where("$table.$dateCol", '>=', $startStr)
+            ->where("$joinTable.active", true)
+            ->selectRaw("$joinTable.$netCol net, DATE($table.$dateCol) d, COUNT(DISTINCT HOUR($table.$dateCol)) h, COUNT(DISTINCT $table.$unitCol) u")
+            ->groupBy('net', 'd')
+            ->get();
+
+        $perNet = [];
+        foreach ($rows as $r) {
+            $net = $r->net ?: 'inconnu';
+            $perNet[$net][$r->d] = ['h' => (int) $r->h, 'u' => (int) $r->u];
+        }
+
+        $unitsByNet = DB::table($joinTable)
+            ->where('active', true)
+            ->selectRaw("$netCol net, COUNT(*) c")
+            ->groupBy('net')
+            ->pluck('c', 'net');
+
+        $out = [];
+        foreach ($perNet as $net => $byDay) {
+            $out[] = [
+                'code'     => (string) $net,
+                'label'    => $label((string) $net),
+                'segments' => $this->daysToSegments($today, $window, $retentionDays, $byDay, (int) ($unitsByNet[$net] ?? 0)),
+            ];
+        }
+        usort($out, fn ($a, $b) => strcmp($a['label'], $b['label']));
+        return $out;
+    }
+
+    /**
+     * Reconvertit `last_at` (string) en Carbon dans chaque barre, après
+     * lecture du cache.
+     *
+     * @param array<int, array<string, mixed>> $bars
+     * @return array<int, array<string, mixed>>
+     */
+    private function inflateBars(array $bars): array
+    {
+        foreach ($bars as &$bar) {
+            if (isset($bar['last_at']) && is_string($bar['last_at'])) {
+                try {
+                    $bar['last_at'] = Carbon::parse($bar['last_at']);
+                } catch (\Throwable) {
+                    $bar['last_at'] = null;
+                }
+            }
+        }
+        return $bars;
+    }
 }

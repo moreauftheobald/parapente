@@ -1,4 +1,6 @@
-@if (session('sync_output'))
+@include('admin.data._retention-bars', ['bars' => $retentionBars ?? []])
+
+        @if (session('sync_output'))
             <div class="mb-6 bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
                 <div class="px-4 py-2 text-xs uppercase tracking-wider text-gray-500 border-b border-gray-800">
                     Résultat de la dernière opération

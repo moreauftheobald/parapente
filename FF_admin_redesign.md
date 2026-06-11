@@ -124,6 +124,20 @@ santé est portée par le bloc Sidecar.
      partial `_monitor-tab` + helpers monitor du contrôleur.
    - Reste : rapprocher les écrans APIs météo / APIs stations (même
      pattern) — non critique.
+4bis. **Barres de rétention / profondeur** — **FAIT (2026-06-11)** : bandeau
+   « coup d'œil » en tête des onglets Balises et Stations de `/admin/data`.
+   Une barre par flux (archives prévisions 30 j · agrégat horaire 30 j ·
+   relevés bruts 7 j) ; segment = jour (plus ancien à gauche), couleur =
+   présence (vert : ≥ 22 h ET ≥ 90 % d'unités · orange partiel · gris
+   absent · hachuré = jour en cours), trait à la borne de rétention, badge
+   verdict (✅ complets / ⚠️ trou / ⚠️ purge en retard via « plus ancienne
+   donnée J-X »), détail dépliable par modèle/réseau. Calcul
+   `DataCoverage::{balise,station}RetentionBars()`, **cache paresseux 30 min
+   invalidé par les jobs** (`DataCoverage::forgetBars()` dans les jobs de
+   collecte/agrégation/archive + purge). Au passage, l'agrégat horaire
+   stations (`weather_station_observations_hourly`) est enfin exploité.
+   Les grilles J-7→J+5 existantes sont conservées dessous.
+
 5. **Tendances** : sparklines 7-30 j sur la couverture et les erreurs
    (sources : `weather_fetch_log` 30 j, `job_monitors` 7 j — suffisant sans
    nouvelle table) ; à brancher sur le dashboard.

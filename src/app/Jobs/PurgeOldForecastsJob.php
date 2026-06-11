@@ -166,6 +166,10 @@ class PurgeOldForecastsJob implements ShouldQueue
 
         $deletedMonitors = JobMonitor::purgeOlderThan(self::JOB_MONITOR_RETENTION_DAYS);
 
+        // La purge déplace la borne « plus ancienne donnée » de tous les flux.
+        \App\Services\DataCoverage::forgetBars('balises');
+        \App\Services\DataCoverage::forgetBars('stations');
+
         $this->trackSuccess(
             sprintf(
                 'forecasts %d · archives %d/%d · horaires %d/%d · brut %d/%d · fetch_log %d',

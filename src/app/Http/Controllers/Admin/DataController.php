@@ -52,6 +52,7 @@ class DataController extends Controller
             $data['balisesPiou']        = Balise::where('source', 'pioupiou')->count();
             $data['balisesWindy']       = Balise::where('source', 'windy')->count();
             $data['windyKeyConfigured'] = trim((string) $settings->get('windy.api_key', '')) !== '';
+            $data['retentionBars']      = $coverage->baliseRetentionBars();
             $data['baliseForecasts']    = $coverage->baliseForecastCoverage();
             $data['baliseReadings']     = $coverage->baliseReadingsCoverage();
         }
@@ -67,6 +68,7 @@ class DataController extends Controller
                 'metar'      => WeatherStation::where('network', 'metar')->count(),
                 'infoclimat' => WeatherStation::where('network', 'infoclimat')->count(),
             ];
+            $data['retentionBars']    = $coverage->stationRetentionBars();
             $data['stationForecasts'] = $coverage->stationForecastCoverage();
             $data['stationReadings']  = $coverage->stationReadingsCoverage();
         }
