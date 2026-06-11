@@ -10,10 +10,11 @@
         'pending' => 'bg-gray-600',
         default   => 'bg-gray-800',
     };
-    $segTitle = function (array $s): string {
+    $segTitle = function (array $s, bool $sampled = false): string {
         if ($s['is_today']) return $s['date'] . ' — en cours (jour incomplet)';
         if ($s['state'] === 'gray') return $s['date'] . ' — aucune donnée';
-        return $s['date'] . ' — ' . $s['hours'] . ' h/24 · ' . $s['units'] . '/' . $s['units_total'] . ' unités';
+        $units = $s['units'] . '/' . $s['units_total'] . ' unités' . ($sampled ? ' (à 12h)' : '');
+        return $s['date'] . ' — ' . $s['hours'] . ' h/24 · ' . $units;
     };
 @endphp
 
@@ -59,7 +60,7 @@
                 <div class="flex gap-px h-5 rounded overflow-hidden bg-gray-950">
                     @foreach ($bar['segments'] as $s)
                         <div class="flex-1 {{ $segClass($s) }} @if (! $s['beyond'] && $loop->index > 0 && $bar['segments'][$loop->index - 1]['beyond']) rb-boundary @endif @if ($s['is_today']) rb-today @endif"
-                             title="{{ $segTitle($s) }}"></div>
+                             title="{{ $segTitle($s, $bar['sampled'] ?? false) }}"></div>
                     @endforeach
                 </div>
 
@@ -90,7 +91,7 @@
                                 <div class="w-32 shrink-0 text-[11px] text-gray-400 truncate" title="{{ $bd['label'] }}">{{ $bd['label'] }}</div>
                                 <div class="flex gap-px h-3 rounded overflow-hidden bg-gray-950 flex-1">
                                     @foreach ($bd['segments'] as $s)
-                                        <div class="flex-1 {{ $segClass($s) }} @if ($s['is_today']) rb-today @endif" title="{{ $segTitle($s) }}"></div>
+                                        <div class="flex-1 {{ $segClass($s) }} @if ($s['is_today']) rb-today @endif" title="{{ $segTitle($s, $bar['sampled'] ?? false) }}"></div>
                                     @endforeach
                                 </div>
                             </div>
