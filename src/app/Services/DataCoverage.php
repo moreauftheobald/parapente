@@ -45,7 +45,7 @@ class DataCoverage
      * entrée (avec p.ex. des Eloquent sérialisés) crashe le template
      * Blade au déballage (`__PHP_Incomplete_Class`).
      */
-    private const CACHE_VERSION = 'v2';
+    private const CACHE_VERSION = 'v3';
 
     /** Périmètre des prévisions sites : 5 jours futurs (J → J+4) */
     private const SITE_FORECAST_DAYS_FUTURE = 5;
@@ -76,6 +76,8 @@ class DataCoverage
         Cache::forget('data_coverage.' . self::CACHE_VERSION . '.balise_readings');
         Cache::forget('data_coverage.' . self::CACHE_VERSION . '.station_forecasts');
         Cache::forget('data_coverage.' . self::CACHE_VERSION . '.station_readings');
+        Cache::forget(self::BARS_KEY_BALISES);
+        Cache::forget(self::BARS_KEY_STATIONS);
     }
 
     /**
@@ -100,13 +102,14 @@ class DataCoverage
      */
     public function modelFreshness(): array
     {
-        // Cache désactivé temporairement : la persistance file/redis a
-        // pollué les entrées avec des Eloquent sérialisés (avant le
-        // refactor lightModel) qui se déballent en __PHP_Incomplete_Class
-        // → 500 dans Blade. Mieux vaut rebuilder à chaque appel (page
-        // admin consultée ponctuellement, build < 100 ms).
         try {
-            return $this->inflateModelFreshness($this->buildModelFreshness());
+            return $this->inflateModelFreshness(
+                Cache::remember(
+                    'data_coverage.' . self::CACHE_VERSION . '.model_freshness',
+                    self::CACHE_TTL_S,
+                    fn () => $this->buildModelFreshness(),
+                )
+            );
         } catch (\Throwable $e) {
             Log::error('DataCoverage::modelFreshness build failed', [
                 'error' => $e->getMessage(),
@@ -852,17 +855,21 @@ class DataCoverage
         callable $inflate,
         array $default,
     ): array {
-        // Cache désactivé temporairement (cf. commentaire sur
-        // modelFreshness()). Le paramètre $cacheKey est conservé pour
-        // ne pas casser la signature et faciliter la réactivation.
         try {
-            return $inflate($build());
+            return $inflate(Cache::remember($cacheKey, self::CACHE_TTL_S, $build));
         } catch (\Throwable $e) {
             Log::error("DataCoverage::{$cacheKey} build failed", [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
-            return $default;
+            // Cache corrompu ou build en échec : on retente sans cache
+            // avant de rendre la section vide.
+            try {
+                Cache::forget($cacheKey);
+                return $inflate($build());
+            } catch (\Throwable) {
+                return $default;
+            }
         }
     }
 
@@ -1010,11 +1017,11 @@ class DataCoverage
             $active = Balise::where('active', true)->count();
             return [
                 $this->buildRetentionBar('Archives prévisions', 'archive', 30,
-                    'forecast_archive_balises', 'target_at', 'balise_id', $active, 'model'),
+                    'forecast_archive_balises', 'target_at', 'balise_id', $active, 'model', slotted: true),
                 $this->buildRetentionBar('Agrégat horaire', 'hourly', 30,
-                    'balise_readings_hourly', 'hour_at', 'balise_id', $active, 'balise_source'),
+                    'balise_readings_hourly', 'hour_at', 'balise_id', $active, 'balise_source', slotted: true),
                 $this->buildRetentionBar('Relevés bruts', 'raw', 7,
-                    'balise_readings', 'read_at', 'balise_id', $active, 'balise_source'),
+                    'balise_readings', 'read_at', 'balise_id', $active, 'balise_source', slotted: false),
             ];
         });
     }
@@ -1026,11 +1033,11 @@ class DataCoverage
             $active = WeatherStation::where('active', true)->count();
             return [
                 $this->buildRetentionBar('Archives prévisions', 'archive', 30,
-                    'forecast_archive_stations', 'target_at', 'weather_station_id', $active, 'model'),
+                    'forecast_archive_stations', 'target_at', 'weather_station_id', $active, 'model', slotted: true),
                 $this->buildRetentionBar('Agrégat horaire', 'hourly', 30,
-                    'weather_station_observations_hourly', 'hour_at', 'weather_station_id', $active, 'station_network'),
+                    'weather_station_observations_hourly', 'hour_at', 'weather_station_id', $active, 'station_network', slotted: true),
                 $this->buildRetentionBar('Relevés bruts', 'raw', 7,
-                    'weather_station_observations', 'observed_at', 'weather_station_id', $active, 'station_network'),
+                    'weather_station_observations', 'observed_at', 'weather_station_id', $active, 'station_network', slotted: false),
             ];
         });
     }
@@ -1072,6 +1079,7 @@ class DataCoverage
         string $unitCol,
         int $activeUnits,
         string $breakdown,
+        bool $slotted = false,
     ): array {
         $window = $retentionDays + self::RETENTION_MARGIN_DAYS;
         $today  = CarbonImmutable::now()->startOfDay();
@@ -1083,6 +1091,7 @@ class DataCoverage
             'retention_days' => $retentionDays,
             'window_days'    => $window,
             'active_units'   => $activeUnits,
+            'sampled'        => $slotted,
             'segments'       => [],
             'breakdown'      => [],
             'oldest_offset'  => null,
@@ -1097,16 +1106,9 @@ class DataCoverage
 
         $startStr = $start->format('Y-m-d H:i:s');
 
-        $rows = DB::table($table)
-            ->where($dateCol, '>=', $startStr)
-            ->selectRaw("DATE($dateCol) d, COUNT(DISTINCT HOUR($dateCol)) h, COUNT(DISTINCT $unitCol) u")
-            ->groupBy('d')
-            ->get();
-
-        $byDay = [];
-        foreach ($rows as $r) {
-            $byDay[$r->d] = ['h' => (int) $r->h, 'u' => (int) $r->u];
-        }
+        $byDay = $slotted
+            ? $this->slottedDayStats($table, $dateCol, $unitCol, $today, $window)
+            : $this->genericDayStats($table, $dateCol, $unitCol, $startStr);
 
         // MIN/MAX sur toute la table (hors fenêtre) → détecte le débordement
         // de purge et donne la dernière réception. Index sur la colonne date
@@ -1132,7 +1134,7 @@ class DataCoverage
         $purgeLate = $oldestOffset !== null && $oldestOffset <= -($retentionDays + 1);
 
         $bar['segments']      = $segments;
-        $bar['breakdown']     = $this->buildBreakdown($breakdown, $table, $dateCol, $unitCol, $startStr, $today, $window, $retentionDays, $activeUnits);
+        $bar['breakdown']     = $this->buildBreakdown($breakdown, $table, $dateCol, $unitCol, $startStr, $today, $window, $retentionDays, $activeUnits, $slotted);
         $bar['oldest_offset'] = $oldestOffset;
         $bar['oldest_date']   = $oldest?->format('Y-m-d');
         $bar['last_at']       = ($bounds && $bounds->mx) ? (string) $bounds->mx : null;
@@ -1144,6 +1146,81 @@ class DataCoverage
         ];
 
         return $bar;
+    }
+
+    /**
+     * Stats journalières d'une table à créneaux horaires EXACTS
+     * (`target_at` / `hour_at` tombent pile sur l'heure) — le cas des
+     * archives de prévisions et des agrégats horaires, dont la
+     * volumétrie (plusieurs millions de lignes pour les archives à
+     * cause de la dimension bucket) interdit un GROUP BY plein.
+     *
+     * Deux requêtes en accès index pur :
+     *  1. présence horaire : DISTINCT sur la liste exhaustive des
+     *     créneaux de la fenêtre (window × 24 timestamps) — exact ;
+     *  2. unités : COUNT(DISTINCT unit) échantillonné sur le créneau
+     *     de 12h00 de chaque jour (33 timestamps) — approximation
+     *     « état à midi », suffisante pour le verdict de présence.
+     *
+     * @return array<string, array{h:int,u:int}>
+     */
+    private function slottedDayStats(string $table, string $dateCol, string $unitCol, CarbonImmutable $today, int $window): array
+    {
+        $hourSlots = [];
+        $noonSlots = [];
+        for ($offset = -($window - 1); $offset <= 0; $offset++) {
+            $day = $today->addDays($offset);
+            for ($h = 0; $h < 24; $h++) {
+                $hourSlots[] = $day->setTime($h, 0)->format('Y-m-d H:i:s');
+            }
+            $noonSlots[] = $day->setTime(12, 0)->format('Y-m-d H:i:s');
+        }
+
+        $byDay = [];
+
+        $present = DB::table($table)
+            ->whereIn($dateCol, $hourSlots)
+            ->distinct()
+            ->pluck($dateCol);
+        foreach ($present as $ts) {
+            $d = substr((string) $ts, 0, 10);
+            $byDay[$d]['h'] = ($byDay[$d]['h'] ?? 0) + 1;
+            $byDay[$d]['u'] ??= 0;
+        }
+
+        $units = DB::table($table)
+            ->whereIn($dateCol, $noonSlots)
+            ->selectRaw("DATE($dateCol) d, COUNT(DISTINCT $unitCol) u")
+            ->groupBy('d')
+            ->get();
+        foreach ($units as $r) {
+            $byDay[$r->d]['h'] ??= 0;
+            $byDay[$r->d]['u'] = (int) $r->u;
+        }
+
+        return $byDay;
+    }
+
+    /**
+     * Stats journalières par GROUP BY classique — réservé aux tables
+     * brutes (timestamps quelconques) dont la fenêtre est courte
+     * (rétention 7 j + marge).
+     *
+     * @return array<string, array{h:int,u:int}>
+     */
+    private function genericDayStats(string $table, string $dateCol, string $unitCol, string $startStr): array
+    {
+        $rows = DB::table($table)
+            ->where($dateCol, '>=', $startStr)
+            ->selectRaw("DATE($dateCol) d, COUNT(DISTINCT HOUR($dateCol)) h, COUNT(DISTINCT $unitCol) u")
+            ->groupBy('d')
+            ->get();
+
+        $byDay = [];
+        foreach ($rows as $r) {
+            $byDay[$r->d] = ['h' => (int) $r->h, 'u' => (int) $r->u];
+        }
+        return $byDay;
     }
 
     /**
@@ -1212,12 +1289,13 @@ class DataCoverage
         int $window,
         int $retentionDays,
         int $activeUnits,
+        bool $slotted = false,
     ): array {
         try {
             return match ($mode) {
-                'model' => $this->breakdownByModel($table, $dateCol, $unitCol, $startStr, $today, $window, $retentionDays, $activeUnits),
-                'balise_source' => $this->breakdownByNetwork($table, $dateCol, $unitCol, $startStr, $today, $window, $retentionDays, 'balises', 'source', fn ($c) => $this->sourceLabel($c)),
-                'station_network' => $this->breakdownByNetwork($table, $dateCol, $unitCol, $startStr, $today, $window, $retentionDays, 'weather_stations', 'network', fn ($c) => $this->stationNetworkLabel($c)),
+                'model' => $this->breakdownByModel($table, $dateCol, $unitCol, $today, $window, $retentionDays, $activeUnits),
+                'balise_source' => $this->breakdownByNetwork($table, $dateCol, $unitCol, $startStr, $today, $window, $retentionDays, 'balises', 'source', fn ($c) => $this->sourceLabel($c), $slotted),
+                'station_network' => $this->breakdownByNetwork($table, $dateCol, $unitCol, $startStr, $today, $window, $retentionDays, 'weather_stations', 'network', fn ($c) => $this->stationNetworkLabel($c), $slotted),
                 default => [],
             };
         } catch (\Throwable $e) {
@@ -1226,18 +1304,41 @@ class DataCoverage
         }
     }
 
-    /** @return array<int, array<string, mixed>> */
-    private function breakdownByModel(string $table, string $dateCol, string $unitCol, string $startStr, CarbonImmutable $today, int $window, int $retentionDays, int $activeUnits): array
+    /**
+     * Liste des créneaux 12h00 de la fenêtre (échantillonnage des
+     * tables à créneaux exacts — accès index pur via IN).
+     *
+     * @return array<int, string>
+     */
+    private function noonSlots(CarbonImmutable $today, int $window): array
+    {
+        $slots = [];
+        for ($offset = -($window - 1); $offset <= 0; $offset++) {
+            $slots[] = $today->addDays($offset)->setTime(12, 0)->format('Y-m-d H:i:s');
+        }
+        return $slots;
+    }
+
+    /**
+     * Détail par modèle (archives, toujours slotted) : présence + unités
+     * échantillonnées au créneau 12h00 de chaque jour. h := 24 si le
+     * créneau est présent (le détail fin des heures reste sur la barre
+     * principale — exacte).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function breakdownByModel(string $table, string $dateCol, string $unitCol, CarbonImmutable $today, int $window, int $retentionDays, int $activeUnits): array
     {
         $rows = DB::table($table)
-            ->where($dateCol, '>=', $startStr)
-            ->selectRaw("weather_model_id mid, DATE($dateCol) d, COUNT(DISTINCT HOUR($dateCol)) h, COUNT(DISTINCT $unitCol) u")
+            ->whereIn($dateCol, $this->noonSlots($today, $window))
+            ->selectRaw("weather_model_id mid, DATE($dateCol) d, COUNT(DISTINCT $unitCol) u")
             ->groupBy('mid', 'd')
             ->get();
 
         $perModel = [];
         foreach ($rows as $r) {
-            $perModel[(int) $r->mid][$r->d] = ['h' => (int) $r->h, 'u' => (int) $r->u];
+            $u = (int) $r->u;
+            $perModel[(int) $r->mid][$r->d] = ['h' => $u > 0 ? 24 : 0, 'u' => $u];
         }
 
         $models = WeatherModel::query()
@@ -1258,15 +1359,31 @@ class DataCoverage
     }
 
     /** @return array<int, array<string, mixed>> */
-    private function breakdownByNetwork(string $table, string $dateCol, string $unitCol, string $startStr, CarbonImmutable $today, int $window, int $retentionDays, string $joinTable, string $netCol, callable $label): array
+    private function breakdownByNetwork(string $table, string $dateCol, string $unitCol, string $startStr, CarbonImmutable $today, int $window, int $retentionDays, string $joinTable, string $netCol, callable $label, bool $slotted): array
     {
-        $rows = DB::table($table)
+        $query = DB::table($table)
             ->join($joinTable, "$joinTable.id", '=', "$table.$unitCol")
-            ->where("$table.$dateCol", '>=', $startStr)
-            ->where("$joinTable.active", true)
-            ->selectRaw("$joinTable.$netCol net, DATE($table.$dateCol) d, COUNT(DISTINCT HOUR($table.$dateCol)) h, COUNT(DISTINCT $table.$unitCol) u")
-            ->groupBy('net', 'd')
-            ->get();
+            ->where("$joinTable.active", true);
+
+        if ($slotted) {
+            // Table à créneaux horaires exacts : échantillon 12h00, h := 24
+            // si présent (accès index pur, pas de scan de fenêtre).
+            $rows = $query
+                ->whereIn("$table.$dateCol", $this->noonSlots($today, $window))
+                ->selectRaw("$joinTable.$netCol net, DATE($table.$dateCol) d, COUNT(DISTINCT $table.$unitCol) u")
+                ->groupBy('net', 'd')
+                ->get()
+                ->map(function ($r) {
+                    $r->h = ((int) $r->u) > 0 ? 24 : 0;
+                    return $r;
+                });
+        } else {
+            $rows = $query
+                ->where("$table.$dateCol", '>=', $startStr)
+                ->selectRaw("$joinTable.$netCol net, DATE($table.$dateCol) d, COUNT(DISTINCT HOUR($table.$dateCol)) h, COUNT(DISTINCT $table.$unitCol) u")
+                ->groupBy('net', 'd')
+                ->get();
+        }
 
         $perNet = [];
         foreach ($rows as $r) {
