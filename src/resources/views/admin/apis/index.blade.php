@@ -1,5 +1,5 @@
 @extends('layouts.admin')
-@section('title', 'APIs météo')
+@section('title', 'APIs externes')
 
 @php
     $authBadge = function (string $type): string {
@@ -14,10 +14,15 @@
 
 @section('content')
 <div>
-    <x-admin.page-title title="APIs météo"
-        subtitle="Sources de données pour le fetch des modèles. Chaque modèle pointe vers UNE API (politique single-shot)." />
+    <x-admin.page-title title="APIs externes"
+        subtitle="Sources de données prévisions (modèles météo) et observations (réseaux de stations)." />
 
-    <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+    {{-- ── Cadre 1 : APIs prévisions ──────────────────────────────── --}}
+    <h2 class="text-xs uppercase tracking-wider text-gray-400 mb-3">
+        <i class="fa-solid fa-cloud text-sky-400"></i> APIs prévisions (modèles météo)
+        <span class="text-gray-600 normal-case">— chaque modèle pointe vers UNE API (politique single-shot)</span>
+    </h2>
+    <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden mb-8">
         <table class="w-full text-sm">
             <thead class="bg-gray-950 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-800">
                 <tr>
@@ -118,5 +123,12 @@
         <code class="font-mono text-gray-400">WeatherApiRegistry</code>). Pour ajouter une nouvelle source, créer une classe
         implémentant <code class="font-mono text-gray-400">WeatherApiInterface</code> et l'enregistrer dans le registry.
     </p>
+
+    {{-- ── Cadre 2 : APIs stations météo ──────────────────────────── --}}
+    <h2 class="text-xs uppercase tracking-wider text-gray-400 mb-3">
+        <i class="fa-solid fa-tower-observation" style="color:#3b82f6"></i> APIs stations météo
+        <span class="text-gray-600 normal-case">— une API par réseau d'observations</span>
+    </h2>
+    @include('admin.apis._station-apis-table')
 </div>
 @endsection

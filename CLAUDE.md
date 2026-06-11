@@ -456,7 +456,7 @@ flash messages globaux via `<x-admin.alert>` — ne pas les répéter dans les v
 | **Consensus & sidecar** (`SectionSettingsController`, `/admin/meteo/settings`) | 4 onglets : consensus par variable (30 configs JSON), variables = `model_variable_overrides`, dépendances (graphe sidecar), état sidecar. Les anciennes pages « Paramètres — Sites/Balises/Stations/Contenu » ont été supprimées (généraux → hub Paramètres, data → Data/couverture, logs → Logs/jobs) |
 | **Data / couverture** (`DataController`, `/admin/data`) | 4 onglets (modèles / sites / balises / stations) : fraîcheur des fetches, couverture prévisions + observations (`DataCoverage`), imports ParaglidingEarth, découverte balises/stations |
 | Sites / Balises / Stations / Users | listings filtrables (`HasFilterableIndex` : pays/région/département…), fiches, toggles |
-| Modèles / APIs météo / APIs stations | édition cadence, activation, credentials (OAuth2 MF, clés), test/inspect |
+| Modèles / APIs | modèles : cadence, activation, test/inspect ; **APIs externes** (`/admin/apis`, écran unique à 2 cadres : APIs prévisions + APIs stations) : credentials (OAuth2 MF, clés), quotas, toggle |
 | Sync (`DataSyncController`) | import sites ParaglidingEarth, découverte balises/stations, deploy |
 | Qualité données | doublons sites/balises (seuils `quality.*`), ignore/unignore |
 | Fiabilité | compare / horizon / models / exports (cf. Fiabilité) |

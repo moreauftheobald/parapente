@@ -52,11 +52,8 @@
                 <a href="{{ route('admin.models.index') }}" class="{{ $adminLink($adminSegment === 'models') }}">
                     <i class="fa-solid fa-cloud w-4 text-center"></i> Modèles météo
                 </a>
-                <a href="{{ route('admin.apis.index') }}" class="{{ $adminLink($adminSegment === 'apis') }}">
-                    <i class="fa-solid fa-plug w-4 text-center"></i> APIs météo
-                </a>
-                <a href="{{ route('admin.station-apis.index') }}" class="{{ $adminLink($adminSegment === 'station-apis') }}">
-                    <i class="fa-solid fa-plug w-4 text-center" style="color:#3b82f6"></i> APIs stations
+                <a href="{{ route('admin.apis.index') }}" class="{{ $adminLink($adminSegment === 'apis' || $adminSegment === 'station-apis') }}">
+                    <i class="fa-solid fa-plug w-4 text-center"></i> APIs externes
                 </a>
                 <a href="{{ route('admin.reliability.compare') }}" class="{{ $adminLink($adminSegment === 'reliability') }}">
                     <i class="fa-solid fa-flask-vial w-4 text-center"></i> Fiabilité des modèles
