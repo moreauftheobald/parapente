@@ -55,6 +55,7 @@ class SupervisionService
         \App\Jobs\AggregateStationObservationsHourlyJob::class => ['Agrégation horaire stations',     'Stations', 60],
         \App\Jobs\ComputeBaliseConsensusCompareJob::class      => ['Triple-consensus (shadow)',       'Fiabilité', 60],
         \App\Jobs\ComputeModelReliabilityJob::class            => ['Fiabilité des modèles',           'Fiabilité', 1440],
+        \App\Jobs\WarmDataCoverageJob::class                   => ['Précalcul couverture données',    'Système',  60],
         \App\Jobs\PurgeOldForecastsJob::class                  => ['Purge données météo',             'Système',  1440],
         \App\Jobs\PurgePageViewsJob::class                     => ['Purge trafic',                    'Système',  1440],
     ];
