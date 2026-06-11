@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Services\DataCoverage;
 use App\Models\Balise;
 use App\Models\BaliseReading;
 use App\Services\Balises\BaliseConstants;
@@ -151,6 +152,7 @@ abstract class FetchBaliseReadingsJob implements ShouldQueue
         // Le bundle servi par /api/balises est désormais obsolète : purge.
         $cache->forgetBundle();
 
+        DataCoverage::forgetBars('balises');
         $this->trackSuccess("{$inserted} lectures insérées, {$deactivated} désactivées", ['inserted' => $inserted, 'deactivated' => $deactivated, 'polled' => $balises->count()]);
 
         Log::info(static::class . ' completed', [

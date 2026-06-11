@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Services\DataCoverage;
 use App\Jobs\Concerns\TracksExecution;
 use Carbon\Carbon;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -55,6 +56,7 @@ class AggregateStationObservationsHourlyJob implements ShouldQueue
 
         $upserted = self::aggregateRange($startHour, $endHour);
 
+        DataCoverage::forgetBars('stations');
         $this->trackSuccess("{$upserted} lignes agrégées", ['rows_upserted' => $upserted]);
 
         Log::info('AggregateStationObservationsHourlyJob completed', [

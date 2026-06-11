@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Services\DataCoverage;
 use App\Jobs\Concerns\TracksExecution;
 use App\Models\Balise;
 use App\Models\WeatherApi;
@@ -184,6 +185,7 @@ class FetchBaliseForecastsJob implements ShouldQueue
         // coords des balises et archivé comme le modèle qui_vole_consensus.
         $totalUpsert += $this->archiveConsensus($openMeteo, $points, $fetchedAt);
 
+        DataCoverage::forgetBars('balises');
         $this->trackSuccess("{$balises->count()} balises, {$models->count()} modèles (+ consensus), {$totalUpsert} rows", ['balises' => $balises->count(), 'models' => $models->count(), 'rows_upserted' => $totalUpsert]);
 
         Log::info('FetchBaliseForecastsJob completed', [

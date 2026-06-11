@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Services\DataCoverage;
 use App\Jobs\Concerns\TracksExecution;
 use App\Models\StationApi;
 use App\Models\WeatherStation;
@@ -191,6 +192,7 @@ abstract class FetchWeatherStationReadingsJob implements ShouldQueue
         $api->incrementRequestsToday();
         $api->recordSuccess();
 
+        DataCoverage::forgetBars('stations');
         $this->trackSuccess("{$inserted} obs insérées, {$deactivated} désactivées", ['inserted' => $inserted, 'deactivated' => $deactivated, 'skipped_dedup' => $skippedDedup, 'polled' => $stations->count()]);
 
         Log::info(static::class . ' completed', [

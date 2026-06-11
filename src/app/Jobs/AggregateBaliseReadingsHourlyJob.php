@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Services\DataCoverage;
 use App\Jobs\Concerns\TracksExecution;
 use App\Models\Balise;
 use Carbon\Carbon;
@@ -120,6 +121,7 @@ class AggregateBaliseReadingsHourlyJob implements ShouldQueue
             $upserted += count($chunk);
         }
 
+        DataCoverage::forgetBars('balises');
         $this->trackSuccess("{$upserted} lignes agrégées sur {$baliseIds->count()} balises", ['rows_upserted' => $upserted, 'balises' => $baliseIds->count()]);
 
         Log::info('AggregateBaliseReadingsHourlyJob completed', [

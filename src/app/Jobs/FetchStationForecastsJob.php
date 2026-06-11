@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Services\DataCoverage;
 use App\Jobs\Concerns\TracksExecution;
 use App\Models\WeatherApi;
 use App\Models\WeatherFetchLog;
@@ -182,6 +183,7 @@ class FetchStationForecastsJob implements ShouldQueue
         // des stations comme le modèle qui_vole_consensus.
         $totalUpsert += $this->archiveConsensus($openMeteo, $pointChunks, $fetchedAt, $fetchedAtStr);
 
+        DataCoverage::forgetBars('stations');
         $this->trackSuccess("{$totalUpsert} rows, " . count($points) . " stations, {$models->count()} modèles (+ consensus)", ['rows_upserted' => $totalUpsert, 'stations' => count($points), 'models' => $models->count()]);
 
         Log::info('FetchStationForecastsJob completed', [
