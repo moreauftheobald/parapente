@@ -12,14 +12,6 @@ use Illuminate\View\View;
 
 class StationApiController extends Controller
 {
-    public function index(): View
-    {
-        $apis = StationApi::orderBy('name')->get();
-
-        return view('admin.station-apis.index', [
-            'apis' => $apis,
-        ]);
-    }
 
     public function edit(StationApi $stationApi): View
     {

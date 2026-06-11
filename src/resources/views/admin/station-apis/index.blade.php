@@ -1,23 +1,5 @@
-@extends('layouts.admin')
-@section('title', 'APIs stations météo')
-
-@php
-    $authBadge = function (string $type): string {
-        return match ($type) {
-            'oauth2'     => '<span class="px-2 py-0.5 text-[10px] font-mono uppercase rounded bg-violet-500/15 border border-violet-500/30 text-violet-300">OAuth2</span>',
-            'api_key'    => '<span class="px-2 py-0.5 text-[10px] font-mono uppercase rounded bg-amber-500/15 border border-amber-500/30 text-amber-300">API key</span>',
-            'user_agent' => '<span class="px-2 py-0.5 text-[10px] font-mono uppercase rounded bg-sky-500/15 border border-sky-500/30 text-sky-300">UA</span>',
-            default      => '<span class="px-2 py-0.5 text-[10px] font-mono uppercase rounded bg-gray-700/60 border border-gray-600 text-gray-400">none</span>',
-        };
-    };
-@endphp
-
-@section('content')
-<div>
-    <x-admin.page-title title="APIs stations météo">
-        <x-slot:subtitle>Sources de données pour les observations des stations météo. Chaque réseau a sa propre API.</x-slot:subtitle>
-    </x-admin.page-title>
-
+{{-- Cadre « APIs stations météo » de l'écran APIs unifié.
+     Variables : $stationApis (Collection de StationApi), $authBadge (closure du parent). --}}
     <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
         <table class="w-full text-sm">
             <thead class="bg-gray-950 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-800">
@@ -33,7 +15,7 @@
                 </tr>
             </thead>
             <tbody class="divide-y divide-gray-800">
-                @forelse ($apis as $api)
+                @forelse ($stationApis as $api)
                     <tr class="hover:bg-gray-800/50">
                         <td class="px-4 py-3">
                             <div class="flex items-center gap-2">
@@ -123,5 +105,3 @@
         Les APIs sont créées par le <code class="font-mono text-gray-400">StationApiSeeder</code>.
         Pour ajouter un nouveau réseau, créer un provider et l'enregistrer dans le seeder.
     </p>
-</div>
-@endsection

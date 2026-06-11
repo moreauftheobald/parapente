@@ -23,10 +23,9 @@ class WeatherApiController extends Controller
 {
     public function index(): View
     {
-        $apis = WeatherApi::orderBy('name')->get();
-
         return view('admin.apis.index', [
-            'apis' => $apis,
+            'apis'        => WeatherApi::orderBy('name')->get(),
+            'stationApis' => \App\Models\StationApi::orderBy('name')->get(),
         ]);
     }
 

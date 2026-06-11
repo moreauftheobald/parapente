@@ -183,7 +183,6 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::delete('/weather-stations/{weatherStation}',                  [AdminWeatherStationController::class, 'destroy'])->name('weather-stations.destroy');
 
         // ── APIs stations météo ──────────────────────────────────
-        Route::get('/station-apis',                   [AdminStationApiController::class, 'index'])->name('station-apis.index');
         Route::get('/station-apis/{stationApi}/edit',  [AdminStationApiController::class, 'edit'])->name('station-apis.edit');
         Route::patch('/station-apis/{stationApi}',     [AdminStationApiController::class, 'update'])->name('station-apis.update');
         Route::post('/station-apis/{stationApi}/toggle', [AdminStationApiController::class, 'toggleActive'])->name('station-apis.toggle');

@@ -14,7 +14,7 @@
                 <span class="text-gray-600">· auth: {{ $api->auth_type }}</span>
             </p>
         </div>
-        <a href="{{ route('admin.station-apis.index') }}" class="text-sm text-gray-400 hover:text-white transition flex items-center gap-2">
+        <a href="{{ route('admin.apis.index') }}" class="text-sm text-gray-400 hover:text-white transition flex items-center gap-2">
             <i class="fa-solid fa-arrow-left"></i> Liste
         </a>
     </div>
@@ -173,7 +173,7 @@
 
         <div class="flex items-center justify-between">
             <x-admin.button type="submit" variant="primary" icon="fa-solid fa-floppy-disk">Enregistrer</x-admin.button>
-            <a href="{{ route('admin.station-apis.index') }}" class="text-sm text-gray-400 hover:text-white transition">Annuler</a>
+            <a href="{{ route('admin.apis.index') }}" class="text-sm text-gray-400 hover:text-white transition">Annuler</a>
         </div>
     </form>
 </div>

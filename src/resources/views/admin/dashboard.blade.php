@@ -129,8 +129,7 @@
             <div class="px-5 py-3 border-b border-gray-800 text-sm font-medium text-gray-300 flex items-center justify-between">
                 <span><i class="fa-solid fa-plug mr-2 text-gray-500"></i>APIs externes</span>
                 <span class="text-xs">
-                    <a href="{{ route('admin.apis.index') }}" class="text-sky-400 hover:underline">prévisions</a> ·
-                    <a href="{{ route('admin.station-apis.index') }}" class="text-sky-400 hover:underline">stations</a>
+                    <a href="{{ route('admin.apis.index') }}" class="text-sky-400 hover:underline">gérer les APIs</a>
                 </span>
             </div>
             <table class="w-full text-sm">
