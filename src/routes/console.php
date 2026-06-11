@@ -4,6 +4,7 @@ use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use App\Jobs\AggregateBaliseReadingsHourlyJob;
 use App\Jobs\AggregateStationObservationsHourlyJob;
+use App\Jobs\WarmDataCoverageJob;
 use App\Jobs\ComputeBaliseConsensusCompareJob;
 use App\Jobs\ComputeModelReliabilityJob;
 use App\Jobs\FetchBaliseForecastsJob;
@@ -129,6 +130,15 @@ Schedule::job(AggregateBaliseReadingsHourlyJob::class)
 Schedule::job(AggregateStationObservationsHourlyJob::class)
     ->hourlyAt(7)
     ->name('aggregate-station-observations-hourly')
+    ->withoutOverlapping();
+
+// Préchauffage du cache « Data / couverture » (grilles + barres de
+// rétention) : recalcul en arrière-plan des agrégations lourdes sur
+// forecast_archive_* pour que l'écran admin soit instantané.
+// À :24, après les fetches de :00/:15 et les agrégations de :05/:07.
+Schedule::job(WarmDataCoverageJob::class)
+    ->hourlyAt(24)
+    ->name('warm-data-coverage')
     ->withoutOverlapping();
 
 // Purge des pages vues au-delà de la rétention configurée

@@ -37,7 +37,12 @@ use Illuminate\Support\Facades\Log;
  */
 class DataCoverage
 {
-    private const CACHE_TTL_S = 300;
+    /**
+     * TTL du cache des sections. 1 h + préchauffage horaire par
+     * WarmDataCoverageJob (à :24) : l'écran lit toujours un cache chaud,
+     * jamais plus vieux qu'un run du job.
+     */
+    private const CACHE_TTL_S = 4200;
 
     /**
      * Version du schéma des payloads en cache. À incrémenter à chaque
@@ -1021,7 +1026,7 @@ class DataCoverage
     private const RETENTION_MARGIN_DAYS = 3;
     private const SEG_HOURS_FULL        = 22;
     private const SEG_UNITS_FULL_PCT    = 90;
-    private const BARS_CACHE_TTL_S      = 1800;
+    private const BARS_CACHE_TTL_S      = 4200; // > 1 h : préchauffé par WarmDataCoverageJob, invalidé par les jobs de collecte
 
     public const BARS_KEY_BALISES  = 'data_coverage.' . self::CACHE_VERSION . '.balise_retention_bars';
     public const BARS_KEY_STATIONS = 'data_coverage.' . self::CACHE_VERSION . '.station_retention_bars';
