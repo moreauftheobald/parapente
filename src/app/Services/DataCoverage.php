@@ -363,7 +363,7 @@ class DataCoverage
             $rowsRaw = DB::table('forecast_archive_balises')
                 ->join('balises', 'balises.id', '=', 'forecast_archive_balises.balise_id')
                 ->where('balises.active', true)
-                ->whereBetween('forecast_archive_balises.target_at', [$start, $end])
+                ->whereIn('forecast_archive_balises.target_at', $this->hourSlotsForDays($days))
                 ->selectRaw('forecast_archive_balises.weather_model_id as model_id, DATE(forecast_archive_balises.target_at) as day, COUNT(DISTINCT forecast_archive_balises.balise_id, forecast_archive_balises.target_at) as n')
                 ->groupBy('model_id', 'day')
                 ->get();
@@ -576,7 +576,7 @@ class DataCoverage
             $rowsRaw = DB::table('forecast_archive_stations')
                 ->join('weather_stations', 'weather_stations.id', '=', 'forecast_archive_stations.weather_station_id')
                 ->where('weather_stations.active', true)
-                ->whereBetween('forecast_archive_stations.target_at', [$start, $end])
+                ->whereIn('forecast_archive_stations.target_at', $this->hourSlotsForDays($days))
                 ->selectRaw('forecast_archive_stations.weather_model_id as model_id, DATE(forecast_archive_stations.target_at) as day, COUNT(DISTINCT forecast_archive_stations.weather_station_id, forecast_archive_stations.target_at) as n')
                 ->groupBy('model_id', 'day')
                 ->get();
@@ -639,17 +639,21 @@ class DataCoverage
                 'groups' => [],
             ];
 
-            if ($stations->isEmpty() || ! DB::getSchemaBuilder()->hasTable('weather_station_observations')) {
+            if ($stations->isEmpty() || ! DB::getSchemaBuilder()->hasTable('weather_station_observations_hourly')) {
                 return $payload;
             }
 
             $start = $days[0]->startOfDay();
             $end   = end($days)->endOfDay();
 
-            $countRaw = DB::table('weather_station_observations')
-                ->whereBetween('observed_at', [$start, $end])
+            // Couverture lue sur l'agrégat horaire (créneaux pile, volume
+            // borné) plutôt que sur le brut (~millions de lignes / 7 j) :
+            // même sémantique « heures présentes », sans scan massif. Le
+            // brut ne sert plus qu'à la dernière réception (MAX indexé).
+            $countRaw = DB::table('weather_station_observations_hourly')
+                ->whereBetween('hour_at', [$start, $end])
                 ->whereIn('weather_station_id', $stations->pluck('id'))
-                ->selectRaw('weather_station_id, DATE(observed_at) as day, COUNT(DISTINCT HOUR(observed_at)) as n')
+                ->selectRaw('weather_station_id, DATE(hour_at) as day, COUNT(*) as n')
                 ->groupBy('weather_station_id', 'day')
                 ->get();
 
@@ -659,14 +663,16 @@ class DataCoverage
             }
 
             $lastByStation = [];
-            $rawLast = DB::table('weather_station_observations')
-                ->whereIn('weather_station_id', $stations->pluck('id'))
-                ->selectRaw('weather_station_id, MAX(observed_at) as last_at')
-                ->groupBy('weather_station_id')
-                ->get();
-            foreach ($rawLast as $r) {
-                if ($r->last_at) {
-                    $lastByStation[$r->weather_station_id] = (string) $r->last_at;
+            if (DB::getSchemaBuilder()->hasTable('weather_station_observations')) {
+                $rawLast = DB::table('weather_station_observations')
+                    ->whereIn('weather_station_id', $stations->pluck('id'))
+                    ->selectRaw('weather_station_id, MAX(observed_at) as last_at')
+                    ->groupBy('weather_station_id')
+                    ->get();
+                foreach ($rawLast as $r) {
+                    if ($r->last_at) {
+                        $lastByStation[$r->weather_station_id] = (string) $r->last_at;
+                    }
                 }
             }
 
@@ -836,6 +842,26 @@ class DataCoverage
             $days[] = $today->addDays($i);
         }
         return $days;
+    }
+
+    /**
+     * Liste exhaustive des créneaux horaires pile (Y-m-d H:00:00) couvrant
+     * les jours donnés. Sert à interroger les tables d'archives
+     * (`target_at` tombe pile sur l'heure) via `WHERE col IN (...)` en
+     * accès index pur — évite le scan complet des grosses tables.
+     *
+     * @param array<int, CarbonImmutable> $days
+     * @return array<int, string>
+     */
+    private function hourSlotsForDays(array $days): array
+    {
+        $slots = [];
+        foreach ($days as $day) {
+            for ($h = 0; $h < 24; $h++) {
+                $slots[] = $day->setTime($h, 0)->format('Y-m-d H:i:s');
+            }
+        }
+        return $slots;
     }
 
     /**
