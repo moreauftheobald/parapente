@@ -11,6 +11,48 @@ Conventions :
 
 ---
 
+## 2026-06-29 — Performance de la carte de volabilité
+
+Chantier d'optimisation de la carte (`/carte`), motivé par des temps
+d'affichage des marqueurs pouvant atteindre **plusieurs minutes**.
+
+### Corrigé — construction du map bundle (cause racine)
+- `MapBundleBuilder::build()` réécrit en `DB::table()` (stdClass brut, parsing
+  jour/heure par sous-chaîne) au lieu d'hydrater ~130 000 modèles Eloquent
+  `SiteScore` + ~260 000 appels Carbon `->format()`. Seuils `viability.*`
+  mémoïsés dans `DayQualityCalculator` (8 lectures au lieu de ~44 000 allers-
+  retours Redis). **Build : ~50-200 s → ~2 s.** Structure du payload inchangée
+  (pas de bump `CACHE_VERSION`).
+
+### Corrigé — cache « toujours chaud »
+- `RebuildMapBundleJob` : `$timeout` 60 s → 300 s (le job était tué avant
+  d'écrire le cache → la pré-construction n'aboutissait jamais).
+- `WatchScoringTableJob` ne supprime plus le bundle avant le rebuild :
+  écrasement atomique de la clé (l'ancien bundle reste servi en ~400 ms
+  pendant la reconstruction).
+- Nouveau job planifié `rebuild-map-bundle` (toutes les 30 min, filet de
+  sécurité) + déclaré dans `SupervisionService::JOBS`.
+
+### Ajouté / Modifié — front carte
+- **Boot parallélisé** : bundle sites + balises + stations chargés de front
+  (`Promise.all`) ; overrides perso + sites masqués parallélisés.
+- **Vue carte mémorisée** (position / zoom / fond) : `localStorage` +
+  synchro profil pour les connectés. Restauration au boot : profil →
+  localStorage → défaut national.
+- **`minZoom = 6`** (~quart de France) et **stations affichées d'emblée**
+  (3 réseaux par défaut) via le bundle stations national caché — fini le
+  rechargement bbox / le gate zoom 9.
+- **Chart.js en lazy-load** (chargé à la 1ʳᵉ ouverture de l'onglet Modèles).
+- **Rendu incrémental des marqueurs** (sites, balises, stations) : marqueurs
+  réutilisés, `setIcon()` ciblé quand l'icône change, au lieu de tout recréer
+  à chaque changement de jour / filtre / rafraîchissement 5 min.
+
+### Base de données
+- `users.map_view` (JSON nullable) : dernière vue carte de l'utilisateur ;
+  route `PUT /api/me/map-view`.
+
+---
+
 ## 2026-06-10 — Cap fiabilité par maille : cadrage, nettoyage et refonte CLAUDE.md
 
 Préparation du chantier « fiabilité par maille via stations météo »

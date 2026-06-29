@@ -205,7 +205,7 @@ src/                        ← Racine Laravel
 
 | Table | Description | Rétention |
 |---|---|---|
-| `users` | Utilisateurs + rôle admin/user | — |
+| `users` | Utilisateurs + rôle admin/user (+ `map_view` JSON : dernière vue carte) | — |
 | `sites` | Sites de vol (seed Grand Est + import ParaglidingEarth `sites:import`, ~1100 sites ; colonnes géocodage) | — |
 | `site_conditions` | Conditions idéales par site (axe vent, plages vitesse, plafond, overrides rafales) | — |
 | `user_site_conditions` | Scorings perso par utilisateur (miroir + `is_active`, rotation LRU) | — |
@@ -290,7 +290,8 @@ Lever − 30 min (floor heure) → coucher + 30 min (ceil heure), Europe/Paris.
 | Job | Cadence | Rôle |
 |---|---|---|
 | `FetchForecastsJob` → `FetchSiteModelJob`×N | horaire | prévisions par site × modèle → `forecasts` (pas de scoring, pas de consensus) |
-| `WatchScoringTableJob` | chaque minute | détecte le flip `scoring_table` (sidecar) → invalide caches + rebuild bundle ; évalue la fraîcheur (`ScoringFreshness`) |
+| `WatchScoringTableJob` | chaque minute | détecte le flip `scoring_table` (sidecar) → invalide caches détail + dispatch `RebuildMapBundleJob` (écrasement atomique, **sans purger** le bundle servi) ; évalue la fraîcheur (`ScoringFreshness`) |
+| `RebuildMapBundleJob` | 30 min (+ flip scoring, observers) | régénère le map bundle et **écrase** la clé cache (l'ancien reste servi pendant le build ~2 s) ; `$timeout=300` |
 | `FetchPiouPiouReadingsJob` | 10 min | lectures balises PiouPiou |
 | `FetchWindyReadingsJob` | 30 min | lectures balises Windy (Http::pool, skip si pas de clé) |
 | `FetchMetarStationReadingsJob` | 30 min | observations METAR → `weather_station_observations` |
@@ -306,7 +307,8 @@ Lever − 30 min (floor heure) → coucher + 30 min (ceil heure), Europe/Paris.
 | `ComputeModelReliabilityJob` | 03h30 | MAE/`weight_factor` par modèle × balise × bucket × variable (fenêtre `reliability.window_days`) |
 
 Jobs hors scheduler : `FetchSiteForecastsJob` (refresh sync d'un site, activation/tinker),
-`RebuildMapBundleJob` (ShouldBeUnique 30 s), `GeocodeLocationJob` (async, observers).
+`GeocodeLocationJob` (async, observers). `RebuildMapBundleJob` (`ShouldBeUnique`
+30 s) est à la fois planifié (30 min) ET dispatché au flip scoring / par les observers.
 Les jobs balises étendent la base abstraite `FetchBaliseReadingsJob` ; les jobs
 stations étendent `FetchWeatherStationReadingsJob`. Quasiment tous les jobs
 utilisent `TracksExecution` (suivi `job_monitors`, affiché dans les écrans admin).
@@ -324,8 +326,10 @@ utilisent `TracksExecution` (suivi `job_monitors`, affiché dans les écrans adm
   site_scores` + INSERT) puis flippe atomiquement `settings.scoring_table`
   (`"1"`↔`"2"`). Lecture via `SiteScore::onActiveBuffer()` /
   `SiteScore::activeTableName()` (pointeur lu en SQL direct, hors cache).
-- **Invalidation** : `WatchScoringTableJob` purge `SiteDetailCache` (tous sites),
-  map bundle et user-scoring au flip, et dispatch `RebuildMapBundleJob`.
+- **Invalidation** : `WatchScoringTableJob` purge `SiteDetailCache` (tous sites)
+  et user-scoring au flip, puis dispatch `RebuildMapBundleJob`. Le map bundle
+  n'est **pas purgé** : il est écrasé atomiquement à la fin du rebuild (l'ancien
+  reste servi pendant la reconstruction → pas de carte sans marqueurs).
 - **Watchdog de fraîcheur** (`ScoringFreshness`) : au-delà de
   `scoring.stale_after_minutes` (75) sans flip → flag + `Log::error` one-shot ;
   exposé dans `/api/map-bundle` (`scoring_status`) → bandeau carte. N'auto-répare pas.
@@ -404,8 +408,13 @@ aussi le **biais moyen** par paramètre (l'**offset temporel** est un chantier s
 - **Balises** : marqueurs avec dernière lecture + tendance, volet droit avec
   graphes du jour et **comparaison mesures vs consensus** (rose des vents).
 - **Stations météo** : affichées via **MarkerClusterGroup par réseau**
-  (MF / METAR / Infoclimat), visibles à partir du zoom 9 ; fiche détail +
-  comparaison consensus.
+  (MF / METAR / Infoclimat), chargées **nationalement** via le bundle stations
+  caché et visibles **d'emblée** (3 réseaux par défaut) ; le clustering absorbe
+  le volume. Fiche détail + comparaison consensus.
+- **Vue carte** : position/zoom/fond mémorisés (`localStorage` + `users.map_view`
+  pour les connectés, route `PUT /api/me/map-view`) ; `minZoom` borné
+  (~quart de France). Marqueurs **rendus de façon incrémentale** (sites/balises/
+  stations réutilisés, `setIcon()` ciblé). Chart.js chargé à la demande.
 - **Icônes** : API SpotAir, tamponnées sur disque par `IconCacheController`
   (`/icons-cache/{site|balise|station}/...`, nginx sert directement dès le 2e hit ;
   `chown www-data` après premier déploiement ; rotation future :
