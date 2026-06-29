@@ -10,6 +10,12 @@ const BASEMAP_LIST=[
     {key:'light',label:'Clair',icon:'☀',desc:'CartoDB Voyager',url:'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',attribution:'© OpenStreetMap © CARTO',maxZoom:19},
 ];
 
+// Zoom minimum de la carte : empêche de dézoomer au-delà de ~un quart de
+// la France. Évite de surcharger l'écran au boot et borne le volume de
+// tuiles/marqueurs. La vue par défaut cadre la France entière à ce niveau.
+const MAP_MIN_ZOOM = 6;
+const MAP_DEFAULT_VIEW = { lat: 46.6, lng: 2.5, zoom: 6, basemap: 'topo' };
+
 // Jours de la semaine abrégés (index = jour ISO ; ex: dt.getDay() retourne 0..6)
 const DAY_NAMES_SHORT = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
 // Namespace SVG (pour createElementNS)
@@ -71,3 +77,7 @@ const AUTH_USER = {!! json_encode(auth()->check() ? [
     'pseudo'       => auth()->user()->pseudo,
     'display_name' => auth()->user()->displayName(),
 ] : null, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) !!};
+
+// Dernière vue carte enregistrée côté profil (null si invité ou jamais
+// définie). Prioritaire sur localStorage au boot (suivi multi-appareils).
+const USER_MAP_VIEW = {!! json_encode(auth()->check() ? auth()->user()->map_view : null, JSON_UNESCAPED_SLASHES) !!};

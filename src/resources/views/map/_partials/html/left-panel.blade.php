@@ -63,9 +63,6 @@
                                     <span class="lp-switch"></span>
                                 </button>
                             </template>
-                            <div class="lp-note" x-show="!stationZoomOk()" style="color:#6b7280;font-size:11px;margin-top:4px;">
-                                Zoomez davantage pour afficher les stations.
-                            </div>
                         </div>
 
                         <div class="lp-section">

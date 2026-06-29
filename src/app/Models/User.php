@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[Fillable(['name', 'pseudo', 'bio', 'email', 'password', 'role'])]
+#[Fillable(['name', 'pseudo', 'bio', 'email', 'password', 'role', 'map_view'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -27,6 +27,10 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            // Dernière vue carte enregistrée ({lat,lng,zoom,basemap}) — sert à
+            // resservir au pilote sa position/zoom entre appareils (la vue est
+            // aussi gardée en localStorage côté client pour les invités).
+            'map_view' => 'array',
         ];
     }
 

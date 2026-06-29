@@ -77,16 +77,19 @@ function mapApp(){return{
     // Volet droit (balise) : relevés + historique du jour
     baliseData:null, baliseLoading:false, _baliseObj:null,
 
-    // Stations météo (MF / METAR / Infoclimat) — MarkerClusterGroup par réseau
-    // Désactivées par défaut (perf) ; visibles uniquement à partir de zoom 9.
+    // Stations météo (MF / METAR / Infoclimat) — MarkerClusterGroup par réseau.
+    // Chargées nationalement (bundle caché) et visibles d'emblée dès le zoom
+    // minimum ; le clustering par réseau gère le volume à l'affichage.
     STATION_NETWORKS: [
         { key:'mf',         label:'Météo-France', icon:'🏛️', color:'#3b82f6' },
         { key:'metar',      label:'METAR',        icon:'✈️',  color:'#7c3aed' },
         { key:'infoclimat', label:'Infoclimat',   icon:'🌡️', color:'#16a34a' },
     ],
-    STATION_MIN_ZOOM: 9,
+    // Stations chargées nationalement (bundle caché) et affichées dès le
+    // zoom minimum de la carte — le clustering par réseau absorbe le volume.
+    STATION_MIN_ZOOM: MAP_MIN_ZOOM,
     weatherStations:[],
-    stationNetworksVisible:{ mf:false, metar:false, infoclimat:false },
+    stationNetworksVisible:{ mf:true, metar:true, infoclimat:true },
     _stationsLayers:{},
     _stationsMarkers:{},
     _stationsTimer:null,
@@ -106,27 +109,26 @@ function mapApp(){return{
     async init(){
         await this.$nextTick();
         this.initMap();
-        await this.loadSites();
-        await this.loadBalises();
+
+        // Boot parallélisé : le bundle sites (+ overlays perso) et les données
+        // live balises/stations se chargent de front au lieu de s'enchaîner.
+        // Le rendu des marqueurs sites dépend du bundle → loadSites() fait son
+        // propre renderMarkers() en fin ; balises et stations sont indépendantes.
+        const boot = [this.loadSites(), this.loadBalises()];
+        if(this._anyStationNetworkOn()) boot.push(this.loadStations());
+        await Promise.all(boot);
+
         this._balisesTimer = setInterval(() => this.loadBalises(), 5 * 60 * 1000);
-        // Stations désactivées par défaut — le premier loadStations() est
-        // déclenché par toggleStationNetwork() quand l'utilisateur active un réseau.
+        // Stations chargées nationalement (bundle caché) : on ne recharge plus
+        // par bbox au pan/zoom — uniquement un rafraîchissement périodique des
+        // lectures si au moins un réseau est actif.
         this._stationsTimer = setInterval(() => {
             if(this._anyStationNetworkOn()) this.loadStations();
         }, 5 * 60 * 1000);
 
-        // Rechargement bbox des stations au pan/zoom (debounce 500ms).
-        // Gère aussi le seuil de zoom : retire/ajoute les layers
-        // quand on franchit STATION_MIN_ZOOM.
-        this.map.on('moveend', () => {
-            if(!this._anyStationNetworkOn()) return;
-            clearTimeout(this._stationsMoveTimer);
-            if(this.map.getZoom() < this.STATION_MIN_ZOOM){
-                this._removeAllStationLayers();
-                return;
-            }
-            this._stationsMoveTimer = setTimeout(() => this.loadStations(), 500);
-        });
+        // Persistance de la vue (position/zoom/fond) : localStorage à chaque
+        // déplacement + synchro profil en debounce pour les utilisateurs connectés.
+        this.map.on('moveend', () => this._persistView());
 
         // Popup flottante balise/station : reste collée au marqueur au
         // pan/zoom, se ferme au clic sur la carte (pas au clic marqueur,
@@ -170,9 +172,12 @@ function mapApp(){return{
     },
 
     initMap(){
-        this.map=L.map('map',{center:[49.1,5.5],zoom:7,zoomControl:false});
+        // Vue restaurée : profil (connecté) → localStorage → défaut national.
+        const v = this._restoreView();
+        this.currentBasemap = v.basemap;
+        this.map=L.map('map',{center:[v.lat,v.lng],zoom:v.zoom,minZoom:MAP_MIN_ZOOM,zoomControl:false});
         L.control.zoom({position:'topright'}).addTo(this.map);
-        const b=BASEMAP_LIST[0];
+        const b=BASEMAP_LIST.find(x=>x.key===this.currentBasemap)??BASEMAP_LIST[0];
         this.tl=L.tileLayer(b.url,{attribution:b.attribution,maxZoom:b.maxZoom}).addTo(this.map);
 
         // Le conteneur #map peut ne pas avoir sa taille finale au moment
@@ -201,12 +206,68 @@ function mapApp(){return{
         }
     },
 
+    // ── Persistance de la vue carte (position / zoom / fond) ─────
+    // Clé localStorage partagée par invités et connectés. Pour un connecté,
+    // le profil (USER_MAP_VIEW) prime au boot (suivi multi-appareils).
+    _VIEW_KEY: 'quivole.map.view',
+    _viewSaveTimer: null,
+
+    /** Vue à appliquer au boot : profil → localStorage → défaut, zoom clampé. */
+    _restoreView(){
+        let v = null;
+        if(this.authUser && USER_MAP_VIEW && typeof USER_MAP_VIEW.lat === 'number'){
+            v = USER_MAP_VIEW;
+        } else {
+            try{
+                const raw = localStorage.getItem(this._VIEW_KEY);
+                if(raw) v = JSON.parse(raw);
+            }catch(e){ /* localStorage indispo / JSON cassé : on ignore */ }
+        }
+        const d = MAP_DEFAULT_VIEW;
+        if(!v || typeof v.lat !== 'number' || typeof v.lng !== 'number'){
+            return { ...d };
+        }
+        return {
+            lat: v.lat,
+            lng: v.lng,
+            zoom: Math.max(MAP_MIN_ZOOM, Number.isFinite(v.zoom) ? v.zoom : d.zoom),
+            basemap: (v.basemap && BASEMAP_LIST.some(b=>b.key===v.basemap)) ? v.basemap : d.basemap,
+        };
+    },
+
+    /** Enregistre la vue courante : localStorage immédiat + profil en debounce. */
+    _persistView(){
+        if(!this.map) return;
+        const c = this.map.getCenter();
+        const view = {
+            lat: +c.lat.toFixed(5),
+            lng: +c.lng.toFixed(5),
+            zoom: this.map.getZoom(),
+            basemap: this.currentBasemap,
+        };
+        try{ localStorage.setItem(this._VIEW_KEY, JSON.stringify(view)); }catch(e){ /* quota / mode privé */ }
+
+        // Synchro profil (connectés) : debounce 3 s pour éviter un PUT par
+        // micro-déplacement. Best-effort, silencieux en cas d'échec.
+        if(!this.authUser) return;
+        clearTimeout(this._viewSaveTimer);
+        this._viewSaveTimer = setTimeout(() => {
+            fetch('/api/me/map-view', {
+                method:'PUT',
+                headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+                credentials:'same-origin',
+                body: JSON.stringify(view),
+            }).catch(()=>{});
+        }, 3000);
+    },
+
     switchBasemap(key){
         if(key===this.currentBasemap)return;
         const b=BASEMAP_LIST.find(x=>x.key===key);if(!b)return;
         this.map.removeLayer(this.tl);
         this.tl=L.tileLayer(b.url,{attribution:b.attribution,maxZoom:b.maxZoom}).addTo(this.map);
         this.currentBasemap=key;
+        this._persistView();
     },
     toggleDayDrop(btn){if(!this.dayDropOpen){const r=btn.getBoundingClientRect();this.dayDropPos={top:r.bottom+6,left:r.left};}this.dayDropOpen=!this.dayDropOpen;this.bmDropOpen=false;},
     toggleBmDrop(btn){if(!this.bmDropOpen){const r=btn.getBoundingClientRect();this.bmDropPos={top:r.bottom+6,left:r.left,width:r.width};}this.bmDropOpen=!this.bmDropOpen;this.dayDropOpen=false;},
@@ -294,10 +355,12 @@ function mapApp(){return{
             this.sunWindows = {}; this.scoringSource = {};
         }
 
-        // Phase 4 : sur-couche perso (badge + overrides scoring actif)
-        if (this.authUser) await this.loadScoringOverrides();
-        // Sites masqués : filtre les marqueurs + recalcule l'agrégat du jour
-        if (this.authUser) await this.loadHiddenSites();
+        // Sur-couches perso (connecté) chargées en parallèle : badge + overrides
+        // scoring actif d'un côté, sites masqués + agrégat recalculé de l'autre.
+        // Indépendantes l'une de l'autre → Promise.all avant le rendu.
+        if (this.authUser) {
+            await Promise.all([this.loadScoringOverrides(), this.loadHiddenSites()]);
+        }
 
         this.renderMarkers();
     },
@@ -463,25 +526,46 @@ function mapApp(){return{
             });
             this.map.addLayer(this._sitesCluster);
         }
+        // Rendu incrémental : les marqueurs sont créés une seule fois puis
+        // réutilisés. Au changement de jour / filtre, on se contente de mettre
+        // à jour l'icône des sites dont le statut change et d'ajuster
+        // l'appartenance au cluster (vs recréer les ~1100 marqueurs à chaque
+        // fois — coûteux : objets L.marker + divIcon + tooltip + handlers).
         const day=this.days[this.selectedDayIdx]?.raw;
+        this._inClusterIds = this._inClusterIds || new Set();
+        const desired = new Set();
         const toAdd = [];
-        const oldMarkers = this.markers;
-        this.markers = {};
 
         this.sites.forEach(site=>{
             const st=this.dayQuality[site.id]?.[day]?.status ?? 'unknown';
             if(! this._siteVisible(site, st)) return;
+            desired.add(site.id);
 
-            const icon=L.divIcon({className:'',html:siteIconHtml(site,st),iconSize:[40,40],iconAnchor:[20,20]});
-            const mk=L.marker([site.lat,site.lng],{icon})
-                .bindTooltip(site.name,{permanent:false,direction:'top',offset:[0,-22]});
-            mk.on('click',(e)=>{L.DomEvent.stopPropagation(e);this.clickSite(site,mk.getElement());});
-            this.markers[site.id]=mk;
-            toAdd.push(mk);
+            let mk = this.markers[site.id];
+            if(!mk){
+                const icon=L.divIcon({className:'',html:siteIconHtml(site,st),iconSize:[40,40],iconAnchor:[20,20]});
+                mk=L.marker([site.lat,site.lng],{icon})
+                    .bindTooltip(site.name,{permanent:false,direction:'top',offset:[0,-22]});
+                mk.on('click',(e)=>{L.DomEvent.stopPropagation(e);this.clickSite(site,mk.getElement());});
+                mk._status=st;
+                this.markers[site.id]=mk;
+            } else if(mk._status!==st){
+                mk.setIcon(L.divIcon({className:'',html:siteIconHtml(site,st),iconSize:[40,40],iconAnchor:[20,20]}));
+                mk._status=st;
+            }
+            if(!this._inClusterIds.has(site.id)) toAdd.push(mk);
         });
 
-        this._sitesCluster.clearLayers();
+        // Marqueurs devenus invisibles (filtre / jour) : retirés du cluster
+        // mais conservés en mémoire pour réutilisation.
+        const toRemove = [];
+        this._inClusterIds.forEach(id=>{
+            if(!desired.has(id) && this.markers[id]) toRemove.push(this.markers[id]);
+        });
+
+        if(toRemove.length) this._sitesCluster.removeLayers(toRemove);
         if(toAdd.length) this._sitesCluster.addLayers(toAdd);
+        this._inClusterIds = desired;
 
         if(this.selectedFeature?.type==='site' && this.markers[this.selectedFeature.id]){
             setTimeout(()=>this._markerEl(this.markers[this.selectedFeature.id])?.classList.add('selected'),50);
@@ -864,7 +948,28 @@ function mapApp(){return{
     },
     renderModels(){
         if(!this.modelsPayload) return;
-        this.$nextTick(()=>renderModelsTab(this));
+        // Chart.js n'est nécessaire QUE pour le ribbon de cet onglet : on le
+        // charge à la demande (retiré du chemin critique du boot).
+        this._ensureChartJs()
+            .then(()=>this.$nextTick(()=>renderModelsTab(this)))
+            .catch(()=>{});
+    },
+
+    // Charge Chart.js une seule fois, paresseusement. Renvoie une promesse
+    // résolue dès que `window.Chart` est disponible.
+    _chartJsPromise: null,
+    _ensureChartJs(){
+        if(window.Chart) return Promise.resolve();
+        if(this._chartJsPromise) return this._chartJsPromise;
+        this._chartJsPromise = new Promise((resolve,reject)=>{
+            const s=document.createElement('script');
+            s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
+            s.async=true;
+            s.onload=()=>resolve();
+            s.onerror=()=>{ this._chartJsPromise=null; reject(new Error('Chart.js load failed')); };
+            document.head.appendChild(s);
+        });
+        return this._chartJsPromise;
     },
     setModVar(k){ this.modVar=k; this.renderModels(); },
     setModZoom(z){ if(z===this.modZoom) return; this.modZoom=z; this.loadModels(); },
@@ -1274,21 +1379,16 @@ function mapApp(){return{
     },
     stationZoomOk(){ return this.map && this.map.getZoom() >= this.STATION_MIN_ZOOM; },
     async loadStations(){
-        if(!this._anyStationNetworkOn() || !this.stationZoomOk()){
+        if(!this._anyStationNetworkOn()){
             this._removeAllStationLayers();
             return;
         }
         if(this._stationsAbort) this._stationsAbort.abort();
         this._stationsAbort=new AbortController();
         try{
-            const b = this.map.getBounds();
-            const url = '/api/weather-stations?bbox=' + [
-                b.getSouth().toFixed(4),
-                b.getNorth().toFixed(4),
-                b.getWest().toFixed(4),
-                b.getEast().toFixed(4),
-            ].join(',');
-            const r=await fetch(url,{signal:this._stationsAbort.signal});
+            // Bundle national caché (pas de bbox) : toutes les stations d'un
+            // coup, le clustering gère l'affichage selon le viewport.
+            const r=await fetch('/api/weather-stations',{signal:this._stationsAbort.signal});
             if(!r.ok) throw new Error('HTTP '+r.status);
             this.weatherStations=await r.json();
             this.renderStations();

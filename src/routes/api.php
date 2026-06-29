@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\BaliseController;
 use App\Http\Controllers\Api\MapBundleController;
 use App\Http\Controllers\Api\MeHiddenSitesController;
+use App\Http\Controllers\Api\MeMapViewController;
 use App\Http\Controllers\Api\MeScoringController;
 use App\Http\Controllers\Api\SiteController;
 use App\Http\Controllers\Api\UserHiddenSiteController;
@@ -45,6 +46,10 @@ Route::middleware('auth:web')->group(function () {
     // Sites masqués pour la carte : ids à filtrer + agrégat journalier
     // recalculé sans eux (cf. FF_site_blacklist.md).
     Route::get('me/hidden-sites', [MeHiddenSitesController::class, 'overrides']);
+
+    // Persistance de la dernière vue carte (position/zoom/fond) — debounce
+    // côté client au pan/zoom. Suivi multi-appareils pour les connectés.
+    Route::put('me/map-view', [MeMapViewController::class, 'update']);
 
     Route::prefix('users/me/scorings')->group(function () {
         Route::get('/',                       [UserScoringController::class, 'index']);
