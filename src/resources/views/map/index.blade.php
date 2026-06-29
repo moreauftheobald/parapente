@@ -74,9 +74,9 @@
     @include('map._partials.html.popup-feature')
 
     @push('scripts')
-        {{-- Chart.js — uniquement pour le Consensus Ribbon (onglet Modèles, Phase 3).
-             Chargé avant le bloc inline pour que `Chart` soit défini à l'usage. --}}
-        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+        {{-- Chart.js n'est utilisé que par le Consensus Ribbon (onglet Modèles
+             du volet droit) : il est désormais chargé à la demande par
+             mapApp()._ensureChartJs() (retiré du chemin critique du boot). --}}
         <script>
             @include('map._partials.scripts.config')
             @include('map._partials.scripts.icon')
