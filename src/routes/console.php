@@ -18,6 +18,7 @@ use App\Jobs\FetchWindyReadingsJob;
 use App\Jobs\FetchStationForecastsJob;
 use App\Jobs\PurgeOldForecastsJob;
 use App\Jobs\PurgePageViewsJob;
+use App\Jobs\RebuildMapBundleJob;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -36,6 +37,17 @@ Schedule::job(FetchForecastsJob::class)
 Schedule::job(WatchScoringTableJob::class)
     ->everyMinute()
     ->name('watch-scoring-table')
+    ->withoutOverlapping();
+
+// Filet de sécurité : régénère périodiquement le map bundle pour le tenir
+// « chaud » même si aucun flip de scoring n'a lieu (sidecar en panne, run
+// manqué) ou si l'invalidation push échoue. RebuildMapBundleJob écrase la
+// clé de façon atomique → aucun impact visiteur. Le TTL (90 min) reste le
+// dernier filet ; ce rebuild toutes les 30 min garantit qu'on n'atteint
+// jamais l'expiration avec un cache froid.
+Schedule::job(RebuildMapBundleJob::class)
+    ->everyThirtyMinutes()
+    ->name('rebuild-map-bundle')
     ->withoutOverlapping();
 
 // Purge des données obsolètes : tous les jours à 03h00

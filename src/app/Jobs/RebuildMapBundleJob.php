@@ -36,7 +36,12 @@ class RebuildMapBundleJob implements ShouldQueue, ShouldBeUnique
     use Queueable;
     use TracksExecution;
 
-    public int $timeout = 60;
+    // Le build parcourt ~1100 sites × ~120 créneaux horaires : même après
+    // l'optimisation DB::table (passage de plusieurs minutes à quelques
+    // secondes), on garde une marge confortable pour ne JAMAIS tuer le job
+    // avant l'écriture du cache (un timeout < durée de build laissait le
+    // cache vide → carte sans marqueurs, cf. régression historique).
+    public int $timeout = 300;
     public int $tries   = 2;
 
     /** Lock TTL pour le ShouldBeUnique (secondes). */
