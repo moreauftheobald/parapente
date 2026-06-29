@@ -1290,25 +1290,49 @@ function mapApp(){return{
     },
     renderBalises(){
         if(!this.map) return;
-        const byNet = {};
-        this._balisesMarkers = {};
+        // Rendu incrémental : la position d'une balise ne change jamais, seule
+        // son icône (vent/tendance/fraîcheur) évolue d'un fetch à l'autre.
+        // On réutilise donc les marqueurs et on ne fait un setIcon() que quand
+        // l'URL d'icône change réellement (vs tout recréer toutes les 5 min).
+        this._balisesMarkers = this._balisesMarkers || {};
+        const seen = new Set();
+        const addByNet = {};
 
         for(const b of this.balises){
-            const netKey = this._baliseNetworkKey(b);
-            const icon   = L.icon({iconUrl:baliseIconUrl(b.reading), iconSize:[40,40], iconAnchor:[20,20]});
-            const m = L.marker([b.lat,b.lng],{icon})
-                .bindTooltip(baliseTooltipHtml(b),{direction:'top',offset:[0,-22],opacity:.95});
-            m._netKey = netKey;
-            m.on('click',(e)=>{L.DomEvent.stopPropagation(e);this.clickBalise(b.id,m.getLatLng());});
-            this._balisesMarkers[b.id] = m;
-            if(!byNet[netKey]) byNet[netKey] = [];
-            byNet[netKey].push(m);
+            seen.add(b.id);
+            const netKey  = this._baliseNetworkKey(b);
+            const iconUrl = baliseIconUrl(b.reading);
+            let m = this._balisesMarkers[b.id];
+            if(!m){
+                m = L.marker([b.lat,b.lng],{icon:L.icon({iconUrl,iconSize:[40,40],iconAnchor:[20,20]})})
+                    .bindTooltip(baliseTooltipHtml(b),{direction:'top',offset:[0,-22],opacity:.95});
+                m._netKey = netKey;
+                m._iconUrl = iconUrl;
+                m.on('click',(e)=>{L.DomEvent.stopPropagation(e);this.clickBalise(b.id,m.getLatLng());});
+                this._balisesMarkers[b.id] = m;
+                (addByNet[netKey] = addByNet[netKey] || []).push(m);
+            } else {
+                if(m._iconUrl !== iconUrl){
+                    m.setIcon(L.icon({iconUrl,iconSize:[40,40],iconAnchor:[20,20]}));
+                    m._iconUrl = iconUrl;
+                }
+                m.setTooltipContent(baliseTooltipHtml(b));
+            }
+        }
+
+        // Balises disparues (désactivées côté API) : retirées de leur layer.
+        for(const id of Object.keys(this._balisesMarkers)){
+            if(!seen.has(Number(id))){
+                const m = this._balisesMarkers[id];
+                this._balisesLayers[m._netKey]?.removeLayer(m);
+                delete this._balisesMarkers[id];
+            }
         }
 
         for(const net of this.BALISE_NETWORKS){
-            const layer = this._ensureNetworkLayer(net.key);
-            layer.clearLayers();
-            if(byNet[net.key]?.length) layer.addLayers(byNet[net.key]);
+            if(addByNet[net.key]?.length){
+                this._ensureNetworkLayer(net.key).addLayers(addByNet[net.key]);
+            }
         }
     },
     /** Affiche / masque un réseau de balises sans toucher aux autres. */
@@ -1428,26 +1452,47 @@ function mapApp(){return{
     },
     renderStations(){
         if(!this.map) return;
-        const byNet = {};
-        this._stationsMarkers = {};
+        // Rendu incrémental (cf. renderBalises) : position fixe, seule l'icône
+        // de fraîcheur change → réutilisation des marqueurs + setIcon ciblé.
+        this._stationsMarkers = this._stationsMarkers || {};
+        const seen = new Set();
+        const addByNet = {};
 
         for(const s of this.weatherStations){
-            const netKey = this._stationNetworkKey(s);
-            const fKey   = stationFreshnessKey(s.reading?.observed_at);
-            const icon   = L.icon({iconUrl:stationIconUrl(netKey, fKey),iconSize:[24,24],iconAnchor:[12,12]});
-            const m = L.marker([s.lat,s.lng],{icon})
-                .bindTooltip(stationTooltipHtml(s),{direction:'top',offset:[0,-14],opacity:.95});
-            m.on('click',(e)=>{L.DomEvent.stopPropagation(e);this.clickStation(s.id,m.getLatLng());});
-            m._netKey = netKey;
-            this._stationsMarkers[s.id] = m;
-            if(!byNet[netKey]) byNet[netKey] = [];
-            byNet[netKey].push(m);
+            seen.add(s.id);
+            const netKey  = this._stationNetworkKey(s);
+            const fKey    = stationFreshnessKey(s.reading?.observed_at);
+            const iconUrl = stationIconUrl(netKey, fKey);
+            let m = this._stationsMarkers[s.id];
+            if(!m){
+                m = L.marker([s.lat,s.lng],{icon:L.icon({iconUrl,iconSize:[24,24],iconAnchor:[12,12]})})
+                    .bindTooltip(stationTooltipHtml(s),{direction:'top',offset:[0,-14],opacity:.95});
+                m._netKey = netKey;
+                m._iconUrl = iconUrl;
+                m.on('click',(e)=>{L.DomEvent.stopPropagation(e);this.clickStation(s.id,m.getLatLng());});
+                this._stationsMarkers[s.id] = m;
+                (addByNet[netKey] = addByNet[netKey] || []).push(m);
+            } else {
+                if(m._iconUrl !== iconUrl){
+                    m.setIcon(L.icon({iconUrl,iconSize:[24,24],iconAnchor:[12,12]}));
+                    m._iconUrl = iconUrl;
+                }
+                m.setTooltipContent(stationTooltipHtml(s));
+            }
+        }
+
+        for(const id of Object.keys(this._stationsMarkers)){
+            if(!seen.has(Number(id))){
+                const m = this._stationsMarkers[id];
+                this._stationsLayers[m._netKey]?.removeLayer(m);
+                delete this._stationsMarkers[id];
+            }
         }
 
         for(const net of this.STATION_NETWORKS){
-            const layer = this._ensureStationLayer(net.key);
-            layer.clearLayers();
-            if(byNet[net.key]?.length) layer.addLayers(byNet[net.key]);
+            if(addByNet[net.key]?.length){
+                this._ensureStationLayer(net.key).addLayers(addByNet[net.key]);
+            }
         }
     },
     // ── Clic sur une station météo → volet droit (relevés + historique du jour) ──
