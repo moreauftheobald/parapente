@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Services\Map;
 
-use App\Models\Site;
 use App\Models\SiteScore;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -114,23 +114,49 @@ final class MapBundleBuilder
 
         $sitesPayload = [];
 
-        Site::active()
-            ->with('conditions')
-            ->orderBy('id')
-            ->chunkById(200, function ($chunk) use (&$sitesPayload) {
-                $siteIds = $chunk->pluck('id');
+        // Volumétrie importante (~1100 sites × ~120 créneaux horaires sur 5 j
+        // ≈ 130 000 lignes de scores) : on contourne Eloquent et Carbon —
+        // hydrater autant de modèles + caster forecast_at en Carbon par ligne
+        // coûtait plusieurs minutes. On lit en `DB::table()` (stdClass brut)
+        // et on parse jour/heure depuis la chaîne `Y-m-d H:i:s` directement
+        // (cf. règle CLAUDE.md : DB::table + SQL pour les grosses agrégations).
+        $scoresTable = SiteScore::activeTableName();
+        $from = now()->startOfHour()->format('Y-m-d H:i:s');
+        $to   = now()->addDays(5)->format('Y-m-d H:i:s');
 
-                $scoresBySite = SiteScore::onActiveBuffer()
+        DB::table('sites')
+            ->where('active', true)
+            ->orderBy('id')
+            ->select('id', 'name', 'latitude', 'longitude', 'altitude_m', 'level', 'region')
+            ->chunkById(200, function ($chunk) use (&$sitesPayload, $scoresTable, $from, $to) {
+                $siteIds = array_map(static fn ($s) => $s->id, $chunk->all());
+
+                // Conditions (axes de vent) par site — une requête par chunk.
+                $conditions = DB::table('site_conditions')
                     ->whereIn('site_id', $siteIds)
-                    ->upcoming()
+                    ->get(['site_id', 'wind_dir_min', 'wind_dir_max'])
+                    ->keyBy('site_id');
+
+                // Scores du buffer actif, ordonnés — groupés en mémoire par
+                // site_id (tableaux natifs, pas de Collection::groupBy lourde).
+                // Une seule requête par chunk de sites.
+                $scoresBySite = [];
+                $rows = DB::table($scoresTable)
+                    ->whereIn('site_id', $siteIds)
+                    ->where('forecast_at', '>=', $from)
+                    ->where('forecast_at', '<=', $to)
                     ->orderBy('forecast_at')
-                    ->get()
-                    ->groupBy('site_id');
+                    ->select('site_id', 'forecast_at', 'status')
+                    ->get();
+                foreach ($rows as $row) {
+                    $scoresBySite[$row->site_id][] = $row;
+                }
 
                 foreach ($chunk as $site) {
                     $sitesPayload[] = $this->buildSitePayload(
                         $site,
-                        $scoresBySite->get($site->id, collect()),
+                        $conditions->get($site->id),
+                        $scoresBySite[$site->id] ?? [],
                     );
                 }
             });
@@ -167,12 +193,26 @@ final class MapBundleBuilder
      *
      * @return array<string,mixed>
      */
-    private function buildSitePayload(Site $site, \Illuminate\Support\Collection $siteScores): array
+    private function buildSitePayload(object $site, ?object $conditions, array $siteScores): array
     {
         $lat = (float) $site->latitude;
         $lng = (float) $site->longitude;
 
-        $grouped    = $siteScores->groupBy(fn (SiteScore $s) => $s->forecast_at->format('d/m'));
+        // Regroupement par jour `d/m` sans Carbon : `forecast_at` est une
+        // chaîne `Y-m-d H:i:s`. Le cast Eloquent `datetime` ne reconvertit
+        // pas le fuseau pour format('d/m')/format('G') (la valeur stockée est
+        // déjà dans le fuseau applicatif) → extraire les sous-chaînes donne
+        // exactement le même résultat, à coût quasi nul.
+        $grouped = []; // 'd/m' => [['h' => int, 'status' => string], ...]
+        foreach ($siteScores as $score) {
+            $fa  = (string) $score->forecast_at;       // "2026-06-29 13:00:00"
+            $day = substr($fa, 8, 2) . '/' . substr($fa, 5, 2); // "29/06"
+            $grouped[$day][] = [
+                'h'      => (int) substr($fa, 11, 2),
+                'status' => $score->status ?? 'unknown',
+            ];
+        }
+
         $sunWindows = [];
         $days       = [];
         $greenHoursPerDay = []; // day => [hour, hour, ...] pour agrégat global
@@ -184,11 +224,11 @@ final class MapBundleBuilder
             $byHour    = [];
             $greenSet  = [];
             foreach ($dayScores as $score) {
-                $h = (int) $score->forecast_at->format('G');
+                $h = $score['h'];
                 if ($h < $window['start_hour'] || $h > $window['end_hour']) {
                     continue;
                 }
-                $status = $score->status ?? 'unknown';
+                $status = $score['status'];
                 $byHour[$h] = $status;
                 if ($status === 'green') {
                     $greenSet[] = $h;
@@ -206,15 +246,15 @@ final class MapBundleBuilder
         }
 
         return [
-            'id'               => $site->id,
+            'id'               => (int) $site->id,
             'name'             => $site->name,
             'lat'              => $lat,
             'lng'              => $lng,
-            'altitude'         => $site->altitude_m,
+            'altitude'         => $site->altitude_m !== null ? (int) $site->altitude_m : null,
             'level'            => $site->level,
             'region'           => $site->region,
-            'wind_dir_min'     => $site->conditions?->wind_dir_min,
-            'wind_dir_max'     => $site->conditions?->wind_dir_max,
+            'wind_dir_min'     => $conditions?->wind_dir_min !== null ? (int) $conditions->wind_dir_min : null,
+            'wind_dir_max'     => $conditions?->wind_dir_max !== null ? (int) $conditions->wind_dir_max : null,
             'days'             => $days,
             'sun_windows'      => $sunWindows,
             'green_hours_set'  => $greenHoursPerDay, // retiré du payload client (cf. MapBundleController)

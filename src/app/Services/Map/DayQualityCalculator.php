@@ -24,6 +24,21 @@ use App\Services\Settings;
  */
 final class DayQualityCalculator
 {
+    /**
+     * Seuils `viability.*` mémoïsés sur la durée de vie de l'instance.
+     *
+     * `compute()` est appelé en masse lors du build du map bundle (~1 fois
+     * par site × jour, soit plusieurs milliers de fois) : relire les 8
+     * settings via Settings::get() (→ Settings::all() → Cache::remember
+     * Redis) à chaque appel saturait le build (des dizaines de milliers
+     * d'allers-retours Redis). On charge donc les seuils une seule fois.
+     * L'instance étant résolue à neuf par requête HTTP / par run de job,
+     * la fraîcheur reste identique au comportement précédent.
+     *
+     * @var array<string,float|int>|null
+     */
+    private ?array $thresholds = null;
+
     public function __construct(
         private readonly Settings $settings,
     ) {}
@@ -41,14 +56,15 @@ final class DayQualityCalculator
             return ['viability' => 0, 'status' => 'unknown', 'green_hours' => 0];
         }
 
-        $peakHour  = (float) $this->settings->get('viability.peak_hour');
-        $sigma     = (float) $this->settings->get('viability.sigma');
-        $valGreen  = (float) $this->settings->get('viability.val_green');
-        $valOrange = (float) $this->settings->get('viability.val_orange');
-        $runBase   = (float) $this->settings->get('viability.run_base');
-        $runStep   = (float) $this->settings->get('viability.run_step');
-        $thrGreen  = (int)   $this->settings->get('viability.green_threshold');
-        $thrOrange = (int)   $this->settings->get('viability.orange_threshold');
+        $t         = $this->thresholds();
+        $peakHour  = $t['peak_hour'];
+        $sigma     = $t['sigma'];
+        $valGreen  = $t['val_green'];
+        $valOrange = $t['val_orange'];
+        $runBase   = $t['run_base'];
+        $runStep   = $t['run_step'];
+        $thrGreen  = $t['green_threshold'];
+        $thrOrange = $t['orange_threshold'];
 
         $timeWeight = fn (int $h): float => exp(-(($h - $peakHour) ** 2) / (2 * $sigma ** 2));
         $statusVal  = fn (?string $s): float => match ($s) {
@@ -96,5 +112,28 @@ final class DayQualityCalculator
                 : ($viability >= $thrOrange ? 'orange' : 'red'));
 
         return ['viability' => $viability, 'status' => $status, 'green_hours' => $greenHours];
+    }
+
+    /**
+     * Charge (et mémoïse) les seuils `viability.*` depuis Settings.
+     *
+     * @return array<string,float|int>
+     */
+    private function thresholds(): array
+    {
+        if ($this->thresholds !== null) {
+            return $this->thresholds;
+        }
+
+        return $this->thresholds = [
+            'peak_hour'        => (float) $this->settings->get('viability.peak_hour'),
+            'sigma'            => (float) $this->settings->get('viability.sigma'),
+            'val_green'        => (float) $this->settings->get('viability.val_green'),
+            'val_orange'       => (float) $this->settings->get('viability.val_orange'),
+            'run_base'         => (float) $this->settings->get('viability.run_base'),
+            'run_step'         => (float) $this->settings->get('viability.run_step'),
+            'green_threshold'  => (int)   $this->settings->get('viability.green_threshold'),
+            'orange_threshold' => (int)   $this->settings->get('viability.orange_threshold'),
+        ];
     }
 }

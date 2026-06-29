@@ -7,7 +7,6 @@ namespace App\Jobs;
 use App\Models\JobMonitor;
 use App\Models\Site;
 use App\Models\SiteScore;
-use App\Services\Map\MapBundleBuilder;
 use App\Services\Map\ScoringFreshness;
 use App\Services\Map\SiteDetailCache;
 use App\Services\Weather\UserScoringService;
@@ -59,7 +58,15 @@ class WatchScoringTableJob implements ShouldQueue
         if ($seen !== $current) {
             // Flip détecté (ou tout premier passage après déploiement) :
             // les scores servis depuis le cache sont périmés.
-            $cache->forget(MapBundleBuilder::cacheKey());
+            //
+            // IMPORTANT : on ne `forget()` PAS le map bundle ici. Le supprimer
+            // avant la régénération laissait une fenêtre (toute la durée du
+            // build) pendant laquelle les visiteurs déclenchaient le build
+            // paresseux (lent) ou recevaient un bundle vide après timeout de
+            // lock (carte sans marqueurs). À la place, RebuildMapBundleJob
+            // ÉCRASE la clé une fois le nouveau bundle prêt (échange atomique)
+            // : l'ancien bundle, légèrement périmé, reste servi en ~400 ms
+            // pendant toute la reconstruction. Le TTL (90 min) reste le filet.
 
             // Les 3 caches détail par site (scores/chart/multimodel) lisent
             // tous des colonnes de `site_scores` → invalidation site par site.
